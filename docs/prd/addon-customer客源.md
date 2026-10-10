@@ -31,7 +31,7 @@
 
 ## 非目标(本期不做)
 
-- 客源分配/跟进记录/保护期(老系统 customerChance 系,规则清单阶段提取);
+- 跟进记录/保护期/公海(老系统 customerChance 系;分配子域已拆出 V2 PRD:`addon-customer分配.md`);
 - 客源查重、公海池;
 - 楼盘关联(归 addon-building)。
 
@@ -39,7 +39,7 @@
 
 - [x] 登记→转化→建档全链路可用(dev 库冒烟 7/7,2026-10-10);
 - [x] 两 addon 零反向依赖(事件走 yingzao-addons-api 契约);
-- [ ] 客源分配(二期,PRD 届时扩展);
+- [x] 客源分配(V2 子域 PRD 已起草:`addon-customer分配.md`,dev 库冒烟 12/12,2026-10-11);
 - [ ] Web 后台页面(走 huashu-design 审美流程);
 - [ ] 移动端登记表单(uni-app)。
 

@@ -151,8 +151,9 @@ Web 后台启动时向后端拉取已启用插件的**前端清单**(由 `addon.
 1. **插件间契约必须独立模块** `yingzao-addons-api`:只放领域事件与共享扩展点,零实现零依赖。插件之间禁止互相依赖实现模块——首日即验证了这条红线的必要性(事件类放发布方会导致订阅方反向依赖);
 2. **AFTER_COMMIT 监听 + @Transactional 必须 `REQUIRES_NEW`**:Spring 6.1 硬约束,直接 @Transactional 启动即炸(RestrictedTransactionalEventListenerFactory);
 3. **编译必须带 `-parameters`**:Spring 6.1 不再从字节码局部变量表推断参数名,`@PathVariable`/`@RequestParam` 依赖真实参数名反射。根 pom maven-compiler-plugin 已配置;⚠️ 改编译配置后须 `mvn clean package`(增量编译会残留旧 class);
-4. 版本号分段约定(Flyway):core 100–199,addon 对齐错误码段(customer 200+,customerprofile 300+),各 addon 独立 migration location。
+4. 版本号分段约定(Flyway):core 100–199,addon 对齐错误码段(customer 200+,customerprofile 300+,quotation 400+),各 addon 独立 migration location;
 5. spike 范围说明:认证为内存 token(正式版换 Redis);ORM 暂用 JdbcTemplate(正式版评估 MyBatis-Plus);企微/钉钉免登与 uni-app 端见 RFC §7。
+6. **插件分段迁移必须 `out-of-order: true`**(2026-10-11 dev 库实锤):各 addon 版本段独立演进必然交错——customer 的 V201 晚于 customerprofile 的 V300 才出现时,Flyway 默认校验直接拒绝启动("Detected resolved migration not applied to database: 201")。分段是红线,乱序是常态,组装壳 application.yml 已配置。
 
 ## 7. Phase 0 spike 验收标准
 

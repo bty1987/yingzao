@@ -22,6 +22,9 @@ public class LeadService {
     public static final int CODE_LEAD_NOT_FOUND = 210001;
     public static final int CODE_LEAD_ALREADY_CONVERTED = 210002;
 
+    public static final int STATUS_INITIAL = 0;
+    public static final int STATUS_CONVERTED = 1;
+
     private final JdbcTemplate jdbc;
     private final ApplicationEventPublisher publisher;
     private final MessageSource messages;
@@ -53,7 +56,7 @@ public class LeadService {
                     messages.getMessage("lead.notfound", null, LocaleContextHolder.getLocale()));
         }
         Map<String, Object> lead = rows.get(0);
-        if (((Number) lead.get("status")).intValue() != 0) {
+        if (((Number) lead.get("status")).intValue() != STATUS_INITIAL) {
             throw new BizException(CODE_LEAD_ALREADY_CONVERTED,
                     messages.getMessage("lead.alreadyConverted", null, LocaleContextHolder.getLocale()));
         }

@@ -10,6 +10,8 @@ spring:
     password: ${YINGZAO_DB_PASSWORD:yingzao}
   flyway:
     enabled: true
+    # addon 版本段独立演进必然交错(如 customer V201 晚于 customerprofile V300 出现),允许乱序应用
+    out-of-order: true
     # 版本号分段约定:core 100-199,addon 按码段对齐(customer 200+,customerprofile 300+)
     locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile
   messages:

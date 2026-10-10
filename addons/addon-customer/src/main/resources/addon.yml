@@ -1,7 +1,7 @@
 addon:
   id: customer
   name: 客源管理
-  version: 0.1.0
+  version: 0.2.0
   error-code-segment: 210000
   menus:
     - path: /customer/leads
