@@ -7,7 +7,7 @@
 *The Open-Source ERP for Renovation*
 
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](#license)
-[![Backend](https://img.shields.io/badge/Java-21-orange.svg)]()
+[![Backend](https://img.shields.io/badge/Java-17-orange.svg)]()
 [![Framework](https://img.shields.io/badge/Spring%20Boot-3.x-green.svg)]()
 [![Frontend](https://img.shields.io/badge/Vue-3.x-brightgreen.svg)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)]()

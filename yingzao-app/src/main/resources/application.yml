@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: yingzao
+  datasource:
+    url: ${YINGZAO_DB_URL:jdbc:mysql://localhost:3306/yingzao?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${YINGZAO_DB_USER:root}
+    password: ${YINGZAO_DB_PASSWORD:yingzao}
+  flyway:
+    enabled: true
+    # 版本号分段约定:core 100-199,addon 按码段对齐(customer 200+,customerprofile 300+)
+    locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile
+  messages:
+    # 各 addon 独立 basename,避免 jar 内同名资源冲突
+    basename: i18n/messages,i18n/customer,i18n/customerprofile
+    encoding: UTF-8
+  jackson:
+    default-property-inclusion: non_null
+
+yingzao:
+  # 启用的插件清单(编译期装配,未列出的 addon bean 不装配)
+  addons:
+    enabled: customer,customerprofile
+
+logging:
+  level:
+    com.yingzao: info

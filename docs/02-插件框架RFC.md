@@ -144,13 +144,23 @@ Web 后台启动时向后端拉取已启用插件的**前端清单**(由 `addon.
 3. 前端槽位的 context 传参类型如何约定才能不耦合插件?
 4. 插件间确需调用时,走事件编排是否够用?出现反例再议服务化调用。
 
-## 6. Phase 0 spike 验收标准
+## 6. Spike 结论(2026-10-10,后端细链已验证)
+
+客源→客户细链已在 dev 库真实跑通(登录→登记→转化→跨插件事件建档→幂等/错误码/i18n 全过),过程中固化的三个工程结论:
+
+1. **插件间契约必须独立模块** `yingzao-addons-api`:只放领域事件与共享扩展点,零实现零依赖。插件之间禁止互相依赖实现模块——首日即验证了这条红线的必要性(事件类放发布方会导致订阅方反向依赖);
+2. **AFTER_COMMIT 监听 + @Transactional 必须 `REQUIRES_NEW`**:Spring 6.1 硬约束,直接 @Transactional 启动即炸(RestrictedTransactionalEventListenerFactory);
+3. **编译必须带 `-parameters`**:Spring 6.1 不再从字节码局部变量表推断参数名,`@PathVariable`/`@RequestParam` 依赖真实参数名反射。根 pom maven-compiler-plugin 已配置;⚠️ 改编译配置后须 `mvn clean package`(增量编译会残留旧 class);
+4. 版本号分段约定(Flyway):core 100–199,addon 对齐错误码段(customer 200+,customerprofile 300+),各 addon 独立 migration location。
+5. spike 范围说明:认证为内存 token(正式版换 Redis);ORM 暂用 JdbcTemplate(正式版评估 MyBatis-Plus);企微/钉钉免登与 uni-app 端见 RFC §7。
+
+## 7. Phase 0 spike 验收标准
 
 用"客源登记 → 客户建档"一条细链验证全部机制:
 
-- [ ] 客源/客户为两个独立 addon,事件打通(客源转化 → 客户建档),零反向依赖;
+- [x] 客源/客户为两个独立 addon,事件打通(客源转化 → 客户建档),零反向依赖(后端已完成,契约模块 yingzao-addons-api);
 - [ ] Web 后台:两插件菜单/页面/槽位(客户详情页留一个演示槽位)全部由后端下发;
 - [ ] uni-app 一码双出:小程序 + APP 均可登录并完成客源登记;
 - [ ] 企微、钉钉 H5 免登进入同一移动端页面;
-- [ ] docker-compose 一键起(MySQL8 + Redis + 应用),Flyway 全程建库;
-- [ ] 文案零硬编码,i18n 资源中英双语各一份。
+- [ ] docker-compose 一键起(MySQL8 + Redis + 应用),Flyway 全程建库(Dockerfile/compose 已就位,待容器环境验证);
+- [x] 文案零硬编码,i18n 资源中英双语各一份(错误码文案验证通过)。

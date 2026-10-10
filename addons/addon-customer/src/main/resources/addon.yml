@@ -1,0 +1,16 @@
+addon:
+  id: customer
+  name: 客源管理
+  version: 0.1.0
+  error-code-segment: 210000
+  menus:
+    - path: /customer/leads
+      title: 客源管理
+      icon: user
+  dicts:
+    leadSource:
+      - { key: advertisement, label: 广告 }
+      - { key: referral, label: 转介绍 }
+      - { key: walkin, label: 自然进店 }
+  mounts:
+    - { slot: customer.lead.detail.footer, component: CustomerProfileCard, capability: customerprofile:view }

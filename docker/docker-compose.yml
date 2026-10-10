@@ -1,0 +1,33 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: yingzao
+      MYSQL_DATABASE: yingzao
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pyingzao"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: ..
+    environment:
+      YINGZAO_DB_URL: jdbc:mysql://mysql:3306/yingzao?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      YINGZAO_DB_USER: root
+      YINGZAO_DB_PASSWORD: yingzao
+      TZ: Asia/Shanghai
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:

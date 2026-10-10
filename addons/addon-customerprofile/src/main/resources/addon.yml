@@ -1,0 +1,15 @@
+addon:
+  id: customerprofile
+  name: 客户档案
+  version: 0.1.0
+  error-code-segment: 220000
+  menus:
+    - path: /customerprofile/profiles
+      title: 客户档案
+      icon: peers
+  dicts:
+    customerLevel:
+      - { key: normal, label: 普通 }
+      - { key: vip, label: 重要 }
+  mounts:
+    - { slot: customerprofile.profile.detail.footer, component: ProfileTag, capability: customerprofile:view }
