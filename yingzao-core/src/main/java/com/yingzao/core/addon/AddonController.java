@@ -21,13 +21,14 @@ public class AddonController {
     }
 
     public record AddonView(String id, String name, String version,
+                            List<AddonDescriptor.Menu> menus,
                             List<AddonDescriptor.Mount> mounts, Object dicts) {
     }
 
     @GetMapping("/api/addons")
     public ApiResponse<List<AddonView>> addons() {
         List<AddonView> views = registry.enabled().stream()
-                .map(d -> new AddonView(d.id(), d.name(), d.version(), d.mounts(), d.dicts()))
+                .map(d -> new AddonView(d.id(), d.name(), d.version(), d.menus(), d.mounts(), d.dicts()))
                 .toList();
         return ApiResponse.ok(views);
     }

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>营造 YINGZAO · 视觉初稿 · 方向一「巨型字黑白高对比」</title>
+<style>
+  /* ==========================================================
+     营造 YINGZAO — Bold Big-Type Editorial
+     黑 #000 / 白 #FFF / 朱红 #C0392B(唯一点缀色)
+     字体:系统栈模拟超粗 Display(Arial Black / Impact / 微软雅黑 900)
+     ========================================================== */
+  :root{
+    --black:#000;
+    --white:#fff;
+    --red:#C0392B;          /* 白底对比 5.4:1,黑底仅作色块 */
+    --ink-2:#595959;        /* 白底次级文字 7.0:1 */
+    --ink-3:#6f6f6f;        /* 白底弱文字 4.9:1 */
+    --ink-on-black:#8c8c8c; /* 黑底次级文字 7.3:1 */
+    --ghost:#f1f1f1;        /* 白底幽灵字(纯装饰) */
+    --ghost-dark:#1d1d1d;   /* 黑底幽灵字(纯装饰) */
+    --f-disp:'Arial Black',Impact,'Arial Narrow',Helvetica,'Microsoft YaHei','PingFang SC',sans-serif;
+    --f-body:Arial,'Helvetica Neue','Microsoft YaHei','PingFang SC',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:var(--white);color:var(--black)}
+  body{font-family:var(--f-body);font-size:14px;line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--red);color:#fff}
+  :focus-visible{outline:2px solid var(--red);outline-offset:2px}
+
+  .screen{min-height:900px;display:flex}          /* 每屏 900px,上下排布 */
+
+  /* ---------- 通用小件 ---------- */
+  .sq{display:inline-block;width:10px;height:10px;background:var(--red);margin-right:12px;vertical-align:1px}
+  .meta{font-family:var(--f-disp);font-size:12px;letter-spacing:.28em;color:var(--ink-2)}
+  .ulink{font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:1px}
+  .ulink:hover{color:var(--red)}
+  .stamp{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+         width:44px;height:44px;background:var(--red);color:#fff;text-align:center;
+         font-family:var(--f-disp);font-size:15px;line-height:1.05;font-weight:900}
+  .btn-primary{display:inline-block;background:var(--black);color:var(--white);
+         border:1px solid var(--black);font-family:var(--f-body);font-size:16px;font-weight:700;
+         letter-spacing:.3em;text-indent:.3em;padding:0 40px;height:60px;cursor:pointer;
+         transition:background .15s linear,border-color .15s linear}
+  .btn-primary:hover{background:var(--red);border-color:var(--red)}
+
+  /* ==========================================================
+     屏 1 · 登录页(左 60% 巨字 / 右 40% 表单)
+     ========================================================== */
+  .screen-login{border-top:6px solid var(--red)}
+  .login-left{position:relative;width:60%;display:flex;flex-direction:column;justify-content:space-between;
+              padding:40px 64px 36px;border-right:1px solid var(--black);overflow:hidden}
+  .login-right{width:40%;display:flex;align-items:center;justify-content:center;padding:40px 48px}
+
+  .brand-row{display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:2}
+  .brand-mark{display:flex;align-items:center;gap:16px}
+  .brand-name strong{display:block;font-family:var(--f-disp);font-size:18px;letter-spacing:.3em;line-height:1.3}
+  .brand-name span{font-size:12px;letter-spacing:.22em;color:var(--ink-2)}
+
+  .hero{position:relative;z-index:2}
+  .giant{font-family:var(--f-disp);font-weight:900;font-size:clamp(160px,20vw,300px);
+         line-height:.95;letter-spacing:-.045em;margin-left:-.04em;white-space:nowrap}
+  .giant .hollow{color:inherit}
+  @supports (-webkit-text-stroke:2px #000){
+    .giant .hollow{color:transparent;-webkit-text-stroke:3px var(--black)}   /* 「造」描边空心 */
+  }
+  .hero-rule{position:relative;height:1px;background:var(--black);margin:40px 0 30px}
+  .hero-rule::before{content:'';position:absolute;left:0;top:-2px;width:72px;height:5px;background:var(--black)}
+  .tagline{font-family:var(--f-disp);font-size:24px;font-weight:900;letter-spacing:.18em}
+  .hero-sub{margin-top:14px;font-size:14px;color:var(--ink-2);max-width:46ch;line-height:1.9}
+
+  .left-foot{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2}
+  .creed{font-family:var(--f-disp);font-size:14px;font-weight:900;letter-spacing:.3em}
+
+  .ghost-v{position:absolute;right:4px;top:50%;transform:translateY(-50%);
+           writing-mode:vertical-rl;font-family:var(--f-disp);font-size:96px;line-height:1;
+           letter-spacing:.04em;color:var(--ghost);z-index:1;user-select:none;pointer-events:none}
+
+  /* 右侧登录表单 */
+  .login-form{width:min(380px,100%)}
+  .form-eyebrow{display:flex;align-items:center;font-family:var(--f-disp);font-size:12px;letter-spacing:.35em;color:var(--ink-2)}
+  .form-eyebrow::before{content:'';width:8px;height:8px;background:var(--red);margin-right:12px}
+  .login-form h2{font-family:var(--f-disp);font-size:36px;font-weight:900;letter-spacing:.1em;margin:14px 0 40px}
+  .field{margin-bottom:26px}
+  .field .lab{display:flex;justify-content:space-between;align-items:baseline;
+              font-size:14px;font-weight:700;letter-spacing:.12em;margin-bottom:10px}
+  .field .lab i{font-style:normal;font-family:var(--f-disp);font-size:12px;letter-spacing:.2em;color:var(--ink-2)}
+  .field input[type=text],.field input[type=password]{width:100%;height:56px;border:1px solid var(--black);
+              background:var(--white);padding:0 18px;font-family:var(--f-body);font-size:16px;color:var(--black)}
+  .field input::placeholder{color:var(--ink-3)}
+  .field input:focus{border-color:var(--red);outline:none;box-shadow:4px 4px 0 var(--red)}
+  .form-row{display:flex;justify-content:space-between;align-items:center;margin:2px 0 30px;font-size:14px}
+  .check{display:flex;align-items:center;gap:8px;cursor:pointer}
+  .check input{width:14px;height:14px;accent-color:var(--black)}
+  .login-form .btn-primary{width:100%}
+  .form-note{margin-top:24px;padding-top:20px;border-top:1px solid var(--black);font-size:14px;color:var(--ink-2)}
+
+  /* ==========================================================
+     屏 2 · 客源列表页(顶部通栏巨字横幅,无侧栏)
+     ========================================================== */
+  .screen-list{flex-direction:column}
+  .topbar{position:relative;display:flex;justify-content:space-between;align-items:flex-end;
+          background:var(--black);color:var(--white);padding:30px 64px 0;overflow:hidden}
+  .topbar-brand{display:flex;align-items:flex-end;gap:20px;padding-bottom:22px}
+  .giant-sm{font-family:var(--f-disp);font-size:64px;font-weight:900;line-height:.9;letter-spacing:-.02em}
+  .brand-en{font-family:var(--f-disp);font-size:12px;letter-spacing:.3em;color:#b3b3b3;padding-bottom:8px}
+  .tabs{display:flex;gap:36px}
+  .tab{font-size:16px;font-weight:700;letter-spacing:.18em;color:var(--ink-on-black);
+       padding-bottom:22px;border-bottom:5px solid transparent;transition:color .15s linear}
+  .tab:hover{color:#fff}
+  .tab.active{color:#fff;border-bottom-color:var(--red)}
+  .topbar-right{display:flex;align-items:center;gap:24px;padding-bottom:26px}
+  .topbar-right .meta{color:var(--ink-on-black)}
+  .user{font-size:14px;color:#fff;letter-spacing:.08em}
+  .ghost-h{position:absolute;right:-24px;top:-38px;font-family:var(--f-disp);font-size:150px;line-height:1;
+           letter-spacing:.02em;color:var(--ghost-dark);pointer-events:none;user-select:none}
+
+  .main{flex:1;display:flex;flex-direction:column;width:100%;padding:40px 64px 28px}
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px}
+  .page-title{font-family:var(--f-disp);font-size:56px;font-weight:900;letter-spacing:.06em;line-height:1}
+  .page-sub{margin-top:12px;font-size:14px;letter-spacing:.24em;color:var(--ink-2)}
+
+  /* 数据表格:1px 规则线 + 行 hover 反色 */
+  .grid{width:100%;border-collapse:collapse;border-top:2px solid var(--black)}
+  .grid th{font-size:14px;font-weight:900;letter-spacing:.14em;text-align:left;
+           padding:14px 12px;border-bottom:2px solid var(--black);white-space:nowrap}
+  .grid td{padding:13px 12px;border-bottom:1px solid var(--black);font-size:14px;vertical-align:middle;white-space:nowrap}
+  .grid tbody tr{cursor:pointer;transition:background .12s linear,color .12s linear}
+  .grid .c-id{width:60px;color:var(--ink-2);font-family:var(--f-disp);letter-spacing:.08em}
+  .grid .c-name{width:92px;font-weight:900;letter-spacing:.1em;font-size:15px}
+  .grid .c-phone{width:140px;letter-spacing:.04em}
+  .grid .c-src{width:112px}
+  .grid .c-note{color:var(--ink-2);min-width:200px;overflow:hidden;text-overflow:ellipsis}
+  .grid .c-status{width:104px}
+  .grid .c-time{width:172px;color:var(--ink-2);letter-spacing:.04em}
+  .grid .c-act{width:80px}
+
+  .tag,.st-open{display:inline-block;border:1px solid var(--black);padding:3px 12px;
+                font-size:14px;letter-spacing:.08em;transition:border-color .12s linear,color .12s linear}
+  .st-done{display:inline-block;background:var(--red);border:1px solid var(--red);color:#fff;
+           padding:3px 12px;font-size:14px;letter-spacing:.08em}
+  .act{font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:4px}
+  .act:hover{color:var(--red)}
+
+  .grid tbody tr:hover{background:var(--black);color:var(--white)}
+  .grid tbody tr:hover .c-id,
+  .grid tbody tr:hover .c-note,
+  .grid tbody tr:hover .c-time{color:#b3b3b3}
+  .grid tbody tr:hover .tag,
+  .grid tbody tr:hover .st-open{border-color:#fff;color:#fff}
+  .grid tbody tr:hover .act{color:#fff}
+
+  /* 假分页 */
+  .pager{margin-top:auto;display:flex;justify-content:space-between;align-items:center;padding-top:26px}
+  .pager-info{font-size:14px;color:var(--ink-2);letter-spacing:.06em}
+  .pager-nums{display:flex;align-items:center;gap:8px}
+  .pg{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:38px;
+      padding:0 12px;border:1px solid var(--black);font-size:14px;font-weight:700;
+      transition:background .12s linear,color .12s linear}
+  .pg:hover{background:var(--black);color:#fff}
+  .pg.active{background:var(--black);color:#fff}
+  .pg.dots{border:none}
+  .pg.disabled{color:var(--ink-3);border-color:var(--ink-3);cursor:default}
+  .pg.disabled:hover{background:transparent;color:var(--ink-3)}
+
+  .foot-strip{display:flex;justify-content:space-between;align-items:center;
+              border-top:1px solid var(--black);padding:0 64px;height:52px}
+
+  /* ---------- 降级 ---------- */
+  @media (max-width:1180px){
+    .ghost-v,.ghost-h{display:none}
+    .main,.login-left,.topbar,.foot-strip{padding-left:32px;padding-right:32px}
+    .login-right{padding-left:32px;padding-right:32px}
+    .giant{font-size:clamp(140px,17vw,240px)}
+  }
+  @media (max-width:900px){
+    .screen-login{flex-direction:column}
+    .login-left{width:100%;min-height:640px;border-right:none;border-bottom:1px solid var(--black)}
+    .login-right{width:100%;padding:56px 32px}
+    .grid .c-note,.grid .c-time{display:none}
+    .page-title{font-size:40px}
+    .topbar{flex-wrap:wrap}
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ 屏 1 · 登录页 ═══════════════ -->
+<section class="screen screen-login">
+  <div class="login-left">
+    <header class="brand-row">
+      <div class="brand-mark">
+        <span class="stamp" aria-hidden="true">营<br>造</span>
+        <div class="brand-name">
+          <strong>YINGZAO</strong>
+          <span>开源装修 ERP</span>
+        </div>
+      </div>
+      <span class="meta">V1.0 · OPEN SOURCE</span>
+    </header>
+
+    <div class="hero">
+      <h1 class="giant">营<span class="hollow">造</span></h1>
+      <div class="hero-rule" aria-hidden="true"></div>
+      <p class="tagline">「现代装修企业的营造法式」</p>
+      <p class="hero-sub">以宋《营造法式》为范——把规矩、模数与次序,带进现代装修企业的每一单生意。</p>
+    </div>
+
+    <footer class="left-foot">
+      <span class="creed"><i class="sq" aria-hidden="true"></i>工匠 · 规矩 · 可信赖</span>
+      <span class="meta">01 / 登录 LOGIN</span>
+    </footer>
+
+    <span class="ghost-v" aria-hidden="true">YINGZAO — FAZE</span>
+  </div>
+
+  <div class="login-right">
+    <form class="login-form" action="#" method="post">
+      <p class="form-eyebrow">ADMIN LOGIN</p>
+      <h2>管理员登录</h2>
+
+      <div class="field">
+        <label class="lab" for="username"><span>用户名</span><i>01 / NAME</i></label>
+        <input id="username" name="username" type="text" placeholder="工号或手机号" autocomplete="username">
+      </div>
+
+      <div class="field">
+        <label class="lab" for="password"><span>密码</span><i>02 / KEY</i></label>
+        <input id="password" name="password" type="password" placeholder="请输入密码" autocomplete="current-password">
+      </div>
+
+      <div class="form-row">
+        <label class="check"><input type="checkbox" checked> 记住我</label>
+        <a class="ulink" href="#">忘记密码</a>
+      </div>
+
+      <button class="btn-primary" type="submit">登 录</button>
+
+      <p class="form-note">开源项目 · 账号由企业管理员统一开通</p>
+    </form>
+  </div>
+</section>
+
+<!-- ═══════════════ 屏 2 · 客源列表页 ═══════════════ -->
+<section class="screen screen-list">
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="giant-sm">营造</span>
+      <span class="brand-en">YINGZAO ERP</span>
+    </div>
+    <nav class="tabs" aria-label="主导航">
+      <a class="tab active" href="#" aria-current="page">客源管理</a>
+      <a class="tab" href="#">客户档案</a>
+    </nav>
+    <div class="topbar-right">
+      <span class="meta">V1.0</span>
+      <span class="user">管理员 · FL-00479</span>
+    </div>
+    <span class="ghost-h" aria-hidden="true">YINGZAO</span>
+  </header>
+
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">客源管理</h2>
+        <p class="page-sub">KE YUAN · 记录每一通来电与每一次进店</p>
+      </div>
+      <button class="btn-primary" type="button">登记客源</button>
+    </div>
+
+    <table class="grid">
+      <thead>
+        <tr>
+          <th class="c-id">ID</th>
+          <th class="c-name">姓名</th>
+          <th class="c-phone">电话</th>
+          <th class="c-src">来源</th>
+          <th class="c-note">备注</th>
+          <th class="c-status">状态</th>
+          <th class="c-time">登记时间</th>
+          <th class="c-act">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="c-id">0001</td>
+          <td class="c-name">张三</td>
+          <td class="c-phone">138****6214</td>
+          <td class="c-src"><span class="tag">广告</span></td>
+          <td class="c-note">玉兰湾 128㎡,约定量房</td>
+          <td class="c-status"><span class="st-open">已登记</span></td>
+          <td class="c-time">2026-10-08 14:32</td>
+          <td class="c-act"><a class="act" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="c-id">0002</td>
+          <td class="c-name">李四</td>
+          <td class="c-phone">139****3357</td>
+          <td class="c-src"><span class="tag">转介绍</span></td>
+          <td class="c-note">王宅业主推荐,意向全包</td>
+          <td class="c-status"><span class="st-done">已转化</span></td>
+          <td class="c-time">2026-10-07 09:15</td>
+          <td class="c-act"><a class="act" href="#">详情</a></td>
+        </tr>
+        <tr>
+          <td class="c-id">0003</td>
+          <td class="c-name">王五</td>
+          <td class="c-phone">137****8821</td>
+          <td class="c-src"><span class="tag">自然进店</span></td>
+          <td class="c-note">到店咨询半包价格</td>
+          <td class="c-status"><span class="st-open">已登记</span></td>
+          <td class="c-time">2026-10-05 16:40</td>
+          <td class="c-act"><a class="act" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="c-id">0004</td>
+          <td class="c-name">赵六</td>
+          <td class="c-phone">136****2049</td>
+          <td class="c-src"><span class="tag">广告</span></td>
+          <td class="c-note">信息流留资,约到店</td>
+          <td class="c-status"><span class="st-done">已转化</span></td>
+          <td class="c-time">2026-10-03 11:02</td>
+          <td class="c-act"><a class="act" href="#">详情</a></td>
+        </tr>
+        <tr>
+          <td class="c-id">0005</td>
+          <td class="c-name">钱七</td>
+          <td class="c-phone">135****7733</td>
+          <td class="c-src"><span class="tag">转介绍</span></td>
+          <td class="c-note">同小区业主推荐</td>
+          <td class="c-status"><span class="st-open">已登记</span></td>
+          <td class="c-time">2026-10-02 18:26</td>
+          <td class="c-act"><a class="act" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="c-id">0006</td>
+          <td class="c-name">孙八</td>
+          <td class="c-phone">138****9516</td>
+          <td class="c-src"><span class="tag">自然进店</span></td>
+          <td class="c-note">老房改造,电梯广告扫码</td>
+          <td class="c-status"><span class="st-open">已登记</span></td>
+          <td class="c-time">2026-09-30 10:11</td>
+          <td class="c-act"><a class="act" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="c-id">0007</td>
+          <td class="c-name">周九</td>
+          <td class="c-phone">134****4472</td>
+          <td class="c-src"><span class="tag">广告</span></td>
+          <td class="c-note">抖音咨询,预算 20 万</td>
+          <td class="c-status"><span class="st-open">已登记</span></td>
+          <td class="c-time">2026-09-28 20:47</td>
+          <td class="c-act"><a class="act" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="c-id">0008</td>
+          <td class="c-name">吴十</td>
+          <td class="c-phone">139****6088</td>
+          <td class="c-src"><span class="tag">转介绍</span></td>
+          <td class="c-note">内部推荐,别墅项目</td>
+          <td class="c-status"><span class="st-done">已转化</span></td>
+          <td class="c-time">2026-09-26 15:09</td>
+          <td class="c-act"><a class="act" href="#">详情</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pager">
+      <span class="pager-info">共 128 条 · 每页 8 条</span>
+      <div class="pager-nums">
+        <a class="pg disabled" href="#" aria-label="上一页">上一页</a>
+        <a class="pg active" href="#" aria-current="page">1</a>
+        <a class="pg" href="#">2</a>
+        <a class="pg" href="#">3</a>
+        <span class="pg dots">…</span>
+        <a class="pg" href="#">16</a>
+        <a class="pg" href="#">下一页</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="foot-strip">
+    <span class="meta"><i class="sq" aria-hidden="true"></i>YINGZAO © 2026 · 现代装修企业的营造法式</span>
+    <span class="meta">开源装修 ERP · 02 / 客源</span>
+  </footer>
+</section>
+
+<!--
+  ◆ form 母题来源:所有直角描边构件(输入框/标签/按钮/表格线/分页块)取自《营造法式》的「材分」模数制——
+    1px 规则线即基本材分,黑为墨线、白为纸面,正红如朱漆只施于印章、激活态与「已转化」。
+  ◆ assumption 清单:
+  1. 点缀色选定正红 #C0392B(宋代朱漆意象,白底文字对比 5.4:1 达标;裸粉 #E8C4C0 对比度不足 4.5:1 仅堪作大色块,故弃用);
+  2. 登录假设仅「账号 + 密码」一种方式,验证码 / 钉钉扫码留待后续迭代;
+  3. 客源状态仅两态:已登记 / 已转化,跟进中的过程状态由后续「跟进记录」页承载;
+  4. 电话统一遮掩为 138****6214 式样,操作列仅「转化 / 详情」两个动作,分页为静态假条;
+  5. 版式以 1440px 桌面宽优先,移动端仅做基础降级,未深度适配。
+-->
+</body>
+</html>

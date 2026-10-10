@@ -50,6 +50,11 @@ public class AddonRegistry {
     @SuppressWarnings("unchecked")
     private AddonDescriptor parse(Map<String, Object> raw) {
         Map<String, Object> a = (Map<String, Object>) raw.get("addon");
+        List<Map<String, Object>> menus = (List<Map<String, Object>>) a.getOrDefault("menus", List.of());
+        List<AddonDescriptor.Menu> parsedMenus = menus.stream()
+                .map(m -> new AddonDescriptor.Menu((String) m.get("path"), (String) m.get("title"),
+                        (String) m.get("icon")))
+                .toList();
         List<Map<String, Object>> mounts = (List<Map<String, Object>>) a.getOrDefault("mounts", List.of());
         List<AddonDescriptor.Mount> parsedMounts = mounts.stream()
                 .map(m -> new AddonDescriptor.Mount((String) m.get("slot"), (String) m.get("component"),
@@ -60,6 +65,7 @@ public class AddonRegistry {
                 (String) a.get("name"),
                 (String) a.getOrDefault("version", "0.0.0"),
                 a.get("error-code-segment") == null ? 0 : (Integer) a.get("error-code-segment"),
+                parsedMenus,
                 parsedMounts,
                 (Map<String, Object>) a.getOrDefault("dicts", Map.of()));
     }

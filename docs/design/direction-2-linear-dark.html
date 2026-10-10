@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>营造 Yingzao — 视觉方向 02 · Linear Dark</title>
+<style>
+/* ============================================================
+   营造 Yingzao · 方向02「Linear Dark」
+   已联网核实 Linear token(2026-10):
+   底 #08090A / 面板阶梯 #0F1011→#141516→#18191A→#1C1D1F
+   accent #5E6AD2(亮变体 #828FFF)/ 正文 #F7F8F8 / 次级 #8A8F98
+   hairline 边框 / Inter(以系统栈近似)/ mono 点缀
+   ============================================================ */
+:root{
+  --void:#08090A;            /* 页面最底 */
+  --bg:#0F1011;              /* 石墨主底 */
+  --bg-deep:#0C0D0E;         /* 侧栏 */
+  --sunken:#0B0C0D;          /* 输入框下沉 */
+  --panel:#141516;           /* 卡片 */
+  --panel-2:#18191A;         /* 悬浮层 */
+  --line:rgba(255,255,255,0.06);
+  --line-2:rgba(255,255,255,0.10);
+  --hairline:#23252A;
+  --text:#F7F8F8;
+  --text-2:#A6A9B0;
+  --text-3:#8A8F98;
+  --accent:#5E6AD2;
+  --accent-hover:#6E79DC;
+  --accent-soft:#828FFF;
+  --green:#4CB782;
+  --r:8px;
+  --r-s:6px;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",
+         Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Courier New",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--void)}
+body{font-family:var(--sans);color:var(--text);-webkit-font-smoothing:antialiased;
+     text-rendering:optimizeLegibility;min-width:1240px}
+button{font-family:inherit}
+
+/* ---------- 两屏之间的交付标注条 ---------- */
+.shot-cap{height:44px;display:flex;align-items:center;gap:10px;padding:0 24px;
+  background:var(--void);border-top:1px solid rgba(255,255,255,0.04);
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  font-family:var(--mono);font-size:11px;letter-spacing:0.16em;
+  text-transform:uppercase;color:var(--text-3)}
+.shot-cap i{width:6px;height:6px;border-radius:2px;background:var(--accent);flex-shrink:0}
+.shot-cap em{font-style:normal;color:var(--text-2)}
+
+/* ---------- 通用零件 ---------- */
+.mark{width:24px;height:24px;border-radius:6px;background:var(--accent);
+  position:relative;flex-shrink:0}
+/* 矩:曲尺 L 形,取「规矩」意象 */
+.mark::before{content:"";position:absolute;left:6px;top:6px;width:12px;height:2px;
+  background:#fff;border-radius:1px}
+.mark::after{content:"";position:absolute;left:6px;top:6px;width:2px;height:11px;
+  background:#fff;opacity:.82;border-radius:1px}
+kbd{font-family:var(--mono);font-size:11px;line-height:16px;color:var(--text-2);
+  background:rgba(255,255,255,0.05);border:1px solid var(--line-2);
+  border-bottom-color:rgba(255,255,255,0.16);border-radius:4px;padding:1px 5px}
+.avatar{border-radius:50%;background:#23252B;border:1px solid var(--line-2);
+  color:var(--text);display:flex;align-items:center;justify-content:center;
+  position:relative;flex-shrink:0;font-weight:500}
+.avatar i{position:absolute;right:-1px;bottom:-1px;width:8px;height:8px;
+  border-radius:50%;background:var(--green);border:2px solid var(--bg-deep)}
+
+/* ============================================================
+   屏 1 · 登录
+   ============================================================ */
+#screen-login{height:900px;position:relative;background:var(--bg);overflow:hidden;
+  background-image:
+    radial-gradient(760px 340px at 50% -120px, rgba(94,106,210,0.13), transparent 70%),
+    linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+  background-size:auto,48px 48px,48px 48px}
+.login-wrap{height:100%;display:flex;align-items:center;justify-content:center}
+.login-card{width:360px;background:var(--panel);border:1px solid var(--hairline);
+  border-radius:10px;padding:36px 32px 26px;
+  box-shadow:0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)}
+.brand{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:28px}
+.brand .mark{width:32px;height:32px;border-radius:8px;margin-bottom:14px}
+.brand .en{font-family:var(--mono);font-size:11px;letter-spacing:0.44em;
+  padding-left:0.44em;color:var(--text-3);text-transform:uppercase;margin-bottom:8px}
+.brand h1{font-size:24px;font-weight:700;letter-spacing:0.06em;color:var(--text)}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:14px;font-weight:500;color:var(--text-2);margin-bottom:6px}
+.field input{width:100%;height:38px;background:var(--sunken);border:1px solid var(--line-2);
+  border-radius:var(--r-s);color:var(--text);font-size:14px;padding:0 12px;
+  font-family:inherit;outline:none;transition:border-color .15s, box-shadow .15s}
+.field input::placeholder{color:var(--text-3)}
+.field input:focus{border-color:rgba(94,106,210,0.7);
+  box-shadow:0 0 0 3px rgba(94,106,210,0.16)}
+.btn-login{width:100%;height:38px;margin-top:6px;background:var(--accent);
+  border:none;border-radius:var(--r-s);color:#fff;font-size:14px;font-weight:600;
+  letter-spacing:0.14em;cursor:pointer;transition:background .15s}
+.btn-login:hover{background:var(--accent-hover)}
+.login-foot{margin-top:24px;padding-top:18px;border-top:1px solid var(--line);
+  text-align:center;font-size:14px;color:var(--text-3);letter-spacing:0.02em}
+
+/* ============================================================
+   屏 2 · 客源列表(工作台)
+   ============================================================ */
+#screen-app{height:900px;background:var(--bg);display:flex;min-width:1240px;overflow:hidden}
+
+/* —— 侧栏 —— */
+.sidebar{width:220px;flex-shrink:0;background:var(--bg-deep);
+  border-right:1px solid var(--line);display:flex;flex-direction:column;
+  padding:14px 12px 12px}
+.side-brand{display:flex;align-items:center;gap:9px;padding:4px 8px 16px}
+.side-brand b{font-size:16px;font-weight:700;letter-spacing:0.04em}
+.side-brand .chip{margin-left:auto;font-family:var(--mono);font-size:10px;
+  letter-spacing:0.12em;color:var(--text-3);border:1px solid var(--line-2);
+  border-radius:4px;padding:1px 5px}
+.nav-label{font-size:11px;font-weight:600;letter-spacing:0.16em;color:var(--text-3);
+  padding:10px 8px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;
+  border-radius:var(--r-s);color:var(--text-2);font-size:14px;margin-bottom:2px;
+  text-decoration:none}
+.nav-item svg{width:16px;height:16px;flex-shrink:0}
+.nav-item:hover{background:rgba(255,255,255,0.04);color:var(--text)}
+.nav-item.active{background:var(--accent);color:#fff;font-weight:500}
+.nav-item .count{margin-left:auto;font-family:var(--mono);font-size:11px;opacity:.75}
+.side-user{margin-top:auto;display:flex;align-items:center;gap:10px;
+  padding:12px 6px 2px;border-top:1px solid var(--line)}
+.side-user .avatar{width:28px;height:28px;font-size:12px}
+.side-user b{display:block;font-size:14px;font-weight:500;line-height:1.3}
+.side-user small{display:block;font-size:12px;color:var(--text-3)}
+
+/* —— 主区 —— */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{height:56px;flex-shrink:0;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:14px;padding:0 24px}
+.crumb{font-size:14px;color:var(--text-3)}
+.crumb-sep{color:var(--text-3);opacity:.5;font-size:14px}
+.topbar h2{font-size:15px;font-weight:600;letter-spacing:0.01em}
+.topbar .spacer{flex:1}
+.searchbox{width:240px;height:32px;background:rgba(255,255,255,0.03);
+  border:1px solid var(--line-2);border-radius:var(--r-s);
+  display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;
+  color:var(--text-3);font-size:13px}
+.searchbox svg{width:14px;height:14px;flex-shrink:0}
+.searchbox kbd{margin-left:auto}
+.top-avatar{width:26px;height:26px;font-size:11px}
+
+.content{flex:1;padding:22px 28px;overflow:hidden}
+.toolbar{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.toolbar h3{font-size:18px;font-weight:600;letter-spacing:-0.01em}
+.count-chip{font-family:var(--mono);font-size:12px;color:var(--text-3);
+  background:rgba(255,255,255,0.04);border:1px solid var(--line);
+  border-radius:10px;padding:1px 8px}
+.seg{display:flex;background:rgba(255,255,255,0.03);border:1px solid var(--line);
+  border-radius:var(--r-s);padding:2px;margin-left:6px}
+.seg button{height:26px;padding:0 12px;border:none;border-radius:4px;
+  background:transparent;color:var(--text-2);font-size:13px;cursor:pointer}
+.seg button b{font-family:var(--mono);font-weight:500;font-size:11px;
+  opacity:.6;margin-left:5px}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:rgba(255,255,255,0.09);color:var(--text);
+  box-shadow:inset 0 0 0 1px var(--line)}
+.btn-new{margin-left:auto;height:32px;padding:0 14px;border:none;
+  border-radius:var(--r-s);background:var(--accent);color:#fff;
+  font-size:14px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:7px;transition:background .15s}
+.btn-new:hover{background:var(--accent-hover)}
+.btn-new .plus{font-size:15px;line-height:1;opacity:.9}
+
+/* —— 数据表 —— */
+.tablewrap{border:1px solid var(--line);border-radius:var(--r);
+  background:rgba(255,255,255,0.012);overflow:hidden}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{font-size:12px;font-weight:500;text-align:left;color:var(--text-3);
+  letter-spacing:0.02em;padding:10px 12px;background:rgba(255,255,255,0.02);
+  border-bottom:1px solid var(--line)}
+td{font-size:14px;color:var(--text-2);height:44px;padding:0 12px;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(255,255,255,0.025)}
+td.name{color:var(--text);font-weight:500}
+td.id{font-family:var(--mono);font-size:13px;color:var(--text-3)}
+td.tel{font-family:var(--mono);font-size:13px}
+td.time{font-family:var(--mono);font-size:13px}
+.tag{display:inline-block;font-size:12px;line-height:18px;padding:0 8px;
+  border:1px solid rgba(255,255,255,0.14);border-radius:4px;color:#C6C8CE}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;
+  line-height:18px;padding:0 8px;border-radius:4px}
+.status i{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.status.open{background:rgba(255,255,255,0.06);color:#B9BCC2}
+.status.open i{background:#9DA0A7}
+.status.done{background:rgba(76,183,130,0.12);color:var(--green)}
+.status.done i{background:var(--green)}
+.act{border:none;background:none;padding:3px 8px;border-radius:4px;
+  font-size:14px;color:var(--accent-soft);cursor:pointer}
+.act:hover{background:rgba(94,106,210,0.14)}
+.act.muted{color:var(--text-3)}
+.act.muted:hover{background:rgba(255,255,255,0.05)}
+
+/* —— 分页 —— */
+.foot{display:flex;align-items:center;margin-top:14px;font-size:13px;color:var(--text-3)}
+.pager{margin-left:auto;display:flex;align-items:center;gap:4px}
+.pager button{min-width:28px;height:28px;padding:0 4px;border-radius:var(--r-s);
+  border:1px solid transparent;background:transparent;color:var(--text-2);
+  font-family:var(--mono);font-size:13px;cursor:pointer}
+.pager button:hover{background:rgba(255,255,255,0.05);color:var(--text)}
+.pager button.on{background:rgba(255,255,255,0.09);border-color:var(--line);color:var(--text)}
+.pager .gap{padding:0 4px;line-height:28px;color:var(--text-3)}
+</style>
+</head>
+<body>
+
+<!-- 标注条 · 屏1 -->
+<div class="shot-cap"><i></i>DIRECTION 02 · LINEAR DARK — <em>SCREEN 01 登录</em></div>
+
+<!-- ================= 屏 1 · 登录 ================= -->
+<section id="screen-login">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="en">Yingzao</span>
+        <h1>营造</h1>
+      </div>
+      <form onsubmit="return false">
+        <div class="field">
+          <label for="u">用户名</label>
+          <input id="u" type="text" placeholder="工号或手机号" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="p">密码</label>
+          <input id="p" type="password" placeholder="请输入密码" autocomplete="current-password">
+        </div>
+        <button class="btn-login" type="submit">登 录</button>
+      </form>
+      <div class="login-foot">现代装修企业的营造法式</div>
+    </div>
+  </div>
+</section>
+
+<!-- 标注条 · 屏2 -->
+<div class="shot-cap"><i></i>DIRECTION 02 · LINEAR DARK — <em>SCREEN 02 客源列表</em></div>
+
+<!-- ================= 屏 2 · 客源列表 ================= -->
+<section id="screen-app">
+
+  <!-- 侧栏 -->
+  <aside class="sidebar">
+    <div class="side-brand">
+      <span class="mark" aria-hidden="true"></span>
+      <b>营造</b>
+      <span class="chip">ERP</span>
+    </div>
+
+    <div class="nav-label">业务</div>
+    <a class="nav-item active" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+        <circle cx="8" cy="8" r="5.2"/>
+        <circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/>
+        <path d="M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15" stroke-linecap="round"/>
+      </svg>
+      客源管理<span class="count">128</span>
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true">
+        <path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.5 1.7h5.1c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z"/>
+      </svg>
+      客户档案
+    </a>
+
+    <div class="side-user">
+      <span class="avatar">营<i></i></span>
+      <span>
+        <b>营造管理员</b>
+        <small>系统管理员</small>
+      </span>
+    </div>
+  </aside>
+
+  <!-- 主区 -->
+  <div class="main">
+
+    <header class="topbar">
+      <span class="crumb">业务</span>
+      <span class="crumb-sep">/</span>
+      <h2>客源管理</h2>
+      <span class="spacer"></span>
+      <div class="searchbox">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 13.6 13.6"/>
+        </svg>
+        搜索客源、电话、备注
+        <kbd>⌘K</kbd>
+      </div>
+      <span class="avatar top-avatar">营<i></i></span>
+    </header>
+
+    <div class="content">
+
+      <div class="toolbar">
+        <h3>客源管理</h3>
+        <span class="count-chip">128</span>
+        <div class="seg">
+          <button class="on" type="button">全部<b>128</b></button>
+          <button type="button">广告<b>46</b></button>
+          <button type="button">转介绍<b>52</b></button>
+          <button type="button">自然进店<b>30</b></button>
+        </div>
+        <button class="btn-new" type="button"><span class="plus">+</span>登记客源</button>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <colgroup>
+            <col style="width:84px"><col style="width:92px"><col style="width:138px">
+            <col style="width:96px"><col><col style="width:94px">
+            <col style="width:142px"><col style="width:84px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>ID</th><th>姓名</th><th>电话</th><th>来源</th>
+              <th>备注</th><th>状态</th><th>登记时间</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="id">KY-0001</td><td class="name">张三</td><td class="tel">138-0011-2233</td>
+              <td><span class="tag">广告</span></td>
+              <td>高新区万科城交房集客活动登记,意向全包</td>
+              <td><span class="status open"><i></i>已登记</span></td>
+              <td class="time">2026-10-08 14:32</td>
+              <td><button class="act" type="button">转化</button></td>
+            </tr>
+            <tr>
+              <td class="id">KY-0002</td><td class="name">李四</td><td class="tel">139-2244-5566</td>
+              <td><span class="tag">转介绍</span></td>
+              <td>老客户王先生推荐,意向半包,周末方便电联</td>
+              <td><span class="status open"><i></i>已登记</span></td>
+              <td class="time">2026-10-07 10:18</td>
+              <td><button class="act" type="button">转化</button></td>
+            </tr>
+            <tr>
+              <td class="id">KY-0003</td><td class="name">王五</td><td class="tel">150-3377-8899</td>
+              <td><span class="tag">自然进店</span></td>
+              <td>门店到访咨询,重点关注主材品牌与环保等级</td>
+              <td><span class="status done"><i></i>已转化</span></td>
+              <td class="time">2026-10-06 16:45</td>
+              <td><button class="act muted" type="button">详情</button></td>
+            </tr>
+            <tr>
+              <td class="id">KY-0004</td><td class="name">赵六</td><td class="tel">186-5522-1144</td>
+              <td><span class="tag">广告</span></td>
+              <td>短视频样板间推广留资,洋房三室待交房</td>
+              <td><span class="status open"><i></i>已登记</span></td>
+              <td class="time">2026-10-05 09:27</td>
+              <td><button class="act" type="button">转化</button></td>
+            </tr>
+            <tr>
+              <td class="id">KY-0005</td><td class="name">钱七</td><td class="tel">137-8899-6633</td>
+              <td><span class="tag">转介绍</span></td>
+              <td>合作工长介绍,四室两厅,预算充足</td>
+              <td><span class="status open"><i></i>已登记</span></td>
+              <td class="time">2026-10-03 15:02</td>
+              <td><button class="act" type="button">转化</button></td>
+            </tr>
+            <tr>
+              <td class="id">KY-0006</td><td class="name">孙八</td><td class="tel">159-6644-2200</td>
+              <td><span class="tag">自然进店</span></td>
+              <td>国庆门店促销活动到访,已领参观动线手册</td>
+              <td><span class="status done"><i></i>已转化</span></td>
+              <td class="time">2026-10-02 11:36</td>
+              <td><button class="act muted" type="button">详情</button></td>
+            </tr>
+            <tr>
+              <td class="id">KY-0007</td><td class="name">周九</td><td class="tel">188-1122-3344</td>
+              <td><span class="tag">广告</span></td>
+              <td>搜索落地页留资,二次来电预约量房</td>
+              <td><span class="status open"><i></i>已登记</span></td>
+              <td class="time">2026-09-30 19:08</td>
+              <td><button class="act" type="button">转化</button></td>
+            </tr>
+            <tr>
+              <td class="id">KY-0008</td><td class="name">吴十</td><td class="tel">135-7788-9900</td>
+              <td><span class="tag">自然进店</span></td>
+              <td>路过门店随手登记,预约周末携户型图详谈</td>
+              <td><span class="status open"><i></i>已登记</span></td>
+              <td class="time">2026-09-29 08:55</td>
+              <td><button class="act" type="button">转化</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="foot">
+        <span>共 128 条 · 每页 8 条</span>
+        <div class="pager">
+          <button type="button" aria-label="上一页">‹</button>
+          <button class="on" type="button">1</button>
+          <button type="button">2</button>
+          <button type="button">3</button>
+          <span class="gap">…</span>
+          <button type="button">16</button>
+          <button type="button" aria-label="下一页">›</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!--
+┌ form 母题说明 ────────────────────────────────────────────────
+│ 母题来自内容本身:tagline「现代装修企业的营造法式」中的
+│ 「法式 / 规矩」意象——全局恒定 1px 规矩线(rgba 白 6% hairline)
+│ 与 48px 模数栅格对应古建「以规矩成方圆」;品牌记号取「矩」
+│ (曲尺 L 形白线),登录卡与表格同守一套圆角与分隔韵律。
+└──────────────────────────────────────────────────────────────
+
+assumption 清单:
+1. Linear 语言已于交付前联网核实:底 #08090A、面板阶梯
+   #0F1011→#141516→#18191A→#1C1D1F、accent #5E6AD2(亮变体
+   #828FFF)、正文 #F7F8F8 / 次级 #8A8F98、hairline 边框、
+   Inter Variable——本稿据实采用;唯 Inter 因「零外部依赖」
+   红线以 system-ui / PingFang SC / 微软雅黑 栈近似,未还原
+   Berkeley Mono,以系统等宽栈替代。
+2. 登录页顶部的径向紫光与 48px 网格为氛围推测:Linear 官网
+   有暗部大气光效,其真实登录页可能更素,此处刻意压至 13% 以下透明度。
+3. 登录卡 360px、侧栏 220px、两屏各 900px 高为任务书指定尺寸,
+   非 Linear 实测布局值。
+4. 全部客源数据(姓名/电话/备注/时间)为虚构样例,电话采用
+   138-0011-2233 类演示号段,不代表真实用户。
+5. 交互全部为静态 CSS 悬停态,无 JS;快捷键 ⌘K 仅作视觉签名,
+   实际绑定待开发阶段定义。
+-->
+</body>
+</html>

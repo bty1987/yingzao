@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="营造 Yingzao · 装修行业开源 ERP 管理后台 · 视觉方向三:东方极简(屏壹 登录 / 屏贰 客源列表)">
+<title>营造 YINGZAO · 管理后台视觉初稿 · 方向三 东方极简</title>
+<!--
+  ─────────────────────────────────────────────────────────────
+  营造 YINGZAO · 视觉方向三 · 东方极简(原研哉 / 日本设计中心式)
+  视觉 DNA:纸白暖底 #FAF9F5 + 墨黑 #1A1A18 + 朱印红 #B03A2E(唯一点缀)
+  display 宋体栈 × 正文黑体栈;古籍版式:版框、双线栏格、藏书朱印。
+  纯 HTML + CSS,零外部依赖,无 JS。可读性底线:正文 ≥14px,正文对比度 ≥4.5:1。
+  ─────────────────────────────────────────────────────────────
+-->
+<style>
+/* ═══════════════════════════════════════════════════════════
+   模数制 MODULAR SCALE(材分制彩蛋)
+   《营造法式》以「材分」为万物之尺度——本稿一份 = 8px。
+   全部间距、组件尺寸、字号档位皆取 8 的整数倍:
+   8 / 16 / 24 / 32 / 40 / 48 / 56 / 64 / 88 / 120 ……
+   模数即装饰,不假多余线脚。
+   ═══════════════════════════════════════════════════════════ */
+:root{
+  --fen: 8px;                    /* 一分 = 8px,基本模数 */
+  /* 三色:纸 / 墨 / 朱 */
+  --paper:      #FAF9F5;         /* 纸白暖底 */
+  --paper-deep: #F0EEE6;         /* 纸色加深一档(行 hover) */
+  --ink:        #1A1A18;         /* 墨黑 */
+  --ink-soft:   #6B675C;         /* 次级墨(对比度 5.4:1) */
+  --line:       rgba(26,26,24,.15);  /* 细横线:墨 15%,古籍栏线 */
+  --line-strong:rgba(26,26,24,.5);   /* 表头双线 */
+  --cinnabar:   #B03A2E;         /* 朱印红(对比度 5.7:1) */
+  --gray-dot:   #8A867C;         /* 来源色点·灰(仅装饰点) */
+  /* 字体:宋体 display × 黑体正文 */
+  --song: 'Songti SC','STSong','SimSun','Noto Serif SC',serif;
+  --hei:  'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Heiti SC',sans-serif;
+}
+*{ margin:0; padding:0; box-sizing:border-box; }
+html{ -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+body{ background:#E8E5DB; font-family:var(--hei); color:var(--ink); }
+::selection{ background:var(--cinnabar); color:var(--paper); }
+a:focus-visible, button:focus-visible{ outline:2px solid var(--cinnabar); outline-offset:2px; }
+
+/* 屏与屏之间的说明条(交付标注,非产品界面) */
+.caption{
+  padding:24px 0; text-align:center;
+  font-family:var(--song); font-size:12px;
+  letter-spacing:.5em; text-indent:.5em; color:var(--ink-soft);
+}
+
+/* 每屏固定 900px 高,上下排布 */
+.screen{ height:900px; background:var(--paper); position:relative; overflow:hidden; }
+
+/* ═══════════════ 屏壹 · 登录(古籍扉页) ═══════════════ */
+.screen-login{ display:flex; align-items:center; justify-content:center; }
+
+/* 版框:1px 墨线(15%)围合全页,内衬更淡一线,如古籍边栏 */
+.page-frame{ position:absolute; top:24px; right:24px; bottom:24px; left:24px;
+  border:1px solid var(--line); pointer-events:none; }
+.page-frame::after{ content:''; position:absolute; top:8px; right:8px; bottom:8px; left:8px;
+  border:1px solid rgba(26,26,24,.06); }
+
+.login-wrap{ text-align:center; }
+
+.brand-row{ display:flex; align-items:flex-end; justify-content:center; gap:24px; }
+.brand{
+  font-family:var(--song); font-size:120px; line-height:1; font-weight:600;
+  letter-spacing:.12em; margin-right:-.12em; color:var(--ink);
+}
+/* 朱印:CSS 阴文方印(64px 见方 = 8 材分),白字宋体,内框如印边 */
+.seal{
+  position:relative; display:inline-flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  background:var(--cinnabar); color:var(--paper);
+  font-family:var(--song); border-radius:2px;
+}
+.seal::after{ content:''; position:absolute; top:4px; right:4px; bottom:4px; left:4px;
+  border:1px solid rgba(250,249,245,.45); }
+.seal span{ line-height:1.15; }
+.seal-lg{ width:64px; height:64px; font-size:20px; margin-bottom:16px; }
+.seal-sm{ width:28px; height:28px; font-size:10px; }
+
+.brand-en{
+  margin-top:32px; font-family:var(--song); font-size:14px;
+  letter-spacing:.72em; text-indent:.72em; color:var(--ink-soft);
+}
+.tagline{
+  margin-top:16px; font-size:16px; letter-spacing:.14em; text-indent:.14em; color:var(--ink);
+}
+
+/* 窄表单:320px(40 材分),输入框仅存一条底墨线 */
+.login-form{ width:320px; margin:56px auto 0; text-align:left; }
+.field{
+  display:block; width:100%; height:48px; padding:0 8px;
+  border:0; border-bottom:1px solid rgba(26,26,24,.35); border-radius:0;
+  background:transparent; font-family:var(--hei); font-size:14px;
+  letter-spacing:.08em; color:var(--ink);
+}
+.field + .field{ margin-top:24px; }
+.field::placeholder{ color:var(--ink-soft); }
+.field:focus{ outline:none; border-bottom-color:var(--cinnabar); }
+
+/* 登录钮:墨黑实底、白字、方角(2px),悬停转朱 */
+.btn-primary{
+  margin-top:40px; width:100%; height:48px;
+  border:0; border-radius:2px; background:var(--ink); color:var(--paper);
+  font-family:var(--hei); font-size:16px; letter-spacing:.5em; text-indent:.5em;
+  cursor:pointer; transition:background-color .18s ease;
+}
+.btn-primary:hover{ background:var(--cinnabar); }
+
+/* 版权脚注,沉在版框底部 */
+.colophon{
+  position:absolute; bottom:40px; left:0; right:0; text-align:center;
+  font-size:12px; letter-spacing:.32em; text-indent:.32em; color:var(--ink-soft);
+}
+
+/* ═══════════════ 屏贰 · 客源列表(横导航 + 古籍栏格) ═══════════════ */
+.screen-list{ display:flex; flex-direction:column; }
+
+/* 顶部横导航:64px(8 材分)高,底一条墨线 */
+.topbar{ height:64px; border-bottom:1px solid var(--line); }
+.topbar-inner{ max-width:1280px; height:64px; margin:0 auto; padding:0 32px;
+  display:flex; align-items:center; }
+.logo{ display:flex; align-items:center; gap:8px; }
+.logo-type{ font-family:var(--song); font-size:24px; font-weight:700;
+  letter-spacing:.12em; margin-right:-.12em; color:var(--ink); }
+.nav{ margin-left:64px; height:64px; display:flex; }
+.nav a{
+  display:flex; align-items:center; height:64px; margin-right:40px; padding:0 4px;
+  font-size:14px; letter-spacing:.2em; color:var(--ink-soft); text-decoration:none;
+  border-bottom:2px solid transparent; transition:color .15s, border-color .15s;
+}
+.nav a:last-child{ margin-right:0; }
+.nav a:hover{ color:var(--ink); }
+.nav a.active{ color:var(--ink); border-bottom-color:var(--cinnabar); } /* active:朱红下划线 */
+.account{ margin-left:auto; font-size:14px; letter-spacing:.08em; color:var(--ink-soft); }
+.account a{ color:var(--ink-soft); text-decoration:none; margin-left:8px; transition:color .15s; }
+.account a:hover{ color:var(--cinnabar); text-decoration:underline; }
+
+.main{ max-width:1280px; width:100%; margin:0 auto; padding:48px 32px 0; }
+
+/* 页题:宋体大字 + 副题,右侧墨黑方角按钮 */
+.page-head{ display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:40px; }
+.page-title{ font-family:var(--song); font-size:40px; line-height:1; font-weight:600;
+  letter-spacing:.1em; color:var(--ink); }
+.page-sub{ margin-top:16px; font-size:14px; letter-spacing:.16em; color:var(--ink-soft); }
+.btn-ink{
+  height:40px; padding:0 24px; border:0; border-radius:2px;
+  background:var(--ink); color:var(--paper);
+  font-family:var(--hei); font-size:14px; letter-spacing:.24em; text-indent:.24em;
+  cursor:pointer; transition:background-color .18s ease;
+}
+.btn-ink:hover{ background:var(--cinnabar); }
+
+/* 古籍版式表格:表头墨色上下双细线,行间 1px 淡墨线 */
+.ledger{ width:100%; border-collapse:collapse; }
+.ledger th{
+  padding:16px; text-align:left;
+  font-family:var(--song); font-size:15px; font-weight:700;
+  letter-spacing:.1em; color:var(--ink-soft);
+  border-top:1px solid var(--line-strong);      /* 上线 */
+  border-bottom:1px solid var(--line-strong);   /* 下线:合为表头双线 */
+}
+.ledger td{
+  height:56px; padding:0 16px; vertical-align:middle;  /* 行高 56 = 7 材分 */
+  font-size:14px; color:var(--ink);
+  border-bottom:1px solid var(--line);
+}
+.ledger tbody tr{ transition:background-color .15s ease; }
+.ledger tbody tr:hover{ background:var(--paper-deep); }  /* 行 hover:纸色加深一档 */
+
+.cell-id{ font-family:var(--song); font-size:15px; letter-spacing:.04em; color:var(--ink-soft); }
+.cell-name{ font-weight:500; }
+.cell-phone{ letter-spacing:.02em; }
+.cell-note{ color:var(--ink-soft); }
+.cell-time{ font-family:var(--song); font-size:14px; letter-spacing:.02em; color:var(--ink-soft); }
+
+/* 来源列:8px 见方色点(一材分),墨/朱/灰三色 */
+.src-dot{ display:inline-block; width:8px; height:8px; margin-right:8px; vertical-align:middle; }
+.src-adv{ background:var(--ink); }        /* 广告 → 墨 */
+.src-ref{ background:var(--cinnabar); }   /* 转介绍 → 朱 */
+.src-walk{ background:var(--gray-dot); }  /* 自然进店 → 灰 */
+
+/* 状态小方标:已登记 = 墨描边;已转化 = 朱红实底 */
+.tag{
+  display:inline-block; min-width:64px; padding:5px 8px; text-align:center;
+  font-size:12px; letter-spacing:.16em; text-indent:.16em; border-radius:2px;
+}
+.tag-open{ border:1px solid rgba(26,26,24,.45); color:var(--ink); }
+.tag-done{ background:var(--cinnabar); color:var(--paper); }
+
+/* 操作列:朱红文字链;已转化者退为灰墨 */
+.convert{
+  font-size:14px; color:var(--cinnabar); text-decoration:none;
+  padding-bottom:2px; border-bottom:1px solid rgba(176,58,46,.35); transition:border-color .15s;
+}
+.convert:hover{ border-bottom-color:var(--cinnabar); }
+.convert-mute{ color:var(--ink-soft); border-bottom-color:rgba(26,26,24,.2); cursor:default; }
+.convert-mute:hover{ border-bottom-color:rgba(26,26,24,.2); }
+
+/* 底部分页:当前页朱红 */
+.pager{ margin-top:40px; padding-bottom:48px;
+  display:flex; justify-content:center; align-items:baseline; }
+.pager a{ text-decoration:none; }
+.pager-step{ margin:0 24px; font-size:14px; letter-spacing:.16em; color:var(--ink-soft); transition:color .15s; }
+.pager-step:hover{ color:var(--ink); }
+.pg{ margin:0 16px; padding-bottom:6px; font-family:var(--song); font-size:16px;
+  color:var(--ink-soft); border-bottom:2px solid transparent; transition:color .15s; }
+.pg:hover{ color:var(--ink); }
+.pg.current{ color:var(--cinnabar); border-bottom-color:var(--cinnabar); }
+</style>
+</head>
+<body>
+
+<div class="caption">视觉方向三 · 东方极简 ｜ 屏壹 · 登录</div>
+
+<!-- ═══════════════ 屏壹 · 登录 ═══════════════ -->
+<section class="screen screen-login">
+  <div class="page-frame" aria-hidden="true"></div><!-- 版框:古籍扉页边框,墨线 15% -->
+
+  <div class="login-wrap">
+    <div class="brand-row">
+      <h1 class="brand">营造</h1><!-- 大号宋体,120px 级 -->
+      <span class="seal seal-lg" aria-hidden="true"><span>法</span><span>式</span></span><!-- 朱印·阴文 -->
+    </div>
+
+    <p class="brand-en">YINGZAO</p><!-- 英文衬线小标,字距拉开 -->
+    <p class="tagline">「现代装修企业的营造法式」</p>
+
+    <form class="login-form" action="#">
+      <input class="field" type="text" name="username" placeholder="用户名"
+             autocomplete="username" aria-label="用户名">
+      <input class="field" type="password" name="password" placeholder="密码"
+             autocomplete="current-password" aria-label="密码">
+      <button class="btn-primary" type="submit">登录</button><!-- 墨黑实底白字方角 -->
+    </form>
+  </div>
+
+  <p class="colophon">© 二〇二六 营造 YINGZAO · 开源装修 ERP</p>
+</section>
+
+<div class="caption">屏贰 · 客源列表</div>
+
+<!-- ═══════════════ 屏贰 · 客源列表 ═══════════════ -->
+<section class="screen screen-list">
+
+  <!-- 顶部横导航 -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">
+        <span class="logo-type">营造</span>
+        <span class="seal seal-sm" aria-hidden="true"><span>营</span><span>造</span></span>
+      </div>
+      <nav class="nav">
+        <a class="active" href="#">客源管理</a><!-- active:朱红下划线 -->
+        <a href="#">客户档案</a>
+      </nav>
+      <div class="account">营造管理员 · <a href="#">退出</a></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">客源管理</h2>
+        <p class="page-sub">「现代装修企业的营造法式」——客源为营造之始</p>
+      </div>
+      <button class="btn-ink" type="button">登记客源</button>
+    </div>
+
+    <table class="ledger">
+      <colgroup>
+        <col style="width:56px">   <!-- ID -->
+        <col style="width:88px">   <!-- 姓名 -->
+        <col style="width:152px">  <!-- 电话 -->
+        <col style="width:112px">  <!-- 来源 -->
+        <col>                      <!-- 备注:弹性 -->
+        <col style="width:96px">   <!-- 状态 -->
+        <col style="width:168px">  <!-- 登记时间 -->
+        <col style="width:72px">   <!-- 操作 -->
+      </colgroup>
+      <thead>
+        <tr>
+          <th>ID</th><th>姓名</th><th>电话</th><th>来源</th>
+          <th>备注</th><th>状态</th><th>登记时间</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="cell-id">0001</td>
+          <td class="cell-name">张三</td>
+          <td class="cell-phone">138 0123 4567</td>
+          <td><span class="src-dot src-adv"></span>广告</td>
+          <td class="cell-note">三室两厅全包咨询,约周末量房</td>
+          <td><span class="tag tag-open">已登记</span></td>
+          <td class="cell-time">2026-10-09 09:24</td>
+          <td><a class="convert" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="cell-id">0002</td>
+          <td class="cell-name">李四</td>
+          <td class="cell-phone">139 2345 6781</td>
+          <td><span class="src-dot src-ref"></span>转介绍</td>
+          <td class="cell-note">老客户推荐,别墅翻新建面 260㎡</td>
+          <td><span class="tag tag-open">已登记</span></td>
+          <td class="cell-time">2026-10-08 15:47</td>
+          <td><a class="convert" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="cell-id">0003</td>
+          <td class="cell-name">王五</td>
+          <td class="cell-phone">137 8765 4321</td>
+          <td><span class="src-dot src-walk"></span>自然进店</td>
+          <td class="cell-note">到店两次,重点看样板间工艺</td>
+          <td><span class="tag tag-done">已转化</span></td>
+          <td class="cell-time">2026-10-07 11:03</td>
+          <td><span class="convert convert-mute">转化</span></td>
+        </tr>
+        <tr>
+          <td class="cell-id">0004</td>
+          <td class="cell-name">赵六</td>
+          <td class="cell-phone">136 9081 7253</td>
+          <td><span class="src-dot src-adv"></span>广告</td>
+          <td class="cell-note">电梯广告扫码,咨询旧房局部改造</td>
+          <td><span class="tag tag-open">已登记</span></td>
+          <td class="cell-time">2026-10-06 18:22</td>
+          <td><a class="convert" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="cell-id">0005</td>
+          <td class="cell-name">钱七</td>
+          <td class="cell-phone">135 2233 4456</td>
+          <td><span class="src-dot src-ref"></span>转介绍</td>
+          <td class="cell-note">小区团购报名,两套婚房新装</td>
+          <td><span class="tag tag-open">已登记</span></td>
+          <td class="cell-time">2026-10-05 10:15</td>
+          <td><a class="convert" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="cell-id">0006</td>
+          <td class="cell-name">孙八</td>
+          <td class="cell-phone">188 5566 7789</td>
+          <td><span class="src-dot src-walk"></span>自然进店</td>
+          <td class="cell-note">留资预约量房,预算 15 万以内</td>
+          <td><span class="tag tag-done">已转化</span></td>
+          <td class="cell-time">2026-10-03 16:40</td>
+          <td><span class="convert convert-mute">转化</span></td>
+        </tr>
+        <tr>
+          <td class="cell-id">0007</td>
+          <td class="cell-name">周九</td>
+          <td class="cell-phone">150 6677 8890</td>
+          <td><span class="src-dot src-adv"></span>广告</td>
+          <td class="cell-note">咨询全案设计,周末方便接洽</td>
+          <td><span class="tag tag-open">已登记</span></td>
+          <td class="cell-time">2026-10-02 14:08</td>
+          <td><a class="convert" href="#">转化</a></td>
+        </tr>
+        <tr>
+          <td class="cell-id">0008</td>
+          <td class="cell-name">吴十</td>
+          <td class="cell-phone">186 7788 9900</td>
+          <td><span class="src-dot src-ref"></span>转介绍</td>
+          <td class="cell-note">由李四推荐,婚房 89㎡ 整装</td>
+          <td><span class="tag tag-open">已登记</span></td>
+          <td class="cell-time">2026-09-30 09:52</td>
+          <td><a class="convert" href="#">转化</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 假分页:当前页朱红 -->
+    <nav class="pager">
+      <a class="pager-step" href="#">上一页</a>
+      <a class="pg current" href="#">1</a>
+      <a class="pg" href="#">2</a>
+      <a class="pg" href="#">3</a>
+      <a class="pager-step" href="#">下一页</a>
+    </nav>
+  </main>
+</section>
+
+<div class="caption">—— 方向三 · 完 ——</div>
+
+<!--
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FORM 母题出处:版框、表头双线栏格与藏书朱印取自《营造法式》古籍版式,
+其骨架是「材分模数制」——所有间距与尺寸皆为 8px(一分)的整数倍,模数即装饰。
+
+ASSUMPTIONS(初稿假设):
+1. 静态视觉初稿:登录、翻页、「登记客源」「转化」仅为纯 CSS 演示,无真实交互与跳转。
+2. 表内电话、时间、备注均为虚构样例数据,不对应任何真实客户。
+3. 顶部导航仅按需求展开「客源管理 / 客户档案」两项,其余 ERP 模块(报价、施工、财务等)待信息架构定稿后补充。
+4. 朱印以 CSS 方块 + 宋体白字模拟阴文印,正式落地可替换为篆刻图形。
+5. 宋体依赖系统字体栈(Songti SC / STSong / SimSun / Noto Serif SC),各平台渲染略有差异;为守住零外部依赖,未内嵌字体文件。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-->
+</body>
+</html>

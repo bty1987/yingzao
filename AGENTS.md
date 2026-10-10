@@ -66,11 +66,16 @@
 - 🔴 冒烟请求含中文必须用 python urllib(UTF-8),Git Bash 的 curl 发中文 = GBK 炸 JSON;
 - jar 被锁:按 8080 端口找 PID `taskkill //PID x //F`。
 
-## 当前进度(2026-10-10)
+## 当前进度(2026-10-10 夜间自动任务更新)
 
 - ✅ 41 模块过堂终版(需求规格书);插件框架六点代码化;客源→客户细链 dev 库冒烟 **7/7 通过**(提交 b1bde89);
-- ⏳ spike 前端段:Web 后台(Vue3:菜单/槽位下发渲染)、uni-app 一码双出、企微/钉钉免登、docker-compose 容器验证;
-- ✅ 三决策已定:组织单层 / 工作流轻量自研 / building 归并滞后。
+- ✅ 客源域 L2 规则清单(`docs/rules/customer.md`,状态机/分配决策链/保护期,标注方林嫌疑,§9 待业务确认);
+- ✅ Web 后台工程骨架(`web/`,npm build 全绿):动态菜单由 `/api/addons` 下发(后端已补 menus 字段)、客源页/档案页/槽位渲染器;**视觉为默认样式,正式视觉待风格选定**;
+- ✅ 风格三方向初稿(`docs/design/`,huashu-design 三套逻辑:大字报/Linear暗色/东方纸墨):**🔴 未选定,选定前不做正式视觉**;
+- ⏳ 待用户:风格三选一(docs/design/index.html)/客源规则 5 条确认/企微钉钉凭证/uni-app 账号/Docker 环境;
+- ⏳ 可自动推进(与视觉零耦合):客源 V2(chance 子域 PRD+分配策略接口)、quotation 规则提取→PRD、uni-app 骨架;
+- ✅ 三决策已定:组织单层 / 工作流轻量自研 / building 归并滞后;
+- 📋 每晚自动任务收尾:`docs/reports/<日期>-总结.md`,最新=2026-10-10-spike阶段总结.md。
 
 ## Git 纪律
 
