@@ -154,6 +154,7 @@ Web 后台启动时向后端拉取已启用插件的**前端清单**(由 `addon.
 4. 版本号分段约定(Flyway):core 100–199,addon 对齐错误码段(customer 200+,customerprofile 300+,quotation 400+),各 addon 独立 migration location;
 5. spike 范围说明:认证为内存 token(正式版换 Redis);ORM 暂用 JdbcTemplate(正式版评估 MyBatis-Plus);企微/钉钉免登与 uni-app 端见 RFC §7。
 6. **插件分段迁移必须 `out-of-order: true`**(2026-10-11 dev 库实锤):各 addon 版本段独立演进必然交错——customer 的 V201 晚于 customerprofile 的 V300 才出现时,Flyway 默认校验直接拒绝启动("Detected resolved migration not applied to database: 201")。分段是红线,乱序是常态,组装壳 application.yml 已配置。
+7. **通知中心 = 内核平台设施,内核不订阅业务事件**(2026-10-12 定案并落地):内核只提供通用站内信(`yz_notification` 表 + `NotificationService.send` + `/api/notifications` 收件箱 API,零业务知识);**插件自己监听自己关注的事件,在 AFTER_COMMIT 回调里调内核 API 落通知**(示范:addon-customer `LeadAssignedNotifier` 监听 `LeadAssignedEvent`)。方向理由:若内核订阅 `LeadAssignedEvent`,内核就必须认识每一个插件事件,"一切皆插件"不成立;通知失败必须在订阅方 try-catch 吞掉(主事务已提交,异常上抛只会把成功操作变 500)。
 
 ## 7. Phase 0 spike 验收标准
 
