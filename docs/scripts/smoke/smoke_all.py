@@ -300,6 +300,107 @@ def main():
     step("转交链两级走完回写通过(1)", len(t_rows2) == 1 and t_rows2[0].get("status") == 1
          and t_rows2[0].get("approval_level") == 2, t_rows2)
 
+    print("== 客户与楼盘档案(addon-customerprofile V1)==")
+    stamp2 = time.strftime("%Y%m%d%H%M%S")
+    city_id = api_ok("建城市", "POST", "/api/customerprofile/cities", tok_admin,
+                     {"name": "烟测市" + stamp2})
+    if city_id is None:
+        return finish()
+    proper_id = api_ok("建城区", "POST", "/api/customerprofile/cities/%s/propers" % city_id, tok_admin,
+                       {"name": "烟测区"})
+    api_err("同城区重名拒绝 330015", "POST", "/api/customerprofile/cities/%s/propers" % city_id, tok_admin,
+            {"name": "烟测区"}, 330015)
+    village_id = api_ok("建楼盘", "POST", "/api/customerprofile/villages", tok_admin,
+                        {"name": "烟测楼盘" + stamp2, "cityId": city_id, "properId": proper_id,
+                         "developer": "冒烟开发商", "x": 123400000, "y": 41800000, "mileage": 12000})
+    api_err("同城区同名楼盘拒绝 330002", "POST", "/api/customerprofile/villages", tok_admin,
+            {"name": "烟测楼盘" + stamp2, "cityId": city_id, "properId": proper_id}, 330002)
+    villages = api_ok("楼盘分页检索", "GET",
+                      "/api/customerprofile/villages?keyword=%s&page=1&size=10" % stamp2, tok_admin)
+    step("检索命中新建楼盘", bool(villages) and villages.get("total", 0) >= 1, villages)
+
+    house_number = "1栋2单元3楼" + stamp2
+    house_id = api_ok("建房屋(门牌密文)", "POST", "/api/customerprofile/houses", tok_admin,
+                      {"villageId": village_id, "number": house_number,
+                       "fields": {"built": "1", "unit": "2", "floorNum": 3, "doorNum": 4,
+                                  "buildArea": 98000, "innerArea": 88000, "houseType": "2室1厅"}})
+    api_err("同楼盘同门牌拒绝 330004", "POST", "/api/customerprofile/houses", tok_admin,
+            {"villageId": village_id, "number": house_number}, 330004)
+    exist_h = api_ok("房屋 get-or-create(已存在幂等)", "POST", "/api/customerprofile/houses/exist", tok_admin,
+                     {"villageId": village_id, "number": house_number})
+    step("幂等回原 id 且 created=false",
+         bool(exist_h) and exist_h.get("created") is False and str(exist_h.get("houseId")) == str(house_id),
+         exist_h)
+    house = api_ok("房屋详情解密", "GET", "/api/customerprofile/houses/%s" % house_id, tok_admin)
+    step("门牌解密与明文一致", bool(house) and house.get("number") == house_number, house)
+
+    cust_phone = "139%08d" % (int(stamp2) % 100000000)
+    cust_id = api_ok("建客户", "POST", "/api/customerprofile/customers", tok_admin,
+                     {"name": "烟测客户" + stamp2, "phone": cust_phone, "address": "烟测路1号",
+                      "identity": "210102199001010011"})
+    api_err("同号重复建档拒绝 330006", "POST", "/api/customerprofile/customers", tok_admin,
+            {"name": "烟测客户B", "phone": cust_phone}, 330006)
+    exist_c = api_ok("客户 get-or-create(已存在幂等)", "POST", "/api/customerprofile/customers/exist",
+                     tok_admin, {"phone": cust_phone, "name": "任意名"})
+    step("幂等回显原客户",
+         bool(exist_c) and exist_c.get("created") is False and str(exist_c.get("customerId")) == str(cust_id),
+         exist_c)
+    custs = api_ok("按手机号检索客户", "GET",
+                   "/api/customerprofile/customers?keyword=%s&page=1&size=10" % cust_phone, tok_admin)
+    step("检索命中", bool(custs) and custs.get("total", 0) >= 1, custs)
+
+    phone2 = "137%08d" % ((int(stamp2) + 1) % 100000000)
+    phone2_id = api_ok("加第二个号码", "POST", "/api/customerprofile/customers/%s/phones" % cust_id,
+                       tok_admin, {"phone": phone2})
+    phones = api_ok("号码列表(脱敏)", "GET", "/api/customerprofile/customers/%s/phones" % cust_id, tok_admin)
+    default_rows = [p for p in (phones or []) if p.get("is_default") == 1]
+    ok = len(default_rows) == 1 and all(cust_phone not in json.dumps(r) for r in (phones or []))
+    step("唯一默认号+列表不含明文", ok, phones)
+    if not default_rows or phone2_id is None:
+        return finish()
+    default_id = default_rows[0]["id"]
+    api_err("默认号码停用拒绝 330008",
+            "POST", "/api/customerprofile/customers/%s/phones/%s/status" % (cust_id, default_id),
+            tok_admin, {"status": 1}, 330008)
+    api_ok("显式切换默认到二号",
+           "POST", "/api/customerprofile/customers/%s/phones/%s/default" % (cust_id, phone2_id),
+           tok_admin, None)
+    api_ok("一号停用(非默认)",
+           "POST", "/api/customerprofile/customers/%s/phones/%s/status" % (cust_id, default_id),
+           tok_admin, {"status": 1})
+    api_err("停用号设默认拒绝 330009",
+            "POST", "/api/customerprofile/customers/%s/phones/%s/default" % (cust_id, default_id),
+            tok_admin, None, 330009)
+    api_ok("一号恢复启用",
+           "POST", "/api/customerprofile/customers/%s/phones/%s/status" % (cust_id, default_id),
+           tok_admin, {"status": 0})
+    rev = api_ok("解密留痕(事由必填即 purpose)",
+                 "POST", "/api/customerprofile/customers/%s/phones/%s/reveal" % (cust_id, phone2_id),
+                 tok_admin, {"purpose": "冒烟核对"})
+    step("明文一致", bool(rev) and rev.get("phone") == phone2, rev)
+    logs = api_ok("审计可查", "GET",
+                  "/api/customerprofile/customers/%s/phone-access-logs?page=1&size=10" % cust_id, tok_admin)
+    step("审计含留痕记录", bool(logs) and logs.get("total", 0) >= 1, logs)
+
+    account_no = "6222" + stamp2
+    acc_id = api_ok("建对私账户(首账户自动默认)", "POST",
+                    "/api/customerprofile/customers/%s/accounts" % cust_id, tok_admin,
+                    {"holderName": "烟测户", "bankName": "烟测银行", "accountNo": account_no})
+    api_err("同账户重复拒绝 330012", "POST", "/api/customerprofile/customers/%s/accounts" % cust_id,
+            tok_admin, {"holderName": "烟测户", "accountNo": account_no}, 330012)
+    accs = api_ok("账户列表(脱敏)", "GET", "/api/customerprofile/customers/%s/accounts" % cust_id, tok_admin)
+    ok = len(accs or []) == 1 and accs[0].get("is_default") == 1 \
+        and account_no not in json.dumps(accs) and accs[0].get("accountMasked", "").endswith(stamp2[-4:])
+    step("账号脱敏+默认标记", ok, accs)
+
+    lead_phone = "136%08d" % ((int(stamp2) + 2) % 100000000)
+    lead2 = api_ok("登记转化用客源", "POST", "/api/customer/leads", tok_b,
+                   {"name": "转化客" + stamp2, "phone": lead_phone, "source": "referral"})
+    api_ok("转化客源", "POST", "/api/customer/leads/%s/convert" % lead2, tok_b)
+    linked = api_ok("转化联动主档(get-or-create 事件链)", "GET",
+                    "/api/customerprofile/customers?keyword=%s&page=1&size=10" % lead_phone, tok_admin)
+    step("转化客源自动落主档", bool(linked) and linked.get("total", 0) >= 1, linked)
+
     return finish()
 
 

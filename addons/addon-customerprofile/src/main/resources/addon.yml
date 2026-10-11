@@ -1,15 +1,21 @@
 addon:
   id: customerprofile
-  name: 客户档案
-  version: 0.1.0
-  error-code-segment: 220000
+  name: 客户与楼盘档案
+  version: 0.2.0
+  error-code-segment: 330000
   menus:
-    - path: /customerprofile/profiles
+    - path: /customerprofile/customers
       title: 客户档案
-      icon: peers
+      icon: user
   dicts:
-    customerLevel:
-      - { key: normal, label: 普通 }
-      - { key: vip, label: 重要 }
+    customerStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已实名 }
+    phoneStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
+    accountType:
+      - { key: '0', label: 对私 }
+      - { key: '1', label: 对公 }
   mounts:
     - { slot: customerprofile.profile.detail.footer, component: ProfileTag, capability: customerprofile:view }

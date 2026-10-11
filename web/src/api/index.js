@@ -10,7 +10,43 @@ export const assignLead = (id, data) => http.post(`/api/customer/leads/${id}/ass
 export const listChances = () => http.get('/api/customer/chances')
 export const confirmChance = (id) => http.post(`/api/customer/chances/${id}/confirm`)
 export const completeChance = (id) => http.post(`/api/customer/chances/${id}/complete`)
-export const listProfiles = () => http.get('/api/customerprofile/profiles')
+// 客户与楼盘档案(addon-customerprofile)
+export const pageCustomers = (params) => http.get('/api/customerprofile/customers', { params })
+export const createCustomer = (data) => http.post('/api/customerprofile/customers', data)
+export const existCustomer = (data) => http.post('/api/customerprofile/customers/exist', data)
+export const fetchCustomer = (id) => http.get(`/api/customerprofile/customers/${id}`)
+export const updateCustomer = (id, data) => http.put(`/api/customerprofile/customers/${id}`, data)
+export const listCustomerPhones = (id) => http.get(`/api/customerprofile/customers/${id}/phones`)
+export const addCustomerPhone = (id, data) => http.post(`/api/customerprofile/customers/${id}/phones`, data)
+export const setDefaultCustomerPhone = (id, phoneId) =>
+  http.post(`/api/customerprofile/customers/${id}/phones/${phoneId}/default`)
+export const updateCustomerPhoneStatus = (id, phoneId, data) =>
+  http.post(`/api/customerprofile/customers/${id}/phones/${phoneId}/status`, data)
+export const revealCustomerPhone = (id, phoneId, data) =>
+  http.post(`/api/customerprofile/customers/${id}/phones/${phoneId}/reveal`, data)
+export const listPhoneAccessLogs = (id, params) =>
+  http.get(`/api/customerprofile/customers/${id}/phone-access-logs`, { params })
+export const listCustomerAccounts = (id) => http.get(`/api/customerprofile/customers/${id}/accounts`)
+export const addCustomerAccount = (id, data) =>
+  http.post(`/api/customerprofile/customers/${id}/accounts`, data)
+export const setDefaultCustomerAccount = (id, accountId) =>
+  http.post(`/api/customerprofile/customers/${id}/accounts/${accountId}/default`)
+export const updateCustomerAccountStatus = (id, accountId, data) =>
+  http.post(`/api/customerprofile/customers/${id}/accounts/${accountId}/status`, data)
+export const listCities = () => http.get('/api/customerprofile/cities')
+export const createCity = (data) => http.post('/api/customerprofile/cities', data)
+export const createCityProper = (cityId, data) =>
+  http.post(`/api/customerprofile/cities/${cityId}/propers`, data)
+export const pageVillages = (params) => http.get('/api/customerprofile/villages', { params })
+export const fetchVillage = (id) => http.get(`/api/customerprofile/villages/${id}`)
+export const createVillage = (data) => http.post('/api/customerprofile/villages', data)
+export const updateVillage = (id, data) => http.put(`/api/customerprofile/villages/${id}`, data)
+export const updateVillageStatus = (id, data) => http.post(`/api/customerprofile/villages/${id}/status`, data)
+export const pageHouses = (params) => http.get('/api/customerprofile/houses', { params })
+export const fetchHouse = (id) => http.get(`/api/customerprofile/houses/${id}`)
+export const createHouse = (data) => http.post('/api/customerprofile/houses', data)
+export const existHouse = (data) => http.post('/api/customerprofile/houses/exist', data)
+export const updateHouse = (id, data) => http.put(`/api/customerprofile/houses/${id}`, data)
 
 // 通知收件箱(内核)
 export const listNotifications = (params) => http.get('/api/notifications', { params })

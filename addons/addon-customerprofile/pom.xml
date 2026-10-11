@@ -12,7 +12,7 @@
 
     <artifactId>addon-customerprofile</artifactId>
     <name>addon-customerprofile</name>
-    <description>客户档案 addon:订阅客源转化事件建档(错误码段 220000)</description>
+    <description>客户与楼盘档案 addon:客户主档案(手机锚点+多电话+收款账户+解密留痕)+ 城市/城区/楼盘(树)/房屋(门牌密文);get-or-create 幂等建档(错误码段 330000)</description>
 
     <dependencies>
         <dependency>
