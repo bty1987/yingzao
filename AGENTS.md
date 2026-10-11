@@ -66,7 +66,7 @@
 - 🔴 冒烟请求含中文必须用 python urllib(UTF-8),Git Bash 的 curl 发中文 = GBK 炸 JSON;
 - jar 被锁:按 8080 端口找 PID `taskkill //PID x //F`。
 
-## 当前进度(2026-10-11 夜间自动任务更新,第 9 次运行)
+## 当前进度(2026-10-11 夜间自动任务更新,第 10 次运行)
 
 - ✅ 41 模块过堂终版;插件框架六点代码化;客源→客户细链冒烟 7/7(b1bde89);客源 V2 分配链冒烟 12/12(9689f13);内核通知中心冒烟 16/16(0d7c914);内核轻量审批状态机冒烟 25/25(b68eb4f);示范插件 addon-example+Web 通知/审批工程页冒烟 28/28(e148667);
 - ✅ **uni-app 移动端骨架 `app/`**(第 6 次,一码三出):uni-app + Vue3 + Vite(@dcloudio 统一 3.0.0-alpha-5030120260930001,vite 5.2.8);八页 = 登录/工作台/客源登记/我的机会/我的审批(三视角+详情全操作)/通知列表/我的;API_BASE 条件编译;`build:h5`/`build:mp-weixin`/`build:app` 三端构建全绿;真机运行待 uni-app 账号与 appid;
@@ -77,11 +77,13 @@
 - ✅ **RBAC v2 设计稿(第 9 次,docs/03-RBAC端点鉴权与数据权限设计.md,纯文档未实施)**:业务 API 端点级鉴权 = addon.yml 新增 `api` 段声明(prefix/exact → require 菜单 path 或 capability,复用 v1 身份字符串授权,角色 UI 零新增维度)+ 内核 RbacInterceptor 统一拦截(管理员旁路/122006 双语/授权并集 Caffeine 缓存+变更主动失效);两阶段收紧(observe 观察期留审计日志 → enforce 未声明即拒);数据权限三层(L0 org 硬边界+L1 归属可见 V2 落地、L2 部门范围等内核组织架构 V3);§8 五项决策待拍板后按 §9 实施清单开工;
 - ✅ **addon-example 多级审批前端对齐 + 转交串联冒烟(第 9 次)**:web Leaves.vue 补**二级审批人选择器**(此前 days≥3 长请假在 web 根本发不出,真缺口)+列表审批级别徽章;uni-app 新增请假页(pages/leave 列表含二级徽章/撤回 + create 发起含二级审批人 picker,工作台入口,镜像 addon.yml 状态字典);app 全局样式补 btn-mini.warn;冒烟 70→**88 步**:新增「转交×多级串联」18 步——非处理人转交 121002/L1 转交后待办迁移、转交后处理人通过仍触发派生 L2(派生链与处理人无关实证)/L2 二次转交/两级走完回写通过;
 - ✅ 冒烟扩至 **88/88 全绿**(dev 库 192.168.5.21 yingzao);mvn clean package 全绿;web npm build 全绿;app 三端构建全绿;
-- ✅ docs/prd/addon-basedata.md(主材计划独立设计,未写码待确认);五域知识资产齐(rules customer/quotation/decoration/construction/payment;PRD 六份含 basedata);三决策已定(组织单层/轻量自研/building 滞后);RFC §6 新坑 6-9 条;
+- ✅ **款项 PRD(第 10 次,docs/prd/addon-payment.md,纯文档待确认)**:规则底座直转业务闭环——**款项单+统一收据+预付款科目化三件套**:款项单类型字典化(类型/顺序/比例模板,灭绝中文名字符串分支)+签约拆分拒绝重建;收据双人留痕+Σ渠道==应收+先验后写;预付款=组织自定义科目字典+原子扣减 SQL(复活老 DAO 死代码)+金额强制>0;退款统一走内核轻量审批(废三轨并存,带状态快照);跨模块回写全事件化(收/确认/退/预付款变动四事件,业务插件自监回写);码段 270000/迁移 800+;非目标剥离渠道适配(V2 插件族)/钱包不迁/批量收款/客户微信确认;
+- ✅ **营销获客域知识资产(第 10 次,docs/rules/market.md + docs/prd/addon-market.md,第六域)**:market 老模块 107 文件/15 ServiceImpl 三路并行深读——模块定性:**2026-07 新增**(老系统最现代化代码:幂等键/AES 手机密文/REQUIRES_NEW 桥接)+**纯叶子**(全仓零反向依赖)+三族(获客链/官网案例库 E 族/微信名片族);获客链=活动(6态含2死态)×渠道→投放源(渠道码/二维码/UTM 三件套)→进线(幂等键+手机密文+EAV 动态字段,幂等三退化实锤)→REQUIRES_NEW 承接桥直调 customer(**孤儿事务缺陷**+housePO 判空序 NPE 地雷)→归因 insert-only 四级漏斗(order 级未实现);案例库=城市-案例-人物-图片-报名五件套展示 CMS(每城每类露 10 条/上下架布尔开关/报名手机明文+钉钉播报/地理回退硬编码"沈阳"/Eopinions 按错 PK 更新);名片族=外部 ISV 白标前台+留资通知(isv 配置键前后端两义/PII 明文进 GET URL/事务内 httpGet/全族零 FLException 静默 return);缺陷 13 条+方林嫌疑 12 条+§11 待确认 8 条;PRD 闭环=投放→进线→**承接改事件+回写契约(废跨插件直调)**→漏斗统计,案例报名复用进线链,码段 280000/迁移 1000+(900+ 被示例占用);
+- ✅ docs/prd/addon-basedata.md(主材计划独立设计,未写码待确认);**六域**知识资产齐(rules customer/quotation/decoration/construction/payment/market;**PRD 八份**:客源/分配/报价/装修单/施工/basedata/款项/营销获客);三决策已定(组织单层/轻量自研/building 滞后);RFC §6 新坑 6-9 条;
 - ✅ 风格三方向初稿(`docs/design/`)仍 🔴 未选定,选定前不做正式视觉(web 与 app 同批重做);
-- ⏳ 待用户:风格三选一(docs/design/index.html)/ 规则确认:客源 5 + 报价 8 + 装修单 10 + 施工 15 + **款项 10(新增)** / PRD 确认(客源/客源分配/报价/装修单/施工五份 + basedata 7 条)——确认后对应 addon 进入写码 / **RBAC v2 设计稿 §8 五项决策**(声明位置/观察期时长/method 维度/数据权限 L2 时机/字段脱敏)/ 企微钉钉凭证 / uni-app 账号与 appid / Docker 环境;
-- ⏳ 可自动推进(下一晚建议,与视觉零耦合):①payment PRD 起草(规则底座已就绪,码段建议 270000/迁移 800+,闭环=统一收据+款项单+预付款科目化三件套)②marketing(营销获客)等新域 L2 规则提取③RBAC v2 拍板后按 §9 实施清单写码④任一 PRD 确认后对应 addon 进入写码(basedata 最成熟);
-- 📋 每晚自动任务收尾:`docs/reports/<日期>-总结.md`(同日多运行按次序号区分),最新=2026-10-11-第9次运行总结.md。
+- ⏳ 待用户:风格三选一(docs/design/index.html)/ 规则确认:客源 5 + 报价 8 + 装修单 10 + 施工 15 + 款项 10 + **营销获客 8(新增,docs/rules/market.md §11)** / PRD 确认(客源/客源分配/报价/装修单/施工/款项/营销获客七份 + basedata 7 条)——确认后对应 addon 进入写码 / **RBAC v2 设计稿 §8 五项决策**(声明位置/观察期时长/method 维度/数据权限 L2 时机/字段脱敏)/ 企微钉钉凭证 / uni-app 账号与 appid / Docker 环境;
+- ⏳ 可自动推进(下一晚建议,与视觉零耦合):①building(楼盘)小域 L2 规则提取(快赢)②sales(主材销售,体量大可独占一夜)或 inventory(库存)域规则提取③RBAC v2 拍板后按 §9 实施清单写码④任一 PRD 确认后对应 addon 进入写码(basedata/款项规则底座最成熟);
+- 📋 每晚自动任务收尾:`docs/reports/<日期>-总结.md`(同日多运行按次序号区分),最新=2026-10-11-第10次运行总结.md。
 
 ## Git 纪律
 
