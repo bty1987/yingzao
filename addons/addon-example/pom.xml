@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.yingzao</groupId>
+        <artifactId>yingzao</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>addon-example</artifactId>
+    <name>addon-example</name>
+    <description>请假示例 addon:面向插件开发者的示范工程(非业务插件),演示接入内核轻量审批的完整回路(错误码段 290000)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

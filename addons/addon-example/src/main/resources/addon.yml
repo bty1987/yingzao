@@ -1,0 +1,15 @@
+addon:
+  id: example
+  name: 请假示例
+  version: 0.1.0
+  error-code-segment: 290000   # 示范工程独占段,与业务 addon 段(210000-260000)保持距离
+  menus:
+    - path: /example/leaves
+      title: 请假示例
+      icon: tickets
+  dicts:
+    leaveStatus:
+      - { key: '0', label: 审批中 }
+      - { key: '1', label: 已通过 }
+      - { key: '2', label: 已驳回 }
+      - { key: '3', label: 已撤回 }

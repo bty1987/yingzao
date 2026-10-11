@@ -34,6 +34,7 @@ async function onLogin() {
   try {
     const res = await login(form)
     localStorage.setItem('yz_token', res.data.token)
+    localStorage.setItem('yz_user_id', String(res.data.userId))
     localStorage.setItem('yz_display_name', res.data.displayName)
     router.push('/')
   } catch (e) {

@@ -12,11 +12,11 @@ spring:
     enabled: true
     # addon 版本段独立演进必然交错(如 customer V201 晚于 customerprofile V300 出现),允许乱序应用
     out-of-order: true
-    # 版本号分段约定:core 100-199,addon 按码段对齐(customer 200+,customerprofile 300+)
-    locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile
+    # 版本号分段约定:core 100-199,addon 按码段对齐(customer 200+,customerprofile 300+,example 900+)
+    locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile, classpath:db/migration/example
   messages:
     # 各 addon 独立 basename,避免 jar 内同名资源冲突
-    basename: i18n/messages,i18n/customer,i18n/customerprofile
+    basename: i18n/messages,i18n/customer,i18n/customerprofile,i18n/example
     encoding: UTF-8
   jackson:
     default-property-inclusion: non_null
@@ -24,7 +24,7 @@ spring:
 yingzao:
   # 启用的插件清单(编译期装配,未列出的 addon bean 不装配)
   addons:
-    enabled: customer,customerprofile
+    enabled: customer,customerprofile,example
 
 logging:
   level:

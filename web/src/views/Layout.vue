@@ -3,6 +3,7 @@
     <el-aside width="220px" class="aside">
       <div class="logo">营造</div>
       <el-menu :default-active="$route.path" router>
+        <el-menu-item index="/approvals">审批中心</el-menu-item>
         <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">{{ m.title }}</el-menu-item>
       </el-menu>
     </el-aside>
@@ -10,6 +11,7 @@
       <el-header class="header">
         <span>{{ $route.meta.title || '' }}</span>
         <span class="spacer" />
+        <NotificationBell />
         <span class="user">{{ displayName }}</span>
         <el-button link @click="logout">退出</el-button>
       </el-header>
@@ -23,6 +25,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { loadAddons, addons } from '../store/addons'
 import { registerAddonRoutes } from '../router'
+import NotificationBell from '../components/NotificationBell.vue'
 
 const router = useRouter()
 const displayName = ref(localStorage.getItem('yz_display_name') || '')
