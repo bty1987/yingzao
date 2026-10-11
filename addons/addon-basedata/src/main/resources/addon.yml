@@ -1,0 +1,28 @@
+addon:
+  id: basedata
+  name: 基础数据
+  version: 0.1.0
+  error-code-segment: 260000
+  menus:
+    - path: /basedata/goods
+      title: 商品档案
+      icon: goods
+    - path: /basedata/packages
+      title: 整装定材
+      icon: box
+  dicts:
+    goodsStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
+    goodsType:
+      - { key: '0', label: 商品 }
+      - { key: '1', label: 套餐 }
+    skuAttrType:
+      - { key: '0', label: 颜色 }
+      - { key: '1', label: 规格 }
+    calcType:
+      - { key: '0', label: 底价 }
+      - { key: '1', label: 点位 }
+    packageLevel:
+      - { key: '0', label: 主数据 }
+      - { key: '1', label: 引用 }

@@ -401,6 +401,94 @@ def main():
                     "/api/customerprofile/customers?keyword=%s&page=1&size=10" % lead_phone, tok_admin)
     step("转化客源自动落主档", bool(linked) and linked.get("total", 0) >= 1, linked)
 
+    print("== 基础数据(addon-basedata V1 商品档案)==")
+    stamp3 = time.strftime("%Y%m%d%H%M%S")
+    cat_root = api_ok("建根品类", "POST", "/api/basedata/categories", tok_admin,
+                      {"name": "烟测品类" + stamp3})
+    if cat_root is None:
+        return finish()
+    api_err("同父同名品类拒绝 260003", "POST", "/api/basedata/categories", tok_admin,
+            {"name": "烟测品类" + stamp3}, 260003)
+    cat_child = api_ok("建子品类", "POST", "/api/basedata/categories", tok_admin,
+                       {"name": "烟测子品类", "parentId": cat_root})
+    api_err("有启用子品类停用拒绝 260004", "POST", "/api/basedata/categories/%s/status" % cat_root,
+            tok_admin, {"status": 1}, 260004)
+    api_ok("停用子品类", "POST", "/api/basedata/categories/%s/status" % cat_child, tok_admin, {"status": 1})
+    api_ok("子品类清空后停用父品类", "POST", "/api/basedata/categories/%s/status" % cat_root,
+           tok_admin, {"status": 1})
+    api_ok("子品类恢复启用", "POST", "/api/basedata/categories/%s/status" % cat_child,
+           tok_admin, {"status": 0})
+    cats = api_ok("品类树回显", "GET", "/api/basedata/categories", tok_admin)
+    root_node = next((c for c in (cats or []) if str(c.get("id")) == str(cat_root)), None)
+    step("树含父子两级", bool(root_node) and any(str(ch.get("id")) == str(cat_child)
+         for ch in (root_node.get("children") or [])), cats)
+
+    brand_id = api_ok("建品牌", "POST", "/api/basedata/brands", tok_admin,
+                      {"name": "烟测品牌" + stamp3, "pinyin": "ycpp" + stamp3[-6:]})
+    api_err("同名品牌拒绝 260006", "POST", "/api/basedata/brands", tok_admin,
+            {"name": "烟测品牌" + stamp3}, 260006)
+
+    barcode = "6901" + stamp3[-8:]
+    goods_id = api_ok("建商品(中文/品类/品牌/厘价)", "POST", "/api/basedata/goods", tok_admin,
+                      {"name": "烟测瓷砖" + stamp3, "pinyin": "yctc", "barcode": barcode,
+                       "categoryId": cat_child, "brandId": brand_id, "unit": "块",
+                       "purchase": 88000, "selling": 128000, "confine": 118000})
+    if goods_id is None:
+        return finish()
+    api_err("同名商品拒绝 260010", "POST", "/api/basedata/goods", tok_admin,
+            {"name": "烟测瓷砖" + stamp3, "categoryId": cat_child, "unit": "块"}, 260010)
+    api_err("同条码商品拒绝 260009", "POST", "/api/basedata/goods", tok_admin,
+            {"name": "另一商品" + stamp3, "categoryId": cat_child, "unit": "块", "barcode": barcode}, 260009)
+    goods = api_ok("商品详情", "GET", "/api/basedata/goods/%s" % goods_id, tok_admin)
+    ok = bool(goods) and str(goods.get("no", "")).startswith("G") and goods.get("selling") == 128000 \
+        and goods.get("category_name")
+    step("编号 G 前缀自动生成+价格厘回显+品类名联查", ok, goods)
+
+    attr_id = api_ok("加 SKU 颜色属性", "POST", "/api/basedata/goods/%s/sku-attrs" % goods_id,
+                     tok_admin, {"attrType": 0, "value": "胡桃木色"})
+    api_err("重复属性值拒绝 260011", "POST", "/api/basedata/goods/%s/sku-attrs" % goods_id,
+            tok_admin, {"attrType": 0, "value": "胡桃木色"}, 260011)
+    price_id = api_ok("加价格体系(补时间有效性)", "POST", "/api/basedata/goods/%s/prices" % goods_id,
+                      tok_admin, {"name": "一级价", "selling": 118000, "beginTime": "2026-10-01"})
+    api_err("同名价格体系拒绝 260012", "POST", "/api/basedata/goods/%s/prices" % goods_id,
+            tok_admin, {"name": "一级价"}, 260012)
+    api_ok("改商品价格(PUT 白名单)", "PUT", "/api/basedata/goods/%s" % goods_id, tok_admin,
+           {"selling": 138000})
+    goods2 = api_ok("详情复查新价", "GET", "/api/basedata/goods/%s" % goods_id, tok_admin)
+    step("售价已更新为 138000", bool(goods2) and goods2.get("selling") == 138000, goods2)
+
+    pkg_goods_id = api_ok("建套餐商品(type=1)", "POST", "/api/basedata/goods", tok_admin,
+                          {"name": "烟测套餐" + stamp3, "categoryId": cat_child, "unit": "套", "type": 1})
+    member_id = api_ok("套餐加成员(x2)", "POST", "/api/basedata/goods/%s/packages" % pkg_goods_id,
+                       tok_admin, {"memberGoodsId": goods_id, "num": 2})
+    api_err("成员为套餐拒绝 260014", "POST", "/api/basedata/goods/%s/packages" % pkg_goods_id,
+            tok_admin, {"memberGoodsId": pkg_goods_id, "num": 1}, 260014)
+    api_err("重复成员拒绝 260015", "POST", "/api/basedata/goods/%s/packages" % pkg_goods_id,
+            tok_admin, {"memberGoodsId": goods_id, "num": 1}, 260015)
+    api_ok("套餐成员列表", "GET", "/api/basedata/goods/%s/packages" % pkg_goods_id, tok_admin)
+    api_ok("停用商品(事件留痕)", "POST", "/api/basedata/goods/%s/status" % goods_id,
+           tok_admin, {"status": 1})
+
+    model_id = api_ok("建主材型号(点位计价)", "POST", "/api/basedata/models", tok_admin,
+                      {"name": "烟测型号" + stamp3, "goodsId": goods_id, "brandId": brand_id,
+                       "price": 99000, "calcType": 1, "pointValue": 300})
+    models = api_ok("型号列表检索", "GET", "/api/basedata/models?keyword=%s&page=1&size=10" % stamp3, tok_admin)
+    step("型号命中且关联商品", bool(models) and models.get("total", 0) >= 1
+         and (models.get("rows") or [{}])[0].get("goods_name"), models)
+
+    mpkg_id = api_ok("建定材包主数据", "POST", "/api/basedata/packages", tok_admin,
+                     {"name": "烟测定材" + stamp3, "selling": 39800000, "balance": 35000000,
+                      "surplus": 1000000})
+    ref_id = api_ok("引用主数据建引用行(快照)", "POST", "/api/basedata/packages/%s/reference" % mpkg_id,
+                    tok_admin, {"surplus": 500000})
+    api_err("引用行改名称拒绝 260020", "PUT", "/api/basedata/packages/%s" % ref_id, tok_admin,
+            {"name": "改不了", "surplus": 1}, 260020)
+    api_ok("引用行仅调浮动量", "PUT", "/api/basedata/packages/%s" % ref_id, tok_admin, {"surplus": 600000})
+    mpkgs = api_ok("定材包列表(主+引可见)", "GET",
+                   "/api/basedata/packages?keyword=%s&page=1&size=10" % stamp3, tok_admin)
+    levels = sorted(str(r.get("level")) for r in (mpkgs or {}).get("rows", []))
+    step("主数据行与引用行同时可见", bool(mpkgs) and mpkgs.get("total", 0) >= 2 and levels == ["0", "1"], mpkgs)
+
     return finish()
 
 

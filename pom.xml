@@ -17,6 +17,7 @@
         <module>addons/addon-customer</module>
         <module>addons/addon-customerprofile</module>
         <module>addons/addon-example</module>
+        <module>addons/addon-basedata</module>
         <module>yingzao-app</module>
     </modules>
 
@@ -58,6 +59,11 @@
             <dependency>
                 <groupId>com.yingzao</groupId>
                 <artifactId>addon-example</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.yingzao</groupId>
+                <artifactId>addon-basedata</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

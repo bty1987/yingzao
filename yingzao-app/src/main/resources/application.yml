@@ -15,10 +15,10 @@ spring:
     # 版本号分段约定:core 100-199,addon 按码段对齐(customer 200+,quotation 400+,decoration 500+,
     # construction 600+,basedata 700+,payment 800+,example 900+,market 1000+,sales 1100+,
     # inventory 1200+,balance 1300+,customerprofile 1400+)
-    locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile, classpath:db/migration/example
+    locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile, classpath:db/migration/example, classpath:db/migration/basedata
   messages:
     # 各 addon 独立 basename,避免 jar 内同名资源冲突
-    basename: i18n/messages,i18n/customer,i18n/customerprofile,i18n/example
+    basename: i18n/messages,i18n/customer,i18n/customerprofile,i18n/example,i18n/basedata
     encoding: UTF-8
   jackson:
     default-property-inclusion: non_null
@@ -26,7 +26,7 @@ spring:
 yingzao:
   # 启用的插件清单(编译期装配,未列出的 addon bean 不装配)
   addons:
-    enabled: customer,customerprofile,example
+    enabled: customer,customerprofile,example,basedata
   crypto:
     # 敏感字段加密密钥(AES-256-GCM + HMAC-SHA256,base64);默认值仅限本地开发冒烟,生产必须环境变量覆盖,
     # 且必须与会话/令牌类密钥分离(老系统一把钥匙开两把锁的教训)。
