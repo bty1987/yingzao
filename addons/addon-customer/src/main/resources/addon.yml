@@ -1,12 +1,15 @@
 addon:
   id: customer
   name: 客源管理
-  version: 0.2.0
+  version: 0.2.1
   error-code-segment: 210000
   menus:
     - path: /customer/leads
       title: 客源管理
       icon: user
+    - path: /customer/chances
+      title: 机会列表
+      icon: connection
   dicts:
     leadSource:
       - { key: advertisement, label: 广告 }

@@ -66,16 +66,17 @@
 - 🔴 冒烟请求含中文必须用 python urllib(UTF-8),Git Bash 的 curl 发中文 = GBK 炸 JSON;
 - jar 被锁:按 8080 端口找 PID `taskkill //PID x //F`。
 
-## 当前进度(2026-10-11 午前自动任务更新,第 6 次运行)
+## 当前进度(2026-10-11 午后自动任务更新,第 7 次运行)
 
 - ✅ 41 模块过堂终版;插件框架六点代码化;客源→客户细链冒烟 7/7(b1bde89);客源 V2 分配链冒烟 12/12(9689f13);内核通知中心冒烟 16/16(0d7c914);内核轻量审批状态机冒烟 25/25(b68eb4f);示范插件 addon-example+Web 通知/审批工程页冒烟 28/28(e148667);
-- ✅ **uni-app 移动端骨架 `app/`(第 6 次,四端最后一端落地,一码三出)**:uni-app + Vue3 + Vite(@dcloudio 统一 3.0.0-alpha-5030120260930001,vite 5.2.8);八页 = 登录/工作台(通知红点入口)/客源登记(来源 picker)/我的机会(assignee_id 前端过滤+确认/完成)/我的审批(三视角 tab+详情页通过/驳回/转交 picker/撤回)/通知列表(点读/全部已读)/我的;请求封装与 web 同一套约定(Bearer/ApiResponse 解包/401 清票据回登录),API_BASE 条件编译(H5 同源 vite 代理:5174,小程序/APP 直连 config.js);`build:h5`/`build:mp-weixin`/`build:app` 三端构建全绿;真机运行待 uni-app 账号与 appid;
-- ✅ **docs/prd/addon-basedata.md(主材计划独立设计,未写码待确认)**:两层模型保留泛化(组织级规则配置层→放线时订单快照实例层,planTime 读时推算 manual_time 优先/实际锚点回退计划锚点);老缺陷修法落设计——五元组唯一约束替代 count-then-insert 竞态、快照存值不存序(品类/品牌/节点 id+名称,修名称匹配断链与 sort 漂移)、履约回填从读时跨表聚合改为 sales/inventory 领域事件回填(addons-api 契约+AFTER_COMMIT 吞异常)、已完成行不可取消/复活、仅 0 态可删;错误码段建议 260000/迁移 700+;§待业务确认 7 条;
-- ✅ 四域知识资产齐(rules customer/quotation/decoration/construction;PRD 六份含 basedata);三决策已定(组织单层/轻量自研/building 滞后);RFC §6 新坑 6-8 条;
+- ✅ **uni-app 移动端骨架 `app/`**(第 6 次,一码三出):uni-app + Vue3 + Vite(@dcloudio 统一 3.0.0-alpha-5030120260930001,vite 5.2.8);八页 = 登录/工作台/客源登记/我的机会/我的审批(三视角+详情全操作)/通知列表/我的;API_BASE 条件编译;`build:h5`/`build:mp-weixin`/`build:app` 三端构建全绿;真机运行待 uni-app 账号与 appid;
+- ✅ **Web 客源分配 + 机会列表工程页(第 7 次,customer V2 web 侧闭环)**:`api/index.js` 接线 assign/chances/confirm/complete 四接口;Leads.vue 加分配弹窗(manual 选人走 GET /api/users filterable / auto 轮询);新增 Chances.vue 机会列表(状态机 0→3→4 徽章 + 确认接单/标记完成);addon-customer 0.2.1 addon.yml 下发 `/customer/chances` 菜单,动态路由零硬编码注册;`mvn clean package` 全绿 + dev 库一键冒烟 36/36;
+- ✅ **冒烟脚本沉淀 `docs/scripts/smoke/`(第 7 次,可重复资产)**:`smoke_all.py` 一键回归(ensure_users 补双测试账号 → 认证 5 步 → 客源中文登记/分配/幂等拒绝 → 机会状态机/守卫 → 通知落达/已读回落 → 审批闭环含非处理人 121002/重复办结 121001/业务单回写),python urllib 中文安全,36 步全绿,README 含环境变量与跑法;坑:通知客源名在 content 不在 title/leave 接口返回业务单 id(审批单 id 从 leave 行 approval_id 反查)/待办行 id 才是审批单id(biz_id 是业务单id);
+- ✅ docs/prd/addon-basedata.md(主材计划独立设计,未写码待确认);四域知识资产齐(rules customer/quotation/decoration/construction;PRD 六份含 basedata);三决策已定(组织单层/轻量自研/building 滞后);RFC §6 新坑 6-8 条;
 - ✅ 风格三方向初稿(`docs/design/`)仍 🔴 未选定,选定前不做正式视觉(web 与 app 同批重做);
 - ⏳ 待用户:风格三选一(docs/design/index.html)/ 客源 5 条 + 报价 8 条 + 装修单 10 条 + 施工 15 条规则确认 / PRD 确认(客源/客源分配/报价/装修单/施工五份 + basedata 材料计划 7 条)——确认后对应 addon 进入写码 / 企微钉钉凭证 / uni-app 账号与 appid / Docker 环境;
-- ⏳ 可自动推进(下一晚建议,与视觉零耦合):①web 客源分配弹窗+机会列表工程页(接 assign/chances/confirm/complete,补齐 customer V2 的 web 侧缺口)②内核/插件测试基建(冒烟脚本沉淀为可重复执行资产)③风格选定后 huashu-design 统一重做 web/app 视觉;
-- 📋 每晚自动任务收尾:`docs/reports/<日期>-总结.md`(同日多运行按次序号区分),最新=2026-10-11-第6次运行总结.md。
+- ⏳ 可自动推进(下一晚建议,与视觉零耦合):①内核 RBAC/权限最小设施(角色-菜单/功能点授权,吸收老 functionright 思想,01 清单已定归属内核,与业务 PRD 门控无关)②addon-example 扩「多级审批=插件串多审批单」示范(RFC §6.8 组合方式,纯插件侧零内核改动)③任一 PRD 确认后对应 addon 进入写码(basedata 最成熟:规则 CRUD+生成/推算/回填三件套已设计到位);
+- 📋 每晚自动任务收尾:`docs/reports/<日期>-总结.md`(同日多运行按次序号区分),最新=2026-10-11-第7次运行总结.md。
 
 ## Git 纪律
 
