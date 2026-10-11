@@ -1,0 +1,24 @@
+{
+  "name": "营造",
+  "appid": "",
+  "description": "营造 - 装修行业开源 ERP 移动端(小程序 + APP 一码双出)",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "vueVersion": "3",
+  "locale": "zh-Hans",
+  "h5": {
+    "title": "营造",
+    "router": { "mode": "hash" }
+  },
+  "mp-weixin": {
+    "appid": "",
+    "setting": { "urlCheck": false },
+    "usingComponents": true
+  },
+  "app-plus": {
+    "usingComponents": true,
+    "nvueStyleCompiler": "uni-app",
+    "compilerVersion": 3,
+    "splashscreen": { "alwaysShowBeforeRender": true, "waiting": true, "autoclose": true, "delay": 0 }
+  }
+}

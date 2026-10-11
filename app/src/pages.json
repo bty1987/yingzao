@@ -1,0 +1,54 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": { "navigationBarTitleText": "营造" }
+    },
+    {
+      "path": "pages/login/login",
+      "style": { "navigationBarTitleText": "登录" }
+    },
+    {
+      "path": "pages/chances/chances",
+      "style": { "navigationBarTitleText": "我的机会", "enablePullDownRefresh": true }
+    },
+    {
+      "path": "pages/approvals/approvals",
+      "style": { "navigationBarTitleText": "我的审批", "enablePullDownRefresh": true }
+    },
+    {
+      "path": "pages/approvals/detail",
+      "style": { "navigationBarTitleText": "审批详情" }
+    },
+    {
+      "path": "pages/notifications/notifications",
+      "style": { "navigationBarTitleText": "通知", "enablePullDownRefresh": true }
+    },
+    {
+      "path": "pages/leads/create",
+      "style": { "navigationBarTitleText": "登记客源" }
+    },
+    {
+      "path": "pages/mine/mine",
+      "style": { "navigationBarTitleText": "我的" }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "营造",
+    "navigationBarBackgroundColor": "#2f3a4a",
+    "backgroundColor": "#f5f6f8"
+  },
+  "tabBar": {
+    "color": "#8a94a6",
+    "selectedColor": "#2f6fed",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "工作台" },
+      { "pagePath": "pages/chances/chances", "text": "机会" },
+      { "pagePath": "pages/approvals/approvals", "text": "审批" },
+      { "pagePath": "pages/mine/mine", "text": "我的" }
+    ]
+  }
+}
