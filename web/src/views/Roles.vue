@@ -1,7 +1,7 @@
 <template>
   <el-card v-if="isAdmin">
     <div style="margin-bottom: 12px; display: flex; align-items: center">
-      <span style="color: #909399; font-size: 12px">
+      <span style="color: var(--yz-ink-50); font-size: 12px">
         角色 = 菜单/功能点授权的载体;内置管理员旁路全部过滤。授权语义为全量替换(勾选即目标态)。
       </span>
       <span style="flex: 1" />
@@ -61,7 +61,7 @@
         <el-checkbox-group v-model="grantForm.capabilities">
           <el-checkbox v-for="c in capabilityCatalog" :key="c.value" :value="c.value">{{ c.label }}</el-checkbox>
         </el-checkbox-group>
-        <p v-if="!capabilityCatalog.length" style="color: #909399; font-size: 12px">当前无插件声明功能点。</p>
+        <p v-if="!capabilityCatalog.length" style="color: var(--yz-ink-50); font-size: 12px">当前无插件声明功能点。</p>
 
         <h4 style="margin-top: 16px">成员(本组织用户)</h4>
         <el-select v-model="grantForm.userIds" multiple filterable style="width: 100%">

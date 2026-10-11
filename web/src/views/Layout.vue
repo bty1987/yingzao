@@ -1,24 +1,33 @@
 <template>
-  <el-container style="height: 100vh">
-    <el-aside width="220px" class="aside">
-      <div class="logo">营造</div>
-      <el-menu :default-active="$route.path" router>
-        <el-menu-item index="/approvals">审批中心</el-menu-item>
-        <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">{{ m.title }}</el-menu-item>
-        <el-menu-item v-if="isAdmin" index="/roles">角色权限</el-menu-item>
-      </el-menu>
-    </el-aside>
-    <el-container>
-      <el-header class="header">
-        <span>{{ $route.meta.title || '' }}</span>
-        <span class="spacer" />
+  <div class="shell">
+    <!-- 方向三:顶部横导航(古籍版式),弃侧栏 -->
+    <header class="topbar">
+      <div class="brand" @click="$router.push(menus[0] ? menus[0].path : '/approvals')">
+        <span class="logo yz-display">营造</span>
+        <span class="yz-seal-stamp stamp">法</span>
+      </div>
+      <nav class="nav">
+        <router-link to="/approvals" class="nav-item" :class="{ active: $route.path === '/approvals' }">审批中心</router-link>
+        <router-link
+          v-for="m in menus"
+          :key="m.path"
+          :to="m.path"
+          class="nav-item"
+          :class="{ active: $route.path === m.path }"
+        >{{ m.title }}</router-link>
+        <router-link v-if="isAdmin" to="/roles" class="nav-item" :class="{ active: $route.path === '/roles' }">角色权限</router-link>
+      </nav>
+      <div class="right">
         <NotificationBell />
         <span class="user">{{ displayName }}</span>
         <el-button link @click="logout">退出</el-button>
-      </el-header>
-      <el-main><router-view /></el-main>
-    </el-container>
-  </el-container>
+      </div>
+    </header>
+    <main class="main">
+      <p v-if="$route.meta.title" class="page-title yz-display">{{ $route.meta.title }}</p>
+      <router-view />
+    </main>
+  </div>
 </template>
 
 <script setup>
@@ -55,9 +64,56 @@ function logout() {
 </script>
 
 <style scoped>
-.aside { background: #fff; border-right: 1px solid #e4e7ed; }
-.logo { height: 60px; display: flex; align-items: center; justify-content: center; font-size: 22px; letter-spacing: 6px; font-weight: 600; }
-.header { display: flex; align-items: center; border-bottom: 1px solid #e4e7ed; background: #fff; }
-.spacer { flex: 1; }
-.user { margin-right: 12px; color: #606266; }
+.shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--yz-paper); }
+
+/* 顶栏:纸面+底部细墨线,宋体品牌+朱印 */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 0 32px;
+  height: 64px;
+  background: var(--yz-paper);
+  border-bottom: 1px solid var(--yz-line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.brand { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.logo { font-size: 24px; font-weight: 600; letter-spacing: 8px; line-height: 1; }
+.stamp { width: 24px; height: 24px; font-size: 12px; }
+
+.nav { display: flex; align-items: center; gap: 8px; flex: 1; }
+.nav-item {
+  padding: 8px 16px;
+  font-size: 15px;
+  color: var(--yz-ink-70);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  line-height: 1;
+}
+.nav-item:hover { color: var(--yz-ink); }
+.nav-item.active {
+  color: var(--yz-seal);
+  border-bottom-color: var(--yz-seal);
+}
+
+.right { display: flex; align-items: center; gap: 16px; }
+.user { color: var(--yz-ink-70); font-size: 14px; }
+
+.main {
+  flex: 1;
+  padding: 32px;
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+/* 宋体页题:每页统一的书页页题 */
+.page-title {
+  margin: 0 0 24px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 4px;
+}
 </style>

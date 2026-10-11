@@ -59,12 +59,12 @@
           <el-timeline-item v-for="r in detail.records || []" :key="r.id" :timestamp="r.created_at" placement="top">
             <div>
               <b>{{ actionLabel(r.action) }}</b>
-              <span style="margin-left: 8px; color: #606266">{{ r.operator_name }}</span>
-              <span v-if="r.action === 4 && r.assignee_name" style="margin-left: 4px; color: #606266">
+              <span style="margin-left: 8px; color: var(--yz-ink-70)">{{ r.operator_name }}</span>
+              <span v-if="r.action === 4 && r.assignee_name" style="margin-left: 4px; color: var(--yz-ink-70)">
                 → {{ r.assignee_name }}
               </span>
             </div>
-            <div v-if="r.comment" style="color: #606266; font-size: 12px">{{ r.comment }}</div>
+            <div v-if="r.comment" style="color: var(--yz-ink-70); font-size: 12px">{{ r.comment }}</div>
           </el-timeline-item>
         </el-timeline>
       </template>

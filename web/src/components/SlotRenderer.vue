@@ -17,7 +17,7 @@ defineProps({ mount: { type: Object, required: true } })
 </script>
 
 <style scoped>
-.slot-placeholder { color: #606266; }
-.hint { font-size: 12px; color: #909399; line-height: 1.8; }
-code { background: #f5f7fa; padding: 0 4px; border-radius: 3px; }
+.slot-placeholder { color: var(--yz-ink-70); }
+.hint { font-size: 12px; color: var(--yz-ink-50); line-height: 1.8; }
+code { background: var(--yz-paper-deep); padding: 0 4px; border-radius: 3px; }
 </style>

@@ -1,0 +1,117 @@
+/* ============================================================
+   营造 Yingzao · 视觉 token(方向:东方纸墨极简)
+   选定记录:docs/design/direction-approved.md(2026-10-11)
+   母题:《营造法式》古籍扉页/版框/朱印;全部间距 8px 模数(材分制)
+   ============================================================ */
+:root {
+  /* 色板 */
+  --yz-paper: #FAF9F5;        /* 纸白暖底 */
+  --yz-paper-deep: #F1EFE8;   /* 纸色加深一档(hover/次级面) */
+  --yz-ink: #1A1A18;          /* 墨黑 */
+  --yz-ink-70: rgba(26, 26, 24, 0.70);
+  --yz-ink-50: rgba(26, 26, 24, 0.50);
+  --yz-line: rgba(26, 26, 24, 0.15);   /* 淡墨线 */
+  --yz-line-strong: rgba(26, 26, 24, 0.55);
+  --yz-seal: #B03A2E;         /* 朱印红(唯一点缀) */
+  --yz-seal-deep: #9E2B25;
+
+  /* 字型 */
+  --yz-font-display: 'Songti SC', 'SimSun', 'Noto Serif SC', serif;
+  --yz-font-body: -apple-system, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+
+  /* 模数(材分制:8px 基) */
+  --yz-u: 8px;
+
+  /* 形状 */
+  --yz-radius: 2px;
+
+  /* ---- Element Plus 主题对齐(官方 CSS 变量) ---- */
+  --el-color-primary: #B03A2E;
+  --el-color-primary-light-3: #C05A50;
+  --el-color-primary-light-5: #D08D86;
+  --el-color-primary-light-7: #E4C0BC;
+  --el-color-primary-light-8: #EFD8D5;
+  --el-color-primary-light-9: #F7ECEA;
+  --el-color-primary-dark-2: #9E2B25;
+  --el-color-success: #5A7247;
+  --el-border-radius-base: 2px;
+  --el-border-color: rgba(26, 26, 24, 0.20);
+  --el-border-color-light: rgba(26, 26, 24, 0.15);
+  --el-border-color-lighter: rgba(26, 26, 24, 0.10);
+  --el-fill-color-light: #F1EFE8;
+  --el-fill-color-lighter: #FAF9F5;
+  --el-text-color-primary: #1A1A18;
+  --el-text-color-regular: rgba(26, 26, 24, 0.78);
+  --el-text-color-secondary: rgba(26, 26, 24, 0.50);
+  --el-font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  background: var(--yz-paper);
+  color: var(--yz-ink);
+  font-family: var(--yz-font-body);
+}
+
+/* 宋体 display 工具类 */
+.yz-display { font-family: var(--yz-font-display); }
+
+/* 品牌朱印(方章):墨/纸底上的一枚阴文方印 */
+.yz-seal-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--yz-seal);
+  color: var(--yz-paper);
+  font-family: var(--yz-font-display);
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 2px;
+  border-radius: 2px;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  box-shadow: 0 1px 0 rgba(26, 26, 24, 0.2);
+}
+
+/* Element Plus 细节对齐:方角按钮/墨黑主按钮 */
+.el-button--primary {
+  --el-button-bg-color: var(--yz-ink);
+  --el-button-border-color: var(--yz-ink);
+  --el-button-hover-bg-color: #33322E;
+  --el-button-hover-border-color: #33322E;
+  --el-button-active-bg-color: var(--yz-seal-deep);
+  border-radius: var(--yz-radius);
+}
+.el-button {
+  border-radius: var(--yz-radius);
+}
+.el-button--primary.is-link, .el-button.is-link {
+  color: var(--yz-seal);
+}
+
+/* 表格:古籍版式——表头上下双线、行间淡墨线、纸底 */
+.el-table {
+  --el-table-border-color: var(--yz-line);
+  --el-table-header-bg-color: transparent;
+  --el-table-header-text-color: var(--yz-ink);
+  --el-table-row-hover-bg-color: var(--yz-paper-deep);
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  background: transparent;
+}
+.el-table th.el-table__cell {
+  border-top: 1px solid var(--yz-line-strong);
+  border-bottom: 1px solid var(--yz-line-strong);
+  font-family: var(--yz-font-display);
+  font-weight: 600;
+}
+
+/* 对话框/卡片:纸面+细墨线 */
+.el-dialog { border-radius: var(--yz-radius); }
+.el-dialog__title { font-family: var(--yz-font-display); }
+.el-card { border-radius: var(--yz-radius); border-color: var(--yz-line); }
+.el-tag { border-radius: var(--yz-radius); }
+.el-input__wrapper { border-radius: var(--yz-radius); }

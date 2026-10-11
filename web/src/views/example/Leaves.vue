@@ -153,7 +153,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.tip { margin-left: 12px; color: #909399; font-size: 12px; }
-.level-plain { color: #909399; font-size: 12px; }
+.tip { margin-left: 12px; color: var(--yz-ink-50); font-size: 12px; }
+.level-plain { color: var(--yz-ink-50); font-size: 12px; }
 .multi-hint { margin-left: 8px; }
 </style>

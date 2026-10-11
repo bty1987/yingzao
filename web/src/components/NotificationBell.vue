@@ -87,7 +87,7 @@ onUnmounted(() => {
 .item:last-child { border-bottom: none; }
 .item .line { display: flex; align-items: center; }
 .item .t { font-weight: 600; font-size: 13px; }
-.item .dot { width: 8px; height: 8px; border-radius: 50%; background: #f56c6c; margin-left: 6px; }
-.item .c { color: #606266; font-size: 12px; margin-top: 2px; }
-.item .time { color: #909399; font-size: 12px; margin-top: 2px; }
+.item .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yz-seal); margin-left: 6px; }
+.item .c { color: var(--yz-ink-70); font-size: 12px; margin-top: 2px; }
+.item .time { color: var(--yz-ink-50); font-size: 12px; margin-top: 2px; }
 </style>
