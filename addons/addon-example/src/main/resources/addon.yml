@@ -1,7 +1,7 @@
 addon:
   id: example
   name: 请假示例
-  version: 0.1.0
+  version: 0.2.0
   error-code-segment: 290000   # 示范工程独占段,与业务 addon 段(210000-260000)保持距离
   menus:
     - path: /example/leaves

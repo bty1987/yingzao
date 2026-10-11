@@ -31,3 +31,12 @@ export const listLeaves = () => http.get('/api/example/leaves')
 export const createLeave = (data) => http.post('/api/example/leaves', data)
 export const cancelLeave = (id) => http.post(`/api/example/leaves/${id}/cancel`)
 
+// 角色与授权(RBAC,内核;仅管理员可操作,服务端 122003 守卫)
+export const listRoles = () => http.get('/api/roles')
+export const createRole = (data) => http.post('/api/roles', data)
+export const fetchRole = (id) => http.get(`/api/roles/${id}`)
+export const deleteRole = (id) => http.delete(`/api/roles/${id}`)
+export const updateRoleMenus = (id, menus) => http.put(`/api/roles/${id}/menus`, { menus })
+export const updateRoleCapabilities = (id, capabilities) => http.put(`/api/roles/${id}/capabilities`, { capabilities })
+export const updateRoleUsers = (id, userIds) => http.put(`/api/roles/${id}/users`, { userIds })
+

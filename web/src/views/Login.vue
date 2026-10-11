@@ -36,6 +36,7 @@ async function onLogin() {
     localStorage.setItem('yz_token', res.data.token)
     localStorage.setItem('yz_user_id', String(res.data.userId))
     localStorage.setItem('yz_display_name', res.data.displayName)
+    localStorage.setItem('yz_roles', JSON.stringify(res.data.roles || []))
     router.push('/')
   } catch (e) {
     ElMessage.error(e.message || '登录失败')

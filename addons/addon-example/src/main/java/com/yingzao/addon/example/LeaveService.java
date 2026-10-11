@@ -16,6 +16,8 @@ import com.yingzao.core.web.BizException;
  * 请假示例服务:演示业务插件接入内核轻量审批的标准组合——
  * 业务单(example_leave)与审批单(yz_approval)同事务落库,提交时携带 biz_addon/biz_type/biz_id 溯源三元组;
  * 办结结果由 {@link LeaveApprovalListener} 监听 ApprovalFinishedEvent 回写业务状态。
+ * 多级审批(RFC §6.8 组合方式):days ≥ {@link #MULTI_LEVEL_MIN_DAYS} 的长请假串两级——
+ * L1 直属审批人通过后由监听器派生 L2 二级审批单,L2 通过才算业务通过;内核审批单零改动。
  * 本 addon 是面向插件开发者的示范工程(非业务插件):表与接口刻意保持最小。
  */
 @Service
@@ -26,16 +28,23 @@ public class LeaveService {
     public static final int CODE_LEAVE_BAD_REQUEST = 290003;
     public static final int CODE_LEAVE_ASSIGNEE_INVALID = 290004;
     public static final int CODE_LEAVE_NOT_OWNER = 290005;
+    public static final int CODE_LEAVE_MANAGER_INVALID = 290006;
 
     public static final int STATUS_RUNNING = 0;
     public static final int STATUS_APPROVED = 1;
     public static final int STATUS_REJECTED = 2;
     public static final int STATUS_CANCELED = 3;
 
+    public static final int LEVEL_FIRST = 1;
+    public static final int LEVEL_SECOND = 2;
+    /** 请假达到该天数即须二级审批(多级串联阈值)。 */
+    public static final int MULTI_LEVEL_MIN_DAYS = 3;
+
     public static final String BIZ_ADDON = "example";
     public static final String BIZ_TYPE = "leave";
 
-    public record CreateCmd(long orgId, long applicantId, String reason, Integer days, Long assigneeId) {
+    public record CreateCmd(long orgId, long applicantId, String reason, Integer days, Long assigneeId,
+                            Long managerId) {
     }
 
     private final JdbcTemplate jdbc;
@@ -56,9 +65,18 @@ public class LeaveService {
             throw badRequest();
         }
         requireOrgUser(cmd.assigneeId(), cmd.orgId());
-        jdbc.update(
-                "insert into example_leave(org_id, applicant_id, assignee_id, reason, days) values (?,?,?,?,?)",
-                cmd.orgId(), cmd.applicantId(), cmd.assigneeId(), cmd.reason(), cmd.days());
+        boolean multiLevel = cmd.days() >= MULTI_LEVEL_MIN_DAYS;
+        if (multiLevel) {
+            if (cmd.managerId() == null || cmd.managerId() == cmd.assigneeId()) {
+                throw managerInvalid();
+            }
+            requireOrgUser(cmd.managerId(), cmd.orgId());
+        }
+        jdbc.update("""
+                insert into example_leave(org_id, applicant_id, assignee_id, manager_id, reason, days, approval_level)
+                values (?,?,?,?,?,?,1)
+                """, cmd.orgId(), cmd.applicantId(), cmd.assigneeId(),
+                multiLevel ? cmd.managerId() : null, cmd.reason(), cmd.days());
         long leaveId = jdbc.queryForObject("select last_insert_id()", Long.class);
         String applicantName = jdbc.queryForObject(
                 "select display_name from yz_user where id = ?", String.class, cmd.applicantId());
@@ -74,7 +92,7 @@ public class LeaveService {
     /** 我的请假单(申请人视角,无跨人查看)。 */
     public List<Map<String, Object>> listMine(long userId) {
         return jdbc.queryForList("""
-                select l.id, l.reason, l.days, l.status, l.approval_id,
+                select l.id, l.reason, l.days, l.status, l.approval_id, l.approval_level,
                        u.display_name as assignee_name, l.created_at, l.finished_at
                 from example_leave l join yz_user u on u.id = l.assignee_id
                 where l.applicant_id = ?
@@ -132,5 +150,10 @@ public class LeaveService {
     private BizException notOwner() {
         return new BizException(CODE_LEAVE_NOT_OWNER,
                 messages.getMessage("leave.notowner", null, LocaleContextHolder.getLocale()));
+    }
+
+    private BizException managerInvalid() {
+        return new BizException(CODE_LEAVE_MANAGER_INVALID,
+                messages.getMessage("leave.manager.invalid", null, LocaleContextHolder.getLocale()));
     }
 }

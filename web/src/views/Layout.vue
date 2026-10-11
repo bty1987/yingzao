@@ -5,6 +5,7 @@
       <el-menu :default-active="$route.path" router>
         <el-menu-item index="/approvals">审批中心</el-menu-item>
         <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">{{ m.title }}</el-menu-item>
+        <el-menu-item v-if="isAdmin" index="/roles">角色权限</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -30,6 +31,9 @@ import NotificationBell from '../components/NotificationBell.vue'
 const router = useRouter()
 const displayName = ref(localStorage.getItem('yz_display_name') || '')
 
+// 管理类入口可见性(RBAC):以登录回显的角色编码为准,服务端守卫才是真闸门
+const isAdmin = JSON.parse(localStorage.getItem('yz_roles') || '[]').includes('admin')
+
 const menus = computed(() =>
   addons.list.flatMap((a) => (a.menus || []).map((m) => ({ ...m, addon: a.id })))
 )
@@ -45,6 +49,7 @@ onMounted(async () => {
 
 function logout() {
   localStorage.removeItem('yz_token')
+  localStorage.removeItem('yz_roles')
   router.push('/login')
 }
 </script>

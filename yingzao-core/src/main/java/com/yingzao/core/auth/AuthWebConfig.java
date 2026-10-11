@@ -21,8 +21,9 @@ public class AuthWebConfig implements WebMvcConfigurer {
 
     public static final int CODE_UNAUTHORIZED = 110002;
 
+    // /api/addons 不在白名单:下发内容按登录人角色过滤(RBAC),菜单前置拉取不存在
     private static final List<String> WHITELIST = List.of(
-            "/api/auth/login", "/api/addons", "/error", "/actuator/health");
+            "/api/auth/login", "/error", "/actuator/health");
 
     private final TokenStore tokenStore;
     private final MessageSource messages;

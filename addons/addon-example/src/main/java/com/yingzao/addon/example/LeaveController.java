@@ -21,7 +21,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/example")
 public class LeaveController {
 
-    public record CreateRequest(String reason, Integer days, Long assigneeId) {
+    public record CreateRequest(String reason, Integer days, Long assigneeId, Long managerId) {
     }
 
     private final LeaveService leaveService;
@@ -35,7 +35,8 @@ public class LeaveController {
         long userId = (Long) request.getAttribute("yz.userId");
         long orgId = (Long) request.getAttribute("yz.orgId");
         return ApiResponse.ok(leaveService.create(
-                new LeaveService.CreateCmd(orgId, userId, body.reason(), body.days(), body.assigneeId())));
+                new LeaveService.CreateCmd(orgId, userId, body.reason(), body.days(), body.assigneeId(),
+                        body.managerId())));
     }
 
     @GetMapping("/leaves")
