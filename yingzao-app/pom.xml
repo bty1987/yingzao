@@ -63,6 +63,10 @@
             <artifactId>addon-balance</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>addon-market</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>

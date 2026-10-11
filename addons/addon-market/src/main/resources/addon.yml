@@ -1,0 +1,52 @@
+addon:
+  id: market
+  name: 营销获客
+  version: 0.1.0
+  error-code-segment: 280000
+  menus:
+    - path: /market/campaigns
+      title: 投放管理
+      icon: DataAnalysis
+    - path: /market/inbounds
+      title: 进线工作台
+      icon: ChatDotRound
+    - path: /market/funnels
+      title: 获客漏斗
+      icon: TrendCharts
+    - path: /market/showcase
+      title: 案例库
+      icon: Picture
+  dicts:
+    campaignStatus:
+      - { key: '0', label: 草稿 }
+      - { key: '2', label: 发布 }
+      - { key: '3', label: 停用 }
+      - { key: '5', label: 归档 }
+    channelStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
+    sourceStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
+    inboundStatus:
+      - { key: '0', label: 待承接 }
+      - { key: '1', label: 承接成功 }
+      - { key: '2', label: 承接失败 }
+      - { key: '3', label: 承接中 }
+      - { key: '4', label: 已忽略 }
+    acceptMode:
+      - { key: 'source', label: 仅建客源 }
+      - { key: 'chance', label: 客源+机会 }
+    attrEventType:
+      - { key: '0', label: 提交 }
+      - { key: '1', label: 建客源 }
+      - { key: '2', label: 建机会 }
+    caseType:
+      - { key: '0', label: 效果图 }
+      - { key: '1', label: 施工图 }
+    caseStatus:
+      - { key: '0', label: 下架 }
+      - { key: '1', label: 上架 }
+    personType:
+      - { key: '0', label: 设计师 }
+      - { key: '1', label: 监理 }

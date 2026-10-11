@@ -25,6 +25,7 @@
         <module>addons/addon-inventory</module>
         <module>addons/addon-sales</module>
         <module>addons/addon-balance</module>
+        <module>addons/addon-market</module>
         <module>yingzao-app</module>
     </modules>
 
@@ -106,6 +107,11 @@
             <dependency>
                 <groupId>com.yingzao</groupId>
                 <artifactId>addon-balance</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.yingzao</groupId>
+                <artifactId>addon-market</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

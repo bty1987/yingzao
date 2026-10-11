@@ -2530,6 +2530,262 @@ def main():
     step("额度流水 append-only 在册(consume/refund 多轮)", ledger_rows >= 4, ledger_rows)
     step("单号计数器多前缀在册", counter_rows >= 4, counter_rows)
 
+    # ========= 营销获客(addon-market 第 27 次扩展)=========
+    print("\n== 营销获客(addon-market:投放物+进线承接+归因漏斗+案例库) ==")
+    stamp_mkt = time.strftime("%H%M%S") + "m"
+    mkt_num = time.strftime("%H%M%S")
+
+    # 插件下发:四菜单
+    addons_mkt = api_ok("admin 插件下发复查(market)", "GET", "/api/addons", tok_admin)
+    mkt_addon = next((a for a in (addons_mkt or []) if a.get("id") == "market"), None)
+    step("market 四菜单动态下发", bool(mkt_addon)
+         and sorted(m.get("path") for m in mkt_addon.get("menus") or []) == [
+             "/market/campaigns", "/market/funnels", "/market/inbounds", "/market/showcase"],
+         mkt_addon and mkt_addon.get("menus"))
+
+    # ---- 投放物:活动/渠道/投放源 ----
+    camp = api_ok("建活动(草稿)", "POST", "/api/market/campaigns", tok_admin,
+                  {"name": "获客活动甲" + stamp_mkt, "description": "冒烟投放活动", "budget": 5000000})
+    camp_id = camp.get("id")
+    api_err("活动重名 280003", "POST", "/api/market/campaigns", tok_admin,
+            {"name": "获客活动甲" + stamp_mkt, "budget": 5000000}, 280003)
+    api_ok("发布活动", "POST", "/api/market/campaigns/%s/publish" % camp_id, tok_admin)
+    api_err("发布后编辑拒绝 280002", "PUT", "/api/market/campaigns/%s" % camp_id, tok_admin,
+            {"name": "改名单" + stamp_mkt, "budget": 1}, 280002)
+    chan = api_ok("建渠道", "POST", "/api/market/channels", tok_admin, {"name": "渠道抖音" + stamp_mkt})
+    chan_id = chan.get("id")
+    api_err("渠道重名 280006", "POST", "/api/market/channels", tok_admin,
+            {"name": "渠道抖音" + stamp_mkt}, 280006)
+    api_ok("停用渠道", "POST", "/api/market/channels/%s/disable" % chan_id, tok_admin)
+    api_err("停用渠道建源 280005", "POST", "/api/market/sources", tok_admin,
+            {"campaignId": camp_id, "channelId": chan_id, "name": "源X"}, 280005)
+    api_ok("恢复渠道(修老无恢复)", "POST", "/api/market/channels/%s/enable" % chan_id, tok_admin)
+    camp2 = api_ok("建第二活动(草稿)", "POST", "/api/market/campaigns", tok_admin,
+                   {"name": "获客活动乙" + stamp_mkt})
+    src2 = api_ok("草稿活动备投放源", "POST", "/api/market/sources", tok_admin,
+                  {"campaignId": camp2.get("id"), "channelId": chan_id, "name": "草稿源"})
+    api_err("草稿活动登记进线 280010", "POST", "/api/market/inbounds", tok_admin,
+            {"sourceId": src2.get("id"), "name": "预占", "phone": "130%09d" % int(mkt_num)}, 280010)
+    src = api_ok("建投放源(code 服务端生成+UTM 拼接)", "POST", "/api/market/sources", tok_admin,
+                 {"campaignId": camp_id, "channelId": chan_id, "name": "落地页A组",
+                  "url": "https://example.com/landing", "utmSource": "douyin",
+                  "utmMedium": "cpc", "utmCampaign": "spring"})
+    src_id = src.get("id")
+    step("渠道码 16 位 hex+utm_url 完整", bool(src.get("code")) and len(src.get("code")) == 16
+         and src.get("utm_url") == "https://example.com/landing?utm_source=douyin&utm_medium=cpc&utm_campaign=spring",
+         src)
+    api_err("归属不一致 280009", "POST", "/api/market/inbounds", tok_admin,
+            {"sourceId": src_id, "campaignId": camp_id + 999, "name": "预占",
+             "phone": "131%09d" % int(mkt_num)}, 280009)
+    api_ok("停用投放源", "POST", "/api/market/sources/%s/disable" % src_id, tok_admin)
+    api_err("停用源登记 280008", "POST", "/api/market/inbounds", tok_admin,
+            {"sourceId": src_id, "name": "预占", "phone": "132%09d" % int(mkt_num)}, 280008)
+    api_ok("恢复投放源", "POST", "/api/market/sources/%s/enable" % src_id, tok_admin)
+
+    # ---- 进线登记与自动承接(chance 档:建客源+派发机会) ----
+    phone1 = "138%09d" % (int(mkt_num) * 10 + 1)
+    ib = api_ok("登记进线(chance 档)", "POST", "/api/market/inbounds", tok_admin,
+                {"sourceId": src_id, "name": "访客甲" + stamp_mkt, "phone": phone1,
+                 "acceptMode": "chance", "note": "冒烟进线",
+                 "items": [{"key": "预算", "value": "20万"}, {"key": "小区", "value": "烟测园"}]})
+    ib_id = ib.get("id")
+    step("登记即归因(0 提交)+track(submit)+单号 MI", ib.get("status") == 0
+         and str(ib.get("inbound_no", "")).startswith("MI")
+         and any(a.get("event_type") == 0 for a in ib.get("attributions") or [])
+         and any(t.get("action") == "submit" for t in ib.get("tracks") or []), ib)
+    if not ib_id:
+        return finish()
+
+    accepted = None
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        accepted = (call("GET", "/api/market/inbounds/%s" % ib_id, tok_admin)[1] or {}).get("data")
+        if accepted and accepted.get("status") == 1:
+            break
+        time.sleep(2)
+    step("自动承接成功(chance→客源+机会)", bool(accepted) and accepted.get("status") == 1
+         and accepted.get("customer_lead_id") and accepted.get("chance_id"), accepted)
+    if not (accepted and accepted.get("status") == 1):
+        return finish()
+    step("承接归因逐级落行(1 建客源+2 建机会)", bool(accepted) and
+         [a.get("event_type") for a in accepted.get("attributions") or []].count(1) == 1
+         and [a.get("event_type") for a in accepted.get("attributions") or []].count(2) == 1,
+         accepted and accepted.get("attributions"))
+    leads_all = api_ok("客源列表(承接建档实证)", "GET", "/api/customer/leads", tok_admin)
+    mkt_lead = next((l for l in (leads_all or []) if l.get("id") == accepted.get("customer_lead_id")), None)
+    step("客源建档(姓名/电话明文/来源 market)", bool(mkt_lead)
+         and mkt_lead.get("name") == "访客甲" + stamp_mkt and mkt_lead.get("phone") == phone1
+         and mkt_lead.get("source") == "market", mkt_lead)
+    chances_all = api_ok("机会列表(自动派发实证)", "GET", "/api/customer/chances", tok_admin)
+    mkt_chance = next((c for c in (chances_all or []) if c.get("id") == accepted.get("chance_id")), None)
+    step("机会自动派发到承接链", bool(mkt_chance)
+         and mkt_chance.get("lead_id") == accepted.get("customer_lead_id"), mkt_chance)
+
+    # 幂等:同键命中回全量+duplicate 标记
+    ib_dup = api_ok("幂等命中回全量(duplicate)", "POST", "/api/market/inbounds", tok_admin,
+                    {"sourceId": src_id, "name": "访客甲" + stamp_mkt, "phone": phone1,
+                     "acceptMode": "chance"})
+    step("重复提交同 id 不新建", ib_dup.get("duplicate") is True and ib_dup.get("id") == ib_id, ib_dup)
+    # 并发幂等:两线程同新键首插,至多一条建成(幂等查询+DB 唯一约束双兜底,修老先查后插无锁)
+    phone3 = "137%09d" % (int(mkt_num) * 10 + 3)
+    conc_results = []
+
+    def _conc_register():
+        status_c, res_c = call("POST", "/api/market/inbounds", tok_admin,
+                               {"sourceId": src_id, "name": "并发访客", "phone": phone3,
+                                "acceptMode": "source"})
+        conc_results.append((status_c, res_c))
+
+    threads = [threading.Thread(target=_conc_register) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    ok_results = [r for r in conc_results
+                  if isinstance(r[1], dict) and r[1].get("code") == 0]
+    ids_back = sorted({(r[1].get("data") or {}).get("id") for r in ok_results})
+    rows3 = db_exec(
+        "select count(*) from market_inbound i join market_inbound r on r.id = %s "
+        "where i.phone_hash = r.phone_hash", (ids_back[0],)) if ids_back else [(0,)]
+    step("两并发同键仅一条建成(DB uk 兜底)", len(ok_results) >= 1 and len(ids_back) == 1
+         and rows3 and rows3[0][0] == 1, (conc_results, rows3))
+
+    # 匿名进线:未允许拒 280014;显式允许登记→承接失败(手机缺失)→失败可见→重试→忽略 全闭环
+    api_err("匿名未允许 280014", "POST", "/api/market/inbounds", tok_admin,
+            {"sourceId": src_id, "name": "匿名客"}, 280014)
+    anon = api_ok("匿名进线显式允许", "POST", "/api/market/inbounds", tok_admin,
+                  {"sourceId": src_id, "name": "匿名客" + stamp_mkt, "allowAnonymous": True})
+    anon_id = anon.get("id")
+    anon2 = None
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        anon2 = (call("GET", "/api/market/inbounds/%s" % anon_id, tok_admin)[1] or {}).get("data")
+        if anon2 and anon2.get("status") in (1, 2):
+            break
+        time.sleep(2)
+    step("匿名进线承接失败留痕(2+error_msg+acceptFail)", bool(anon2) and anon2.get("status") == 2
+         and anon2.get("error_msg")
+         and any(t.get("action") == "acceptFail" for t in anon2.get("tracks") or []), anon2)
+    api_ok("失败重试(2→0 重发)", "POST", "/api/market/inbounds/%s/retry" % anon_id, tok_admin)
+    anon3 = None
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        anon3 = (call("GET", "/api/market/inbounds/%s" % anon_id, tok_admin)[1] or {}).get("data")
+        if anon3 and anon3.get("status") in (1, 2):
+            break
+        time.sleep(2)
+    step("重试后仍失败(无手机永不可承接)", bool(anon3) and anon3.get("status") == 2, anon3)
+    api_ok("忽略(带原因留痕)", "POST", "/api/market/inbounds/%s/ignore" % anon_id, tok_admin,
+           {"reason": "无效流量"})
+    anon4 = (call("GET", "/api/market/inbounds/%s" % anon_id, tok_admin)[1] or {}).get("data")
+    step("忽略置 4+操作留痕", bool(anon4) and anon4.get("status") == 4
+         and any(t.get("action") == "ignore" for t in anon4.get("tracks") or []), anon4)
+    api_err("忽略后重试拒绝 280012", "POST", "/api/market/inbounds/%s/retry" % anon_id, tok_admin, None, 280012)
+    api_err("成功进线忽略拒绝 280012", "POST", "/api/market/inbounds/%s/ignore" % ib_id, tok_admin,
+            {"reason": "x"}, 280012)
+
+    # ---- 获客漏斗(有效进线=status1 口径) ----
+    funnel_c = api_ok("漏斗-按活动", "GET", "/api/market/funnel/campaigns", tok_admin)
+    fc = next((r for r in (funnel_c or []) if r.get("id") == camp_id), None)
+    step("活动漏斗四级计数(进线/有效/客源/机会)", bool(fc) and fc.get("inboundTotal") >= 2
+         and fc.get("inboundValid") >= 1 and fc.get("leadCount") >= 1 and fc.get("chanceCount") >= 1, fc)
+    funnel_h = api_ok("漏斗-按渠道", "GET", "/api/market/funnel/channels", tok_admin)
+    fh = next((r for r in (funnel_h or []) if r.get("id") == chan_id), None)
+    step("渠道漏斗计数与活动口径一致", bool(fh) and fh.get("inboundValid") >= 1
+         and fh.get("chanceCount") >= 1, fh)
+
+    # ---- 案例库 ----
+    ecity = api_ok("建城市", "POST", "/api/market/showcase/cities", tok_admin,
+                   {"name": "烟洲市" + stamp_mkt, "pinyin": "yanzhou"})
+    city_id = ecity.get("id")
+    api_err("城市重名 280017", "POST", "/api/market/showcase/cities", tok_admin,
+            {"name": "烟洲市" + stamp_mkt}, 280017)
+    edes = api_ok("建设计师", "POST", "/api/market/showcase/persons", tok_admin,
+                  {"name": "设计师甲" + stamp_mkt, "type": 0, "title": "主案设计"})
+    des_id = edes.get("id")
+    api_err("人物重名 280019", "POST", "/api/market/showcase/persons", tok_admin,
+            {"name": "设计师甲" + stamp_mkt, "type": 0}, 280019)
+    esup = api_ok("建监理", "POST", "/api/market/showcase/persons", tok_admin,
+                  {"name": "监理乙" + stamp_mkt, "type": 1})
+    sup_id = esup.get("id")
+    ecase = api_ok("建案例(效果图,工期锁0)", "POST", "/api/market/showcase/cases", tok_admin,
+                   {"cityId": city_id, "designerId": des_id, "name": "烟测园样板间" + stamp_mkt,
+                    "village": "烟测园", "style": "东方纸墨", "layout": "三室两厅", "area": 120000,
+                    "cycle": 66, "type": 0, "coverUrl": "https://img.example.com/cover.jpg",
+                    "pictures": [{"url": "https://img.example.com/p1.jpg", "sort": 1}]})
+    case_id = ecase.get("id")
+    case1 = api_ok("案例详情(效果图工期恒0+图片在册)", "GET", "/api/market/showcase/cases/%s" % case_id,
+                   tok_admin)
+    step("效果图 cycle 锁 0(老口径)+图片级联体", case1.get("cycle") == 0
+         and len(case1.get("pictures") or []) == 1, case1)
+    api_ok("上架案例", "POST", "/api/market/showcase/cases/%s/status" % case_id, tok_admin, {"status": 1})
+    api_err("上架中删除拒绝 280021", "DELETE", "/api/market/showcase/cases/%s" % case_id, tok_admin, None, 280021)
+    api_err("城市使用中删除拒绝 280025", "DELETE", "/api/market/showcase/cities/%s" % city_id, tok_admin, None, 280025)
+    api_err("人物使用中删除拒绝 280026", "DELETE", "/api/market/showcase/persons/%s" % des_id, tok_admin, None, 280026)
+
+    # 报名=一种进线入口(复用幂等/密文/承接链,废老独立明文 ecustomer)
+    phone2 = "139%09d" % (int(mkt_num) * 10 + 2)
+    api_err("报名缺手机 280023", "POST", "/api/market/showcase/cases/%s/lead" % case_id, tok_admin,
+            {"name": "报名客"}, 280023)
+    elead = api_ok("案例报名(带手机)", "POST", "/api/market/showcase/cases/%s/lead" % case_id, tok_admin,
+                   {"name": "报名客" + stamp_mkt, "phone": phone2, "note": "来自官网"})
+    elead_id = elead.get("id")
+    elead2 = None
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        elead2 = (call("GET", "/api/market/inbounds/%s" % elead_id, tok_admin)[1] or {}).get("data")
+        if elead2 and elead2.get("status") == 1:
+            break
+        time.sleep(2)
+    step("报名进线自动承接+case_name 快照", bool(elead2) and elead2.get("status") == 1
+         and elead2.get("case_name") == "烟测园样板间" + stamp_mkt
+         and elead2.get("customer_lead_id"), elead2)
+    leads_list = api_ok("报名列表", "GET", "/api/market/showcase/leads?caseId=%s" % case_id, tok_admin)
+    step("报名列表含本条", any(l.get("id") == elead_id for l in (leads_list or [])), leads_list)
+
+    # 报名手机密文实证+读取留痕(DB 直查)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select phone_cipher, phone_hash from market_inbound where id = %s", (elead_id,))
+            cipher_row = cur.fetchone()
+            cur.execute("select count(*) from market_phone_access_log where inbound_id = %s",
+                        (elead_id,))
+            reveal_logs = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("报名手机密文落库(非明文)", bool(cipher_row) and cipher_row[0]
+         and cipher_row[0].startswith("v1:") and phone2.encode("utf-8").decode("utf-8") not in cipher_row[0],
+         cipher_row)
+    step("承接链解密留痕(reveal log)", reveal_logs >= 1, reveal_logs)
+
+    # 承接幂等:重放事件→beginAccept 幂等闸→承接结果不变
+    db_exec("update yz_event_task set status = 0, retry_count = 0, next_retry_time = null, "
+            "claimed_at = null, last_error = null where event_key = %s",
+            ("market:inbound:%d:accepted" % ib_id,))
+    time.sleep(6)
+    replayed = (call("GET", "/api/market/inbounds/%s" % ib_id, tok_admin)[1] or {}).get("data")
+    step("事件重放幂等(状态/承接结果不变)", bool(replayed) and replayed.get("status") == 1
+         and replayed.get("chance_id") == accepted.get("chance_id"), replayed)
+
+    # 删案例(下架后)级联图片,报名进线 case_name 快照保留
+    api_ok("下架案例", "POST", "/api/market/showcase/cases/%s/status" % case_id, tok_admin, {"status": 0})
+    api_ok("删除案例(级联图片)", "DELETE", "/api/market/showcase/cases/%s" % case_id, tok_admin)
+    pics_left = db_exec("select count(*) from market_epicture where case_id = %s", (case_id,))
+    elead3 = (call("GET", "/api/market/inbounds/%s" % elead_id, tok_admin)[1] or {}).get("data")
+    step("图片级联删除", pics_left and pics_left[0][0] == 0, pics_left)
+    step("报名进线 case_name 快照保留(历史可读)", bool(elead3)
+         and elead3.get("case_name") == "烟测园样板间" + stamp_mkt, elead3)
+
+    # market 段总线对账 + 单号流水
+    mkt_pending = db_exec("""
+        select count(*) from yz_event_task
+        where event_type like concat('Inbound', '%%') and status not in (1, 3)
+    """)
+    mi_no = db_exec("select inbound_no from market_inbound where id = %s", (ib_id,))
+    step("总线对账:进线事件零滞留", mkt_pending and mkt_pending[0][0] == 0, mkt_pending)
+    step("进线单号 MI 流水在册", bool(mi_no) and str(mi_no[0][0]).startswith("MI"), mi_no)
+
     return finish()
 
 
