@@ -1,6 +1,6 @@
 # PRD - addon-basedata 基础数据(商品档案 + 主材计划)
 
-> 状态:草稿(主材计划部分设计完毕待业务确认;商品档案/整装定材包部分仅定边界,另出章节)
+> 状态:草稿(主材计划设计完毕待业务确认;商品档案/辅材档案/定材章节 2026-10-11 增补,规则底座 = docs/rules/material.md)
 > 老系统参考:data 模块(过堂拆分:商品/材料档案、整装定材包、材料计划规则归本 addon,见 docs/01 过堂表)+ 施工域主材计划实例层(2026-10-11 addon-construction PRD 已将其剥离到本 addon)
 
 ## 定位与边界
@@ -49,11 +49,43 @@
 - 异常路径:**后补规则不回填存量订单**(老口径:仅放线时点生成;"按订单重跑生成"作为运维动作 V1 不做,排入待确认);锚点时间缺失(排期行无计划时间)→ plan_time 为空,只列出不判逾期;履约事件回填失败不阻断销售主流程(吞异常仅日志);
 - 回滚:无(取消/删除仅 0 态)。
 
+## 商品与辅材档案章节(2026-10-11 增补,规则底座 docs/rules/material.md §6-§7)
+
+### 模型族与改法
+
+| 模型 | 老表(生产行数) | 营造表 | 改法 |
+|---|---|---|---|
+| 商品主档 | data.goods(70.8 万) | `basedata_goods` | 保留泛化:no/name/barcode/category/brand/unit/类型(商品/套餐)/状态;金额保留厘;pieceNum 改语义化倍率并精确定义;**no/barcode 加组织内唯一约束**(老系统全程无查重,260046 仅 name);品类改单表树(废四级定长挂列 zerokind~thrkind);砍品牌名快照双存(bid+brand) |
+| SKU 属性 | data.color 26.7 万/format 29.7 万 | `basedata_goods_sku_attr` | 合并为"商品 SKU 属性值"概念(颜色/规格同构);统一启用过滤(老 addColor 有查重 260034、addFormat 无);管理页全量/选择页仅启用 |
+| 多价格体系 | data.price 30.6 万 | `basedata_goods_price` | gid 外键化(老裸 long);ctype/cvalue 与销售结算枚举统一;**补时间有效性**(老模型缺失);add 补查重 |
+| 商品套餐 | data.goodspackage(393) | `basedata_goods_package` | pid 语义正名(实为主商品 gid,老注释相反);加 status 软删替代物理删;成员不可再为套餐保留 |
+| 主材型号 | data.materialmodel(4.6 万) | `basedata_material_model`(归属待确认 §14-material-5) | 与 goods 补外键或独立价目模型;calcType(0=底价/1=点位)口径随 addon-sales |
+| 辅材档案 | data.aoods(4.9 万)+aoodscharge 2877 | `basedata_auxiliary_material`(+`_charge` 费用模板) | 定额/库房双单位(normunit/normnum/storeunit/storenum)保留;**归属 addon-basedata 或 addon-inventory 待确认**(rules/material.md §14-4);Cost 成本限值后端零消费者暂不迁 |
+| 定材包 | data.noods(1680) | `basedata_material_package` | pnid 两级(0=平台级主数据,>0=引用行存快照、仅浮动量可改)保留泛化;**组织化改写:老 company=0 即集团行的隐式约定改显式 owner_org**;后端补控权(老全靠前端) |
+| 商品使用流水 | data.goodsRecord | 不迁 | 无状态无闭环,并入通用操作日志 |
+| 回尺指标 | data.remeasureformat(0 行) | 不迁(归 addon-quotation) | 生产 0 行,模型随复尺业务走 |
+| inventory 三镜像表 | inventory.color/format/price | 砍 | 老系统靠库外触发器同步双源,营造单源读本 addon |
+
+### 横切修正(对老缺陷的显式修正,验收必测)
+
+- **查重下沉 DB**:goods.no/barcode、format、price 补组织内唯一约束,消 check-then-act 竞态(老 GoodsServiceImpl.java:263-295 等);
+- **导入器全量校验**:gid/bid 存在性、批内查重、pinyin 统一算法(老 imports 存 `List.toString()` 带方括号脏值,GoodsImportService.java:67);
+- **启停语义统一**:status 0 启用/1 停用软开关,状态变更留操作日志(老 updateGoodsForStatus 直落 VO 值无校验);
+- **company→org_id 单层化**:goods/price/materialmodel 的 company int 分叉与"颜色规格无 company 随主表"的不一致,统一 org_id 归属;商品池级联复制(communion 池位与开关)为方林运营特性不迁,如需集团分发走组织级共享字典;
+- **错误码段**:复用本 addon 独占段(声明于 addon.yml),消灭老 130/180/260 三段混用与漂移(rules/material.md §10)。
+
+### 端覆盖增补
+
+- Web 后台:商品/辅材/定材档案管理页(列表+启停+导入);多价格体系随商品详情页;
+- 移动端:商品查询/条码扫码(typeahead 场景),V1.1;
+- 事件契约:商品启停/价格变更领域事件(消费方 addon-quotation/sales/inventory 的规格、销售、库存面)。
+
 ## 非目标(本期不做)
 
-- 商品/材料档案(goods)与整装定材包(cormrice/cormood)的详细设计——本篇只定边界,另出章节;
 - 供应商/采购协同 → addon-supplier;销售单/配送单本体 → addon-sales / addon-inventory(本 addon 只消费事件);
-- 采购建议/自动派单等智能化;多组织集团节点归集(老 pcnid,压后)。
+- 采购建议/自动派单等智能化;多组织集团节点归集(老 pcnid,压后);
+- 选材(soods/soodsitem)→ addon-quotation(写侧)/addon-sales(读侧),见 docs/rules/material.md §13;
+- 旧 material 主链五表(material/materialitem/materialrefund/materialbalance/materialactivityitem)不迁——1.x 代主材销售,以 addon-sales 为唯一口径(rules/material.md §0-§1,改判待确认)。
 
 ## 验收标准
 
@@ -80,6 +112,7 @@
 5. 取消是否接轻量审批(老系统无审批直接切;内核审批底座已就位,可选)?
 6. 确认完成是否强制填 actual_time 与上传凭证(老系统只点确认,无凭证)?
 7. 错误码段建议 **260000**、Flyway 迁移段 **700+**(紧随 construction 600+),addon.yml 声明时定案。
+8. (2026-10-11 增补)商品档案章节共 8 条确认项见 **docs/rules/material.md §14**(addon-material 改判不建/aoods 辅材归属/型号库与 goods 合并/noods 集团两级形态/优惠三承担方对齐等)——本 addon 的商品/辅材/定材章节随其一并确认。
 
 ## 老系统回溯指针(实现者用)
 
