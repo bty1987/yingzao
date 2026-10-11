@@ -1,0 +1,66 @@
+addon:
+  id: construction
+  name: 施工管理
+  version: 0.1.0
+  error-code-segment: 240000
+  menus:
+    - path: /construction/constructions
+      title: 施工管理
+      icon: set-up
+  dicts:
+    drawlineStatus:
+      - { key: '0', label: 排队 }
+      - { key: '1', label: 已排期 }
+      - { key: '2', label: 成功 }
+      - { key: '3', label: 失败 }
+    scheduleStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 开工 }
+      - { key: '2', label: 完工 }
+      - { key: '3', label: 开放工费 }
+    workStatus:
+      - { key: '0', label: 未进场 }
+      - { key: '1', label: 已进场 }
+      - { key: '2', label: 已出场 }
+    workerStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已停用 }
+      - { key: '2', label: 已发送评分 }
+      - { key: '3', label: 已评分 }
+    processStatus:
+      - { key: '0', label: 未完工 }
+      - { key: '1', label: 竣工交付 }
+    accessoryStatus:
+      - { key: '0', label: 开启 }
+      - { key: '1', label: 锁定 }
+    profileMount:
+      - { key: '0', label: 放线档案 }
+      - { key: '1', label: 施工档案 }
+      - { key: '2', label: 验收检查项模板 }
+    profileStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已发送 }
+      - { key: '2', label: 已完成 }
+    profileItemType:
+      - { key: '0', label: 文本域 }
+      - { key: '1', label: 输入框 }
+      - { key: '2', label: 单选 }
+      - { key: '3', label: 多选 }
+      - { key: '4', label: 日期 }
+    acceptanceStatus:
+      - { key: '0', label: 整改中 }
+      - { key: '1', label: 完工 }
+    trackAction:
+      - { key: 'ignite', label: 放线点火 }
+      - { key: 'retroactive', label: 补录点火 }
+      - { key: 'supervisor', label: 更换监理 }
+      - { key: 'accessoryOpen', label: 辅料库开启 }
+      - { key: 'accessoryLock', label: 辅料库锁定 }
+      - { key: 'begin', label: 节点开工 }
+      - { key: 'finish', label: 节点完工 }
+      - { key: 'openSalary', label: 开放工费 }
+      - { key: 'checkout', label: 免检放行 }
+      - { key: 'scheduleDelete', label: 删除节点 }
+      - { key: 'scheduleReset', label: 排期重排 }
+      - { key: 'accept', label: 验收竣工 }
+      - { key: 'acceptRectify', label: 验收整改 }

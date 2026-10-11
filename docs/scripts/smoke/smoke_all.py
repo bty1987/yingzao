@@ -1071,6 +1071,297 @@ def main():
     step("总线对账:quotation 事件零滞留(全消费确认)", q_undelivered == 0, q_undelivered)
     step("轨迹留痕:锁定动作在册", lock_tracks >= 1, lock_tracks)
 
+    print("== 施工(addon-construction V1:放线点火+节点推进+团队留痕+验收收口)==")
+    import datetime
+    s6 = time.strftime("%d%H%M%S")
+    sort_base = 20000 + int(s6) * 3
+    day1 = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    day2 = (datetime.datetime.now() + datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+
+    # 节点模板(组织施工流;木工建后停用,点火快照应剔除)
+    # 归拢历史运行遗留的启用节点(节点是组织配置不删除,不清场则点火快照混入旧节点)
+    legacy = api_ok("历史节点全量回读", "GET", "/api/construction/nodes?includeDisabled=true", tok_admin)
+    for n in (legacy or []):
+        if n.get("status") == 1:
+            api_ok("停用历史启用节点(%s)" % n.get("name"), "POST",
+                   "/api/construction/nodes/%s/status" % n.get("id"), tok_admin, {"status": 0})
+    node1 = api_ok("建节点模板1 拆改(无闸 3天)", "POST", "/api/construction/nodes", tok_admin,
+                   {"name": "拆改" + s6, "sort": sort_base + 1, "precheck": 0, "postcheck": 0,
+                    "timeLimit": 3000, "salaryLimit": 999999000, "accessoryLimit": 999999000})
+    node2 = api_ok("建节点模板2 水电(开工闸500‰ 10天)", "POST", "/api/construction/nodes", tok_admin,
+                   {"name": "水电" + s6, "sort": sort_base + 2, "precheck": 500, "postcheck": 0,
+                    "timeLimit": 10000, "salaryLimit": 5000000, "accessoryLimit": 999999000})
+    node3 = api_ok("建节点模板3 瓦工(双闸500‰ 17天)", "POST", "/api/construction/nodes", tok_admin,
+                   {"name": "瓦工" + s6, "sort": sort_base + 3, "precheck": 500, "postcheck": 500,
+                    "timeLimit": 17000, "salaryLimit": 999999000, "accessoryLimit": 999999000})
+    node4 = api_ok("建节点模板4 木工", "POST", "/api/construction/nodes", tok_admin,
+                   {"name": "木工" + s6, "sort": sort_base + 4, "precheck": 0, "postcheck": 0,
+                    "timeLimit": 1000, "salaryLimit": 999999000, "accessoryLimit": 999999000})
+    if not all([node1, node2, node3, node4]):
+        return finish()
+    api_err("同序号节点拒绝 240015", "POST", "/api/construction/nodes", tok_admin,
+            {"name": "其他" + s6, "sort": sort_base + 1, "timeLimit": 0}, 240015)
+    api_ok("停用木工节点(点火快照应剔除)", "POST", "/api/construction/nodes/%s/status" % node4,
+           tok_admin, {"status": 0})
+    cfg0 = api_ok("组织配置回显(懒初始化默认门槛)", "GET", "/api/construction/config", tok_admin)
+    step("默认验收门槛 800‰", cfg0 and cfg0.get("acceptance_floor") == 800, cfg0)
+    api_err("验收门槛越界拒绝 240014", "PUT", "/api/construction/config", tok_admin,
+            {"acceptanceFloor": 1001}, 240014)
+
+    # 五组客户/房屋(get-or-create 幂等通道,装修单客户×楼盘唯一在途约束要求互不重合)
+    def smoke_pair(suffix):
+        phone = "135%08d" % ((int(s6) * 10 + suffix) % 100000000)
+        c = api_ok("施工客%d get-or-create" % suffix, "POST",
+                   "/api/customerprofile/customers/exist", tok_admin,
+                   {"phone": phone, "name": "施工客%d%s" % (suffix, s6)})
+        h = api_ok("施工房%d get-or-create" % suffix, "POST",
+                   "/api/customerprofile/houses/exist", tok_admin,
+                   {"villageId": village_id, "number": "9栋9单元%s-%d" % (s6, suffix)})
+        return (c or {}).get("customerId"), (h or {}).get("houseId")
+
+    cust_d, house_d = smoke_pair(1)
+    cust_e, house_e = smoke_pair(2)
+    cust_f, house_f = smoke_pair(3)
+    cust_g, house_g = smoke_pair(4)
+    cust_n, house_n = smoke_pair(5)
+
+    # 登记五张装修单(D=主链带定金;N=无报价放线反例)
+    order_d = api_ok("登记装修单D(施工主链,定金3万)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_d, "houseId": house_d, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c, "depositAmount": 30000000})
+    order_e = api_ok("登记装修单E(放线排期/冲突源)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_e, "houseId": house_e, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c})
+    order_f = api_ok("登记装修单F(冲突靶/失败链)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_f, "houseId": house_f, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c})
+    order_g = api_ok("登记装修单G(补录链)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_g, "houseId": house_g, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c})
+    order_n = api_ok("登记装修单N(无报价反例)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_n, "houseId": house_n, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c})
+    if not all([order_d, order_e, order_f, order_g, order_n]):
+        return finish()
+
+    # D 链前置:定金收款→报价锁定→预签→签约拆款线
+    bills_d = api_ok("单D款项反查", "GET",
+                     "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_d, tok_admin)
+    dep_d = [b for b in (bills_d or {}).get("rows", []) if b.get("type_code") == "deposit"]
+    api_ok("单D定金收款", "POST", "/api/payment/bills/%s/collect" % dep_d[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 30000000}]})
+    time.sleep(2)
+    quota_d = api_ok("单D建报价", "POST", "/api/quotation/quotations", tok_admin,
+                     {"orderId": order_d, "name": "施工链报价" + s6, "versionId": q_ver})
+    api_ok("单D报价锁定", "POST", "/api/quotation/quotations/%s/lock" % quota_d, tok_admin)
+    api_ok("单D预签", "POST", "/api/decoration/orders/%s/presign" % order_d, tok_admin)
+    api_ok("单D签约(拆6万款线)", "POST", "/api/decoration/orders/%s/sign" % order_d, tok_admin,
+           {"contractAmount": 100000000})
+
+    # E/F/G 报价锁定(放线门槛=存在已锁定报价)
+    for tag, oid in (("E", order_e), ("F", order_f), ("G", order_g)):
+        q = api_ok("单%s建报价" % tag, "POST", "/api/quotation/quotations", tok_admin,
+                   {"orderId": oid, "name": "放线前置报价%s%s" % (tag, s6), "versionId": q_ver})
+        api_ok("单%s报价锁定" % tag, "POST", "/api/quotation/quotations/%s/lock" % q, tok_admin)
+
+    # 放线申请:门槛与查重
+    api_err("无锁定报价放线拒绝 240003", "POST", "/api/construction/drawlines", tok_admin,
+            {"orderId": order_n}, 240003)
+    dl_d = api_ok("单D放线申请(排队)", "POST", "/api/construction/drawlines", tok_admin,
+                  {"orderId": order_d})
+    api_err("重复放线拒绝 240002", "POST", "/api/construction/drawlines", tok_admin,
+            {"orderId": order_d}, 240002)
+    dl_e = api_ok("单E放线申请", "POST", "/api/construction/drawlines", tok_admin, {"orderId": order_e})
+    dl_f = api_ok("单F放线申请", "POST", "/api/construction/drawlines", tok_admin, {"orderId": order_f})
+    if not all([dl_d, dl_e, dl_f]):
+        return finish()
+
+    # 排期:参数/冲突/状态守卫(修老失效查重:真查 status=1 同小组区间重叠)
+    api_err("结束早于开始拒绝 240014", "POST", "/api/construction/drawlines/%s/schedule" % dl_d, tok_admin,
+            {"groupName": "放线B组" + s6, "planStart": day2 + "T12:00:00", "planEnd": day2 + "T08:00:00"},
+            240014)
+    api_err("排队单直接成功拒绝 240005", "POST", "/api/construction/drawlines/%s/success" % dl_d,
+            tok_admin, None, 240005)
+    api_ok("单E排期(A组 明日08-12)", "POST", "/api/construction/drawlines/%s/schedule" % dl_e, tok_admin,
+           {"groupName": "放线A组" + s6, "planStart": day1 + "T08:00:00", "planEnd": day1 + "T12:00:00"})
+    api_err("同组时间重叠拒绝 240007", "POST", "/api/construction/drawlines/%s/schedule" % dl_f, tok_admin,
+            {"groupName": "放线A组" + s6, "planStart": day1 + "T10:00:00", "planEnd": day1 + "T14:00:00"},
+            240007)
+    api_err("已排期单补录拒绝 240002(活跃放线在册)", "POST", "/api/construction/drawlines/retroactive",
+            tok_admin, {"orderId": order_e, "groupName": "放线A组" + s6,
+                        "planStart": day1 + "T08:00:00", "planEnd": day1 + "T12:00:00"}, 240002)
+    api_ok("单F放线失败(0→3,设计师收通知)", "POST", "/api/construction/drawlines/%s/fail" % dl_f,
+           tok_admin, {"remark": "现场不具备放线条件"})
+    api_err("失败单重复排期拒绝 240005", "POST", "/api/construction/drawlines/%s/schedule" % dl_f,
+            tok_admin, {"groupName": "放线A组" + s6, "planStart": day1 + "T14:00:00",
+                        "planEnd": day1 + "T18:00:00"}, 240005)
+
+    # 单D 排期→成功点火
+    api_ok("单D排期(B组 后日08-12)", "POST", "/api/construction/drawlines/%s/schedule" % dl_d, tok_admin,
+           {"groupName": "放线B组" + s6, "planStart": day2 + "T08:00:00", "planEnd": day2 + "T12:00:00"})
+    api_ok("单D放线成功(点火:施工单+节点排期快照)", "POST", "/api/construction/drawlines/%s/success" % dl_d,
+           tok_admin)
+    time.sleep(2)
+    det_d = api_ok("单D施工详情(点火回读)", "GET", "/api/construction/orders/%s" % order_d, tok_admin)
+    if det_d is None:
+        return finish()
+    d_schedules = (det_d or {}).get("schedules") or []
+    sched1 = next((s for s in d_schedules if s.get("sort") == sort_base + 1), None)
+    sched2 = next((s for s in d_schedules if s.get("sort") == sort_base + 2), None)
+    sched3 = next((s for s in d_schedules if s.get("sort") == sort_base + 3), None)
+    ok = det_d and len(d_schedules) == 3 and det_d.get("period") == 30000 \
+        and det_d.get("order_no") and det_d.get("customer_name") and det_d.get("house_label")
+    step("点火:施工单1:1+停用节点不入快照+工期累加 30000‰天", ok, det_d)
+    ok = d_schedules and d_schedules[0].get("plan_start") and d_schedules[0].get("plan_end") \
+        and d_schedules[1].get("plan_start") >= d_schedules[0].get("plan_end")
+    step("计划时间按工期‰天正向累加(排期快照)", ok, d_schedules)
+    det_d2 = api_ok("单D装修单回读", "GET", "/api/decoration/orders/%s" % order_d, tok_admin)
+    step("工程线 0→1 开工(ConstructionStarted 事件回程车)", det_d2 and det_d2.get("project_status") == 1,
+         det_d2 and det_d2.get("project_status"))
+    page_c = api_ok("施工单分页检索", "GET",
+                    "/api/construction/orders?orderNo=%s&page=1&size=5" % str(det_d.get("order_no")), tok_admin)
+    step("分页命中点火单", bool(page_c) and page_c.get("total", 0) >= 1, page_c)
+    api_ok("单D指定监理(example_c)", "PUT", "/api/construction/orders/%s/supervisor" % order_d, tok_admin,
+           {"userId": uid_c})
+
+    # 单G 显式补录点火 + 验收比例闸反例
+    api_ok("单G显式补录点火(免审后门正名,带审计)", "POST", "/api/construction/drawlines/retroactive",
+           tok_admin, {"orderId": order_g, "groupName": "放线C组" + s6,
+                       "planStart": day1 + "T08:00:00", "planEnd": day1 + "T12:00:00",
+                       "remark": "历史单补录冒烟"})
+    det_g = api_ok("单G施工详情(补录回读)", "GET", "/api/construction/orders/%s" % order_g, tok_admin)
+    g_dl = (det_g or {}).get("drawlines") or []
+    step("补录单带 is_retroactive 审计标记", any(d.get("is_retroactive") == 1 for d in g_dl), g_dl)
+    api_err("零收款验收比例不足拒绝 240011", "POST", "/api/construction/orders/%s/acceptance" % order_g,
+            tok_admin, {"items": [{"name": "外观", "pass": 1}]}, 240011)
+
+    # 节点推进:守卫族+工费旁路+免检留痕
+    api_err("未开工指派工人拒绝 240008", "POST", "/api/construction/schedules/%s/workers" % sched1["id"],
+            tok_admin, {"userId": uid_b}, 240008)
+    api_ok("节点1开工(无闸)", "POST", "/api/construction/schedules/%s/begin" % sched1["id"], tok_admin)
+    api_err("重复开工拒绝 240005", "POST", "/api/construction/schedules/%s/begin" % sched1["id"],
+            tok_admin, None, 240005)
+    wid_b = api_ok("指派工人 example_b(节点1)", "POST", "/api/construction/schedules/%s/workers" % sched1["id"],
+                   tok_admin, {"userId": uid_b})
+    api_err("同节点重复指派拒绝 240009", "POST", "/api/construction/schedules/%s/workers" % sched1["id"],
+            tok_admin, {"userId": uid_b}, 240009)
+    api_err("幽灵工人拒绝 240001", "POST", "/api/construction/schedules/%s/workers" % sched1["id"],
+            tok_admin, {"userId": 99999999}, 240001)
+    api_ok("工人进场", "POST", "/api/construction/workers/%s/enter" % wid_b, tok_admin)
+    api_err("重复进场拒绝 240010", "POST", "/api/construction/workers/%s/enter" % wid_b, tok_admin, None, 240010)
+    api_ok("工人出场", "POST", "/api/construction/workers/%s/leave" % wid_b, tok_admin)
+    api_err("未进场先出场拒绝 240010", "POST", "/api/construction/workers/%s/leave" % wid_b, tok_admin, None, 240010)
+    recs = api_ok("进出场流水回读", "GET", "/api/construction/workers/%s/records" % wid_b, tok_admin)
+    step("流水 append-only 正序(进场→出场)", bool(recs) and len(recs) == 2
+         and recs[0].get("action") == 1 and recs[1].get("action") == 2, recs)
+    api_ok("日志1(自动判进场)", "POST", "/api/construction/schedules/%s/diaries" % sched1["id"], tok_admin,
+           {"content": "进场交底,拆改开工"})
+    api_ok("日志2(自动判出场)", "POST", "/api/construction/schedules/%s/diaries" % sched1["id"], tok_admin,
+           {"content": "拆改完工退场", "hasDrawing": True})
+    api_ok("日志3(普通日志)", "POST", "/api/construction/schedules/%s/diaries" % sched1["id"], tok_admin,
+           {"content": "现场巡查"})
+    diaries1 = api_ok("日志回读(自动进出场判定)", "GET", "/api/construction/schedules/%s/diaries" % sched1["id"],
+                      tok_admin)
+    step("首笔进场/次笔出场/之后普通(灭静默return)",
+         bool(diaries1) and len(diaries1) == 3 and diaries1[0].get("atttype") == 0
+         and diaries1[1].get("atttype") == 2 and diaries1[2].get("atttype") == 1, diaries1)
+    api_ok("节点1完工(无闸)", "POST", "/api/construction/schedules/%s/finish" % sched1["id"], tok_admin)
+    api_err("重复完工拒绝 240005", "POST", "/api/construction/schedules/%s/finish" % sched1["id"],
+            tok_admin, None, 240005)
+    api_err("节点2开工比例闸拒绝 240006(333‰<500‰)", "POST", "/api/construction/schedules/%s/begin" % sched2["id"],
+            tok_admin, None, 240006)
+    api_err("免检空理由拒绝 240014", "POST", "/api/construction/schedules/%s/checkout" % sched2["id"],
+            tok_admin, {"reason": ""}, 240014)
+    api_ok("节点2免检放行(理由留痕)", "POST", "/api/construction/schedules/%s/checkout" % sched2["id"],
+           tok_admin, {"reason": "冒烟:业主书面催办"})
+    api_ok("节点2开工(免检跳过比例闸)", "POST", "/api/construction/schedules/%s/begin" % sched2["id"], tok_admin)
+    wid_c = api_ok("指派工人 example_c(节点2)", "POST", "/api/construction/schedules/%s/workers" % sched2["id"],
+                   tok_admin, {"userId": uid_c})
+    api_ok("发送评分链接(0→2)", "POST", "/api/construction/workers/%s/rate-link" % wid_c, tok_admin)
+    api_ok("客户评分三率(2→3)", "POST", "/api/construction/workers/%s/rate" % wid_c, tok_admin,
+           {"score1": 5, "score2": 4, "score3": 3, "assessment": "师傅很nice"})
+    wid_b2 = api_ok("指派工人 example_b(节点2)", "POST", "/api/construction/schedules/%s/workers" % sched2["id"],
+                    tok_admin, {"userId": uid_b})
+    api_ok("停用工人(0→1)", "POST", "/api/construction/workers/%s/disable" % wid_b2, tok_admin)
+    api_err("重复停用拒绝 240005", "POST", "/api/construction/workers/%s/disable" % wid_b2, tok_admin, None, 240005)
+    api_ok("节点2开放工费(1→3旁路)", "POST", "/api/construction/schedules/%s/open-salary" % sched2["id"],
+           tok_admin)
+    api_err("旁路后重复开放拒绝 240005", "POST", "/api/construction/schedules/%s/open-salary" % sched2["id"],
+            tok_admin, None, 240005)
+    api_ok("节点2完工(3→2)", "POST", "/api/construction/schedules/%s/finish" % sched2["id"], tok_admin)
+    api_err("已开工节点删除拒绝 240013", "DELETE", "/api/construction/schedules/%s" % sched1["id"],
+            tok_admin, None, 240013)
+    bills_d2 = api_ok("单D款项单复查", "GET",
+                      "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_d, tok_admin)
+    tmpl_d = [b for b in (bills_d2 or {}).get("rows", [])
+              if b.get("type_code") == tmpl_code and b.get("direction") == 0]
+    if not tmpl_d:
+        step("单D合同款线在册", False, bills_d2)
+        return finish()
+    api_ok("合同款线收款(比例升至1000‰)", "POST",
+           "/api/payment/bills/%s/collect" % tmpl_d[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "bank", "amount": 60000000}]})
+    api_ok("节点3开工(比例闸500‰已达标)", "POST", "/api/construction/schedules/%s/begin" % sched3["id"],
+           tok_admin)
+    api_ok("节点3完工(完工闸500‰已达标)", "POST", "/api/construction/schedules/%s/finish" % sched3["id"],
+           tok_admin)
+    det_d3 = api_ok("全部节点完工后回读", "GET", "/api/construction/orders/%s" % order_d, tok_admin)
+    step("竣工不自动触发(process 仍 0,唯一入口=验收)+进度快照前推",
+         det_d3 and det_d3.get("process") == 0 and det_d3.get("current_sort") == sort_base + 3,
+         (det_d3 or {}).get("process"))
+    api_ok("排期锚点重排(锚=节点1)", "POST", "/api/construction/orders/%s/schedules/reset" % order_d,
+           tok_admin, {"anchorScheduleId": sched1["id"]})
+
+    # 验收:整改分支+竣工唯一
+    api_ok("提交验收(含不合格项→整改)", "POST", "/api/construction/orders/%s/acceptance" % order_d,
+           tok_admin, {"items": [{"name": "防水", "pass": 0, "remark": "卫生间渗漏"},
+                                 {"name": "瓦面", "pass": 1}], "remark": "整改后复验"})
+    acc1 = api_ok("验收单回读(整改态)", "GET", "/api/construction/orders/%s/acceptance" % order_d, tok_admin)
+    step("整改态 status=0 且 process 未变", acc1 and acc1.get("status") == 0, acc1)
+    api_ok("整改复验全合格→竣工", "POST", "/api/construction/orders/%s/acceptance" % order_d,
+           tok_admin, {"items": [{"name": "防水", "pass": 1, "remark": "已修复"},
+                                 {"name": "瓦面", "pass": 1}], "remark": "复验通过"})
+    api_err("竣工后重复验收拒绝 240012", "POST", "/api/construction/orders/%s/acceptance" % order_d,
+            tok_admin, {"items": [{"name": "再验", "pass": 1}]}, 240012)
+    acc2 = api_ok("竣工后验收单回读", "GET", "/api/construction/orders/%s/acceptance" % order_d, tok_admin)
+    det_d4 = api_ok("竣工后施工单回读", "GET", "/api/construction/orders/%s" % order_d, tok_admin)
+    step("process 0→1 竣工+完工时间落", det_d4 and det_d4.get("process") == 1
+         and acc2 and acc2.get("status") == 1 and bool(acc2.get("check_time")), (det_d4 or {}).get("process"))
+    time.sleep(3)
+    det_d5 = api_ok("单D装修单终态回读", "GET", "/api/decoration/orders/%s" % order_d, tok_admin)
+    step("工程线 1→2 完工(ConstructionAccepted 事件回程车)", det_d5 and det_d5.get("project_status") == 2,
+         det_d5 and det_d5.get("project_status"))
+
+    # 事件与通知对账
+    ev_c = api_ok("施工事件消费查询", "GET",
+                  "/api/events?eventType=ConstructionAcceptedEvent&status=1&page=1&size=5", tok_admin)
+    step("ConstructionAccepted 消费行存在", bool(ev_c) and ev_c.get("total", 0) >= 1, ev_c)
+    notifs_c = api_ok("监理通知列表", "GET", "/api/notifications?page=1&size=50", tok_c)
+    hit_node = [n for n in (notifs_c or []) if "施工节点" in str(n.get("title", ""))]
+    step("监理收节点开完工通知", len(hit_node) >= 1, len(hit_node or []))
+    notifs_b2 = api_ok("设计师通知复查", "GET", "/api/notifications?page=1&size=50", tok_b)
+    hit_fail = [n for n in (notifs_b2 or []) if "放线失败" in str(n.get("title", ""))]
+    hit_acc = [n for n in (notifs_b2 or []) if "竣工" in str(n.get("title", ""))]
+    step("设计师收放线失败+竣工通知", len(hit_fail) >= 1 and len(hit_acc) >= 1,
+         (len(hit_fail), len(hit_acc)))
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select count(*) from yz_event_task
+                where event_type like 'Construction%%' and status != 1
+            """)
+            c_undelivered = cur.fetchone()[0]
+            cur.execute("""
+                select count(*) from construction_order_track
+                where order_id = %s and action = 'checkout'
+            """, (order_d,))
+            checkout_tracks = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("总线对账:construction 事件零滞留(全消费确认)", c_undelivered == 0, c_undelivered)
+    step("免检留痕:轨迹在册(修老完全绕闸无痕)", checkout_tracks >= 1, checkout_tracks)
+
     return finish()
 
 

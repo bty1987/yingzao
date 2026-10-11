@@ -602,6 +602,30 @@ public class DecorationService {
         publishStatus(orgId, order, STATUS_DEPOSIT, "deposit", operatorId);
     }
 
+    // ---- 施工事件回写(由 DecorationConstructionConsumer 调用,必须幂等) ----
+
+    /** 开工点火(放线成功/补录)→ 工程线 0→1;条件更新,重放/已越过(量房先行)静默放行。 */
+    @Transactional
+    public void onConstructionStarted(long orgId, long orderId, long operatorId) {
+        int updated = jdbc.update(
+                "update decoration_order set project_status = 1 where id = ? and project_status = 0",
+                orderId);
+        if (updated > 0) {
+            track(orgId, orderId, "constructionStart", null, 1, operatorId, null);
+        }
+    }
+
+    /** 验收竣工 → 工程线 1→2;条件更新,重放/未开工(0)不越级。 */
+    @Transactional
+    public void onConstructionAccepted(long orgId, long orderId, long operatorId) {
+        int updated = jdbc.update(
+                "update decoration_order set project_status = 2 where id = ? and project_status = 1",
+                orderId);
+        if (updated > 0) {
+            track(orgId, orderId, "constructionAccept", 1, 2, operatorId, null);
+        }
+    }
+
     // ---- 查询 ----
 
     public Map<String, Object> page(long orgId, String orderNo, String customerName, Integer status,

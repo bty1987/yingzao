@@ -179,3 +179,63 @@ export const addQuotationItem = (id, areaId, data) =>
 export const updateQuotationItem = (id, itemId, data) =>
   http.put(`/api/quotation/quotations/${id}/items/${itemId}`, data)
 export const deleteQuotationItem = (id, itemId) => http.delete(`/api/quotation/quotations/${id}/items/${itemId}`)
+
+// 施工管理(addon-construction):放线三段/节点推进/团队留痕/验收/节点模板/档案
+export const pageConstructions = (params) => http.get('/api/construction/orders', { params })
+export const fetchConstruction = (orderId) => http.get(`/api/construction/orders/${orderId}`)
+export const updateConstructionSupervisor = (orderId, data) =>
+  http.put(`/api/construction/orders/${orderId}/supervisor`, data)
+export const switchConstructionAccessory = (orderId, data) =>
+  http.post(`/api/construction/orders/${orderId}/accessory`, data)
+export const submitConstructionAcceptance = (orderId, data) =>
+  http.post(`/api/construction/orders/${orderId}/acceptance`, data)
+export const fetchConstructionAcceptance = (orderId) =>
+  http.get(`/api/construction/orders/${orderId}/acceptance`)
+export const resetConstructionSchedules = (orderId, data) =>
+  http.post(`/api/construction/orders/${orderId}/schedules/reset`, data)
+export const applyConstructionDrawline = (data) => http.post('/api/construction/drawlines', data)
+export const scheduleConstructionDrawline = (id, data) =>
+  http.post(`/api/construction/drawlines/${id}/schedule`, data)
+export const successConstructionDrawline = (id) => http.post(`/api/construction/drawlines/${id}/success`)
+export const failConstructionDrawline = (id, data) => http.post(`/api/construction/drawlines/${id}/fail`, data)
+export const retroactiveConstructionDrawline = (data) =>
+  http.post('/api/construction/drawlines/retroactive', data)
+export const beginConstructionSchedule = (id) => http.post(`/api/construction/schedules/${id}/begin`)
+export const finishConstructionSchedule = (id) => http.post(`/api/construction/schedules/${id}/finish`)
+export const openConstructionSalary = (id) => http.post(`/api/construction/schedules/${id}/open-salary`)
+export const checkoutConstructionSchedule = (id, data) =>
+  http.post(`/api/construction/schedules/${id}/checkout`, data)
+export const deleteConstructionSchedule = (id) => http.delete(`/api/construction/schedules/${id}`)
+export const addConstructionWorker = (id, data) => http.post(`/api/construction/schedules/${id}/workers`, data)
+export const listConstructionWorkers = (id) => http.get(`/api/construction/schedules/${id}/workers`)
+export const disableConstructionWorker = (id) => http.post(`/api/construction/workers/${id}/disable`)
+export const sendConstructionRateLink = (id) => http.post(`/api/construction/workers/${id}/rate-link`)
+export const rateConstructionWorker = (id, data) => http.post(`/api/construction/workers/${id}/rate`, data)
+export const enterConstructionWorker = (id) => http.post(`/api/construction/workers/${id}/enter`)
+export const leaveConstructionWorker = (id) => http.post(`/api/construction/workers/${id}/leave`)
+export const listConstructionRecords = (id) => http.get(`/api/construction/workers/${id}/records`)
+export const addConstructionDiary = (id, data) => http.post(`/api/construction/schedules/${id}/diaries`, data)
+export const listConstructionDiaries = (id) => http.get(`/api/construction/schedules/${id}/diaries`)
+export const listConstructionNodes = (params) => http.get('/api/construction/nodes', { params })
+export const createConstructionNode = (data) => http.post('/api/construction/nodes', data)
+export const updateConstructionNode = (id, data) => http.put(`/api/construction/nodes/${id}`, data)
+export const updateConstructionNodeStatus = (id, data) =>
+  http.post(`/api/construction/nodes/${id}/status`, data)
+export const fetchConstructionConfig = () => http.get('/api/construction/config')
+export const updateConstructionConfig = (data) => http.put('/api/construction/config', data)
+export const listConstructionProfileTemplates = (params) =>
+  http.get('/api/construction/profile-templates', { params })
+export const createConstructionProfileTemplate = (data) =>
+  http.post('/api/construction/profile-templates', data)
+export const deleteConstructionProfileTemplate = (id) =>
+  http.delete(`/api/construction/profile-templates/${id}`)
+export const addConstructionProfileTemplateItem = (id, data) =>
+  http.post(`/api/construction/profile-templates/${id}/items`, data)
+export const deleteConstructionProfileTemplateItem = (id, itemId) =>
+  http.delete(`/api/construction/profile-templates/${id}/items/${itemId}`)
+export const instantiateConstructionProfile = (orderId, data) =>
+  http.post(`/api/construction/orders/${orderId}/profiles`, data)
+export const listConstructionProfiles = (orderId) => http.get(`/api/construction/orders/${orderId}/profiles`)
+export const fillConstructionProfileItem = (id, itemId, data) =>
+  http.put(`/api/construction/profiles/${id}/items/${itemId}`, data)
+export const completeConstructionProfile = (id) => http.post(`/api/construction/profiles/${id}/complete`)

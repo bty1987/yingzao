@@ -21,6 +21,7 @@
         <module>addons/addon-payment</module>
         <module>addons/addon-decoration</module>
         <module>addons/addon-quotation</module>
+        <module>addons/addon-construction</module>
         <module>yingzao-app</module>
     </modules>
 
@@ -82,6 +83,11 @@
             <dependency>
                 <groupId>com.yingzao</groupId>
                 <artifactId>addon-quotation</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.yingzao</groupId>
+                <artifactId>addon-construction</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
