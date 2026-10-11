@@ -142,7 +142,7 @@ public class SalesDeliveryService {
                        (select count(*) from sales_delivery_item i where i.delivery_id = d.id and i.status < 4) as open_count
                 from sales_delivery d join sales_order o on o.id = d.sale_id""" + w
                 + " order by d.id desc limit ? offset ?",
-                SalesOrderService.appendArgs(args, safeSize, (safePage - 1) * safeSize));
+                SalesOrderService.appendArgs(args, safeSize, (safePage - 1) * safeSize).toArray());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", count == null ? 0 : count);
         result.put("rows", rows);

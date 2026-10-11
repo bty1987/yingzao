@@ -392,7 +392,7 @@ public class SalesOrderService {
                 select id, code, order_id, order_no, customer_name, house_label, status, balance_status,
                        fullpay_status, customer_confirmed, total, finish_time, created_by_name, created_at
                 from sales_order""" + w + " order by id desc limit ? offset ?",
-                appendArgs(args, safeSize, (safePage - 1) * safeSize));
+                appendArgs(args, safeSize, (safePage - 1) * safeSize).toArray());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", count == null ? 0 : count);
         result.put("rows", rows);

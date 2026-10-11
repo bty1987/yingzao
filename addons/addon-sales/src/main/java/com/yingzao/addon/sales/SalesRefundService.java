@@ -320,7 +320,7 @@ public class SalesRefundService {
                 select id, sale_id, order_id, type, status, approval_id, is_affirm, amount, remark,
                        created_by_name, created_at
                 from sales_refunds""" + w + " order by id desc limit ? offset ?",
-                SalesOrderService.appendArgs(args, safeSize, (safePage - 1) * safeSize));
+                SalesOrderService.appendArgs(args, safeSize, (safePage - 1) * safeSize).toArray());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", count == null ? 0 : count);
         result.put("rows", rows);

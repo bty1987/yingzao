@@ -2139,6 +2139,370 @@ def main():
     step("轨迹全覆盖(create/confirmPay/refund/finish等)", "create" in actions
          and "confirmPay" in actions and "finish" in actions, actions)
 
+    print("== 结算(addon-balance V1:事件快照吸附+四态机+账户双腿+扣款池+完结唯一定义) ==")
+    stamp_bal = time.strftime("%H%M%S") + "b"
+    # 归属人带时间戳:账户 uk(org+belonger+type)与桶键随跑唯一,冒烟可重复执行
+    sup_b = "sup_b" + stamp_bal
+    sup_c = "sup_c" + stamp_bal
+    sup_z = "sup_z" + stamp_bal
+    sup_b2 = "sup_b2" + stamp_bal
+    cashier = "cashier" + stamp_bal
+
+    def db_exec(query, args=()):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(query, args)
+                if query.strip().lower().startswith("select"):
+                    return cur.fetchall()
+                conn.commit()
+                return cur.rowcount
+        finally:
+            conn.close()
+
+    def publish_ready(item_id, brand, bname, supplier, sname, income, cost, payment,
+                      addon="quotation", stype="selection", grade="C", price=0, qty=1000,
+                      key_suffix=""):
+        payload = json.dumps({
+            "orgId": 1, "sourceAddon": addon, "sourceType": stype, "sourceItemId": item_id,
+            "brandId": brand, "brandName": bname, "supplier": supplier, "supplierName": sname,
+            "grade": grade, "qty": qty, "price": price, "income": income, "cost": cost,
+            "payment": payment, "memo": "冒烟明细 " + item_id}, ensure_ascii=False)
+        db_exec("insert into yz_event_task(event_type, payload, event_key, max_retries) values (%s,%s,%s,2)",
+                ("SettlementItemReadyEvent", payload, "smoke-bal:ready:" + item_id + key_suffix))
+
+    def publish_withdrawn(item_id, reason, addon="quotation", stype="selection", key_suffix=""):
+        payload = json.dumps({"orgId": 1, "sourceAddon": addon, "sourceType": stype,
+                              "sourceItemId": item_id, "reason": reason}, ensure_ascii=False)
+        db_exec("insert into yz_event_task(event_type, payload, event_key, max_retries) values (%s,%s,%s,2)",
+                ("SettlementItemWithdrawnEvent", payload, "smoke-bal:wd:" + item_id + key_suffix))
+
+    def wait_dead(event_key, timeout=40):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            rows = db_exec("select status from yz_event_task where event_key = %s order by id desc limit 1",
+                           (event_key,))
+            if rows and rows[0][0] == 3:
+                return True
+            time.sleep(2)
+        return False
+
+    # 插件下发:三菜单
+    addons_bal = api_ok("admin 插件下发复查(balance)", "GET", "/api/addons", tok_admin)
+    bal_addon = next((a for a in (addons_bal or []) if a.get("id") == "balance"), None)
+    step("balance 三菜单动态下发", bool(bal_addon)
+         and sorted(m.get("path") for m in bal_addon.get("menus") or []) == [
+             "/balance/accounts", "/balance/cutpays", "/balance/settlements"],
+         bal_addon and bal_addon.get("menus"))
+
+    # 事件快照吸附:同键(品牌+归属人+等级)聚一桶,服务端加总四项
+    publish_ready("bsel1" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
+                  1000000, 200000, 800000)
+    publish_ready("bsel2" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
+                  600000, 100000, 500000)
+    time.sleep(3)
+    blist = api_ok("结算单列表(来源过滤)", "GET",
+                   "/api/balance/settlements?settlementType=quotation%3Aselection", tok_admin)
+    bucket_b = next((s for s in (blist or {}).get("rows", [])
+                     if s.get("supplier") == sup_b and s.get("brand_id") == brand2), None)
+    ok = bool(bucket_b) and bucket_b.get("status") == 0 and bucket_b.get("item_count") == 2 \
+        and bucket_b.get("income") == 1600000 and bucket_b.get("cost") == 300000 \
+        and bucket_b.get("payment") == 1300000 and bucket_b.get("profit") == 300000 \
+        and bucket_b.get("amount") == 1300000 and str(bucket_b.get("no", "")).startswith("JS")
+    step("同键聚桶+四项服务端加总+JS单号", ok, bucket_b)
+    if not bucket_b:
+        return finish()
+
+    # 幂等重放(同键同金额)与同键吸附不建新桶
+    publish_ready("bsel1" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
+                  1000000, 200000, 800000)
+    publish_ready("bsel3" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
+                  300000, 50000, 250000)
+    time.sleep(3)
+    b_b = api_ok("聚桶复查(重放幂等)", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("重放不重复落行+同键吸附同行数3", b_b.get("item_count") == 3
+         and b_b.get("payment") == 1550000, b_b)
+
+    # 异键(归属人不同)新桶
+    publish_ready("bsel4" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_c, "厂商丙",
+                  400000, 100000, 320000)
+    time.sleep(3)
+    blist = api_ok("列表复查(异键)", "GET",
+                   "/api/balance/settlements?settlementType=quotation%3Aselection", tok_admin)
+    bucket_c = next((s for s in (blist or {}).get("rows", []) if s.get("supplier") == sup_c), None)
+    step("异归属人独立建桶", bool(bucket_c) and bucket_c.get("item_count") == 1
+         and bucket_c.get("payment") == 320000, bucket_c)
+
+    # 上游修正(同键异金额=更新快照并重算)
+    publish_ready("bsel1" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
+                  1000000, 200000, 850000)
+    time.sleep(3)
+    b_b = api_ok("上游修正复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("修正快照+金额重算(应付160万)", b_b.get("payment") == 1600000
+         and b_b.get("profit") == 300000, b_b)
+
+    # 让减守卫(仅初始态;0<=x<=payment)
+    api_err("负让减拒绝 320017", "PUT", "/api/balance/settlements/%s/discount" % bucket_b["id"],
+            tok_admin, {"value": -1000}, 320017)
+    api_err("超应付让减拒绝 320017", "PUT", "/api/balance/settlements/%s/discount" % bucket_b["id"],
+            tok_admin, {"value": 1600001}, 320017)
+    api_ok("合法让减5万元", "PUT", "/api/balance/settlements/%s/discount" % bucket_b["id"],
+           tok_admin, {"value": 50000})
+    b_b = api_ok("让减后复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("应付总额=payment-discount(155万)", b_b.get("amount") == 1550000, b_b)
+
+    # 明细退结算:未锁定桶摘行重算
+    publish_withdrawn("bsel3" + stamp_bal, "上游作废")
+    time.sleep(3)
+    b_b = api_ok("退回后复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("退回摘行+重算(应付回落130万)", b_b.get("item_count") == 2
+         and b_b.get("payment") == 1350000 and b_b.get("amount") == 1300000, b_b)
+
+    # 未锁定结算拒绝
+    api_err("未锁定结算拒绝 320002", "POST", "/api/balance/settlements/%s/settle" % bucket_b["id"],
+            tok_admin, None, 320002)
+
+    # 锁审链:lock→audit→unaudit→audit→settle
+    api_ok("锁定", "POST", "/api/balance/settlements/%s/lock" % bucket_b["id"], tok_admin)
+    api_ok("送审", "POST", "/api/balance/settlements/%s/audit" % bucket_b["id"], tok_admin)
+    api_ok("驳回退锁定", "POST", "/api/balance/settlements/%s/unaudit" % bucket_b["id"], tok_admin)
+    api_ok("再送审", "POST", "/api/balance/settlements/%s/audit" % bucket_b["id"], tok_admin)
+    api_ok("结算(终态前置)", "POST", "/api/balance/settlements/%s/settle" % bucket_b["id"], tok_admin)
+    b_b = api_ok("结算后复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("状态3+余量=应付总额", b_b.get("status") == 3 and b_b.get("surplus") == 1300000, b_b)
+    api_err("已结算改让减拒绝 320002", "PUT",
+            "/api/balance/settlements/%s/discount" % bucket_b["id"], tok_admin, {"value": 1}, 320002)
+
+    # 锁定后吸附/退回 → 死信可见(消费失败转死信)
+    publish_ready("bsel1" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
+                  1000000, 200000, 900000, key_suffix="-locked")
+    publish_withdrawn("bsel1" + stamp_bal, "锁定后退回", key_suffix="-locked")
+    time.sleep(1)
+    ok = wait_dead("smoke-bal:ready:bsel1" + stamp_bal + "-locked")         and wait_dead("smoke-bal:wd:bsel1" + stamp_bal + "-locked")
+    step("锁定后修正/退回消费失败转死信", ok, None)
+    b_b = api_ok("死信不落行复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("锁定桶零写入(行数仍2)", b_b.get("item_count") == 2, b_b)
+
+    # 已结算事件消费确认
+    ev_settled = db_exec("select status from yz_event_task where event_key = %s",
+                         ("balance:settlement:%d:settled" % bucket_b["id"],))
+    step("SettlementSettledEvent 已消费", bool(ev_settled) and ev_settled[0][0] == 1, ev_settled)
+
+    # ---- 账户双腿 ----
+    acc_b = api_ok("建结算账户(厂商乙)", "POST", "/api/balance/accounts", tok_admin,
+                   {"belonger": sup_b, "belongerName": "厂商乙", "type": 0})
+    api_err("同归属人重复建拒 320024", "POST", "/api/balance/accounts", tok_admin,
+            {"belonger": sup_b, "belongerName": "厂商乙", "type": 0}, 320024)
+    acc_cash = api_ok("建出纳账户", "POST", "/api/balance/accounts", tok_admin,
+                      {"belonger": cashier, "belongerName": "出纳", "type": 1})
+    acc_z = api_ok("建他属结算账户", "POST", "/api/balance/accounts", tok_admin,
+                   {"belonger": sup_z, "belongerName": "厂商丁", "type": 0})
+    acc_off = api_ok("建停用结算账户", "POST", "/api/balance/accounts", tok_admin,
+                     {"belonger": sup_b2, "belongerName": "厂商丙2", "type": 0})
+    if not all([acc_b, acc_cash, acc_z, acc_off]):
+        return finish()
+    api_ok("停用账户", "POST", "/api/balance/accounts/%s/status" % acc_off, tok_admin, {"status": 1})
+
+    api_err("出纳账户当台账腿拒绝 320021", "POST",
+            "/api/balance/settlements/%s/enter" % bucket_b["id"], tok_admin,
+            {"accountId": acc_cash, "money": 100000}, 320021)
+    api_err("归属不一致拒绝 320022", "POST",
+            "/api/balance/settlements/%s/enter" % bucket_b["id"], tok_admin,
+            {"accountId": acc_z, "money": 100000}, 320022)
+    api_err("停用账户拒绝 320006", "POST",
+            "/api/balance/settlements/%s/enter" % bucket_b["id"], tok_admin,
+            {"accountId": acc_off, "money": 100000}, 320006)
+    api_err("零金额拒绝 320004", "POST",
+            "/api/balance/settlements/%s/enter" % bucket_b["id"], tok_admin,
+            {"accountId": acc_b, "money": 0}, 320004)
+    api_ok("台账入账10万", "POST", "/api/balance/settlements/%s/enter" % bucket_b["id"],
+           tok_admin, {"accountId": acc_b, "money": 100000})
+    api_err("超余量入账拒绝 320008", "POST",
+            "/api/balance/settlements/%s/enter" % bucket_b["id"], tok_admin,
+            {"accountId": acc_b, "money": 1200001}, 320008)
+    b_b = api_ok("入账后复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("余量原子消耗(120万)", b_b.get("surplus") == 1200000, b_b)
+
+    api_ok("出纳入金50万", "POST", "/api/balance/accounts/%s/cash-in" % acc_cash, tok_admin,
+           {"money": 500000, "memo": "备用金"})
+    api_err("出纳超余额付款拒绝 320007", "POST",
+            "/api/balance/settlements/%s/pay" % bucket_b["id"], tok_admin,
+            {"accountId": acc_cash, "money": 500001}, 320007)
+    api_ok("出纳付款20万", "POST", "/api/balance/settlements/%s/pay" % bucket_b["id"],
+           tok_admin, {"accountId": acc_cash, "money": 200000})
+    api_ok("出纳再付9万(归属账户透支=预付)", "POST",
+           "/api/balance/settlements/%s/pay" % bucket_b["id"], tok_admin,
+           {"accountId": acc_cash, "money": 90000})
+    b_b = api_ok("付款后复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("实付累计29万(现金腿不消耗余量)", b_b.get("paid") == 290000
+         and b_b.get("surplus") == 1200000, b_b)
+
+    accts = api_ok("账户列表复查", "GET", "/api/balance/accounts", tok_admin)
+    acc_b_row = next((a for a in (accts or {}).get("rows", []) if a.get("id") == acc_b), None)
+    cash_row = next((a for a in (accts or {}).get("rows", []) if a.get("id") == acc_cash), None)
+    ok = bool(acc_b_row) and acc_b_row.get("refer_money") == 100000 \
+        and acc_b_row.get("real_money") == 290000 and acc_b_row.get("surplus") == -190000
+    ok = ok and bool(cash_row) and cash_row.get("refer_money") == 500000 \
+        and cash_row.get("real_money") == 290000 and cash_row.get("surplus") == 210000
+    step("双腿台账+懒开户同步+透支合法", ok, (acc_b_row, cash_row))
+
+    # 完结唯一定义:余量清零且已付款,单向无逆向
+    api_err("余量未清零完结拒绝 320016", "POST",
+            "/api/balance/settlements/%s/finish" % bucket_b["id"], tok_admin, None, 320016)
+    api_ok("入账清零余量", "POST", "/api/balance/settlements/%s/enter" % bucket_b["id"],
+           tok_admin, {"accountId": acc_b, "money": 1200000})
+    api_err("未打付款标完结拒绝 320016", "POST",
+            "/api/balance/settlements/%s/finish" % bucket_b["id"], tok_admin, None, 320016)
+    api_ok("打付款标", "POST", "/api/balance/settlements/pay-mark", tok_admin,
+           {"ids": [bucket_b["id"]]})
+    api_err("重复打标拒绝 320015", "POST", "/api/balance/settlements/pay-mark", tok_admin,
+            {"ids": [bucket_b["id"]]}, 320015)
+    api_err("批量含已付全或无 320015", "POST", "/api/balance/settlements/pay-mark", tok_admin,
+            {"ids": [bucket_b["id"], bucket_c["id"]]}, 320015)
+    api_ok("完结", "POST", "/api/balance/settlements/%s/finish" % bucket_b["id"], tok_admin)
+    b_b = api_ok("完结复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    step("状态4终态", b_b.get("status") == 4, b_b)
+    api_err("终态入账拒绝 320002", "POST", "/api/balance/settlements/%s/enter" % bucket_b["id"],
+            tok_admin, {"accountId": acc_b, "money": 1}, 320002)
+    api_err("终态付款拒绝 320002", "POST", "/api/balance/settlements/%s/pay" % bucket_b["id"],
+            tok_admin, {"accountId": acc_cash, "money": 1}, 320002)
+    api_err("终态锁定拒绝 320002", "POST", "/api/balance/settlements/%s/lock" % bucket_b["id"],
+            tok_admin, None, 320002)
+
+    # 账户流水与不变式(surplus = refer - real)
+    det_b = api_ok("归属账户流水", "GET", "/api/balance/accounts/%s/details" % acc_b, tok_admin)
+    b_actions = [d.get("action") for d in (det_b or {}).get("rows", [])]
+    step("归属账户流水含台账入账+懒开户同步", "settleEnter" in b_actions
+         and "lazySync" in b_actions and len(b_actions) >= 3, b_actions)
+    inv_rows = db_exec("""
+        select count(*) from balance_account
+        where surplus <> refer_money - real_money and org_id = 1
+        """)
+    step("账户净头寸不变式(surplus=refer-real)", inv_rows and inv_rows[0][0] == 0, inv_rows)
+
+    # ---- 扣款池(桶C) ----
+    api_ok("桶C锁定+结算", "POST", "/api/balance/settlements/%s/lock" % bucket_c["id"], tok_admin)
+    api_ok("桶C结算", "POST", "/api/balance/settlements/%s/settle" % bucket_c["id"], tok_admin)
+    pool1 = api_ok("建扣款池(合作费30万)", "POST", "/api/balance/cutpay-pools", tok_admin,
+                   {"name": "烟测合作费池" + stamp_bal, "type": 1, "supplier": sup_c, "total": 300000})
+    api_err("零额度扣款单拒绝 320004", "POST", "/api/balance/cutpays", tok_admin,
+            {"poolId": pool1, "money": 0, "type": 0}, 320004)
+    cp1 = api_ok("建扣款单10万(待绑定)", "POST", "/api/balance/cutpays", tok_admin,
+                 {"poolId": pool1, "money": 100000, "type": 0, "memo": "年度合作费"})
+    if not all([pool1, cp1]):
+        return finish()
+    pools_now = api_ok("建单不动池", "GET", "/api/balance/cutpay-pools", tok_admin)
+    p1 = next((p for p in (pools_now or {}).get("rows", []) if p.get("id") == pool1), None)
+    step("池余量建单不动(30万)", p1 and p1.get("surplus") == 300000, p1)
+
+    cp2 = api_ok("建返款单(仅字典预留)", "POST", "/api/balance/cutpays", tok_admin,
+                 {"poolId": pool1, "money": 1000, "type": 1})
+    api_err("返款单绑定拒绝 320021", "POST", "/api/balance/cutpays/%s/bind" % cp2, tok_admin,
+            {"settlementId": bucket_c["id"]}, 320021)
+
+    api_ok("绑定冲抵(池20万+桶C余量22万)", "POST", "/api/balance/cutpays/%s/bind" % cp1,
+           tok_admin, {"settlementId": bucket_c["id"]})
+    api_err("重复绑定拒绝 320013", "POST", "/api/balance/cutpays/%s/bind" % cp1, tok_admin,
+            {"settlementId": bucket_c["id"]}, 320013)
+    c_now = api_ok("桶C复查", "GET", "/api/balance/settlements/%s" % bucket_c["id"], tok_admin)
+    step("结算单扣款冲抵与余量", c_now.get("cutpay") == 100000 and c_now.get("surplus") == 220000, c_now)
+
+    api_err("子流水超额拒绝 320020", "POST", "/api/balance/cutpays/%s/deduct" % cp1, tok_admin,
+            {"money": 100001}, 320020)
+    api_ok("拆子流水4万(仅留痕)", "POST", "/api/balance/cutpays/%s/deduct" % cp1, tok_admin,
+           {"money": 40000, "memo": "首期"})
+    cp_det = api_ok("扣款单详情", "GET", "/api/balance/cutpays/%s" % cp1, tok_admin)
+    step("子流水在册+累计4万", len(cp_det.get("deducts") or []) == 1
+         and cp_det.get("deduct_total") == 40000, cp_det)
+
+    api_ok("解绑回补(池30万+桶C32万)", "POST", "/api/balance/cutpays/%s/unbind" % cp1,
+           tok_admin, {"reason": "额度调整"})
+    api_err("未绑定再解绑拒绝 320012", "POST", "/api/balance/cutpays/%s/unbind" % cp1, tok_admin,
+            {}, 320012)
+    c_now = api_ok("解绑后复查", "GET", "/api/balance/settlements/%s" % bucket_c["id"], tok_admin)
+    step("解绑精确逆操作(冲抵清零余量回满)", c_now.get("cutpay") == 0
+         and c_now.get("surplus") == 320000, c_now)
+    api_ok("再绑定(对称闭环)", "POST", "/api/balance/cutpays/%s/bind" % cp1, tok_admin,
+           {"settlementId": bucket_c["id"]})
+    c_now = api_ok("再绑后复查", "GET", "/api/balance/settlements/%s" % bucket_c["id"], tok_admin)
+    step("再绑冲抵复原", c_now.get("cutpay") == 100000 and c_now.get("surplus") == 220000, c_now)
+
+    api_ok("停用池", "POST", "/api/balance/cutpay-pools/%s/status" % pool1, tok_admin, {"status": 1})
+    api_err("停用池建单拒绝 320002", "POST", "/api/balance/cutpays", tok_admin,
+            {"poolId": pool1, "money": 1000, "type": 0}, 320002)
+    api_ok("启用池", "POST", "/api/balance/cutpay-pools/%s/status" % pool1, tok_admin, {"status": 0})
+
+    # ---- sales 真链:post 发布 Ready → 吸附 → 解绑退回 → 删空桶 ----
+    brand3 = api_ok("建品牌3(结算真链)", "POST", "/api/basedata/brands", tok_admin,
+                    {"name": "烟测品牌C" + stamp_bal, "pinyin": "ycppc" + stamp_bal[-6:]})
+    goods_sale3 = api_ok("建销售商品3(品牌3,50元)", "POST", "/api/basedata/goods", tok_admin,
+                         {"name": "烟测Sales洁具" + stamp_bal, "categoryId": cat_child,
+                          "brandId": brand3, "unit": "件", "selling": 50000})
+    sale7 = api_ok("开单(结算真链)", "POST", "/api/sales/orders", tok_admin,
+                   {"orderId": order_s, "items": [{"goodsId": goods_sale3, "num": 2000}]})
+    if not all([brand3, goods_sale3, sale7]):
+        return finish()
+    api_ok("sale7生成款项单", "POST", "/api/sales/orders/%s/bill" % sale7, tok_admin)
+    b7 = api_ok("sale7款项反查", "GET",
+                "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale7, tok_admin)
+    bill7 = [b for b in (b7 or {}).get("rows", []) if b.get("direction") == 0][0]
+    api_ok("sale7收款", "POST", "/api/payment/bills/%s/collect" % bill7["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 100000}]})
+    time.sleep(2)
+    api_ok("sale7财务确认款项", "POST", "/api/payment/bills/%s/confirm" % bill7["id"], tok_admin)
+    time.sleep(2)
+    api_ok("sale7发确认码", "POST", "/api/sales/orders/%s/verify-code" % sale7, tok_admin,
+           {"phone": "13900000007"})
+    notif_b = api_ok("通知取确认码(sale7)", "GET", "/api/notifications?page=1&size=3", tok_admin)
+    code7 = ""
+    for n in (notif_b or []):
+        m = _re.search(r"(\d{6})\s*$", str(n.get("content", "")))
+        if m and "验证码" in str(n.get("title", "")):
+            code7 = m.group(1)
+            break
+    api_ok("sale7客户确认", "POST", "/api/sales/orders/%s/confirm" % sale7, tok_admin,
+           {"phone": "13900000007", "code": code7})
+    time.sleep(2)
+    s7_det = api_ok("sale7预结复查", "GET", "/api/sales/orders/%s" % sale7, tok_admin)
+    st7 = next((s for s in (s7_det.get("settlements") or []) if s.get("brand_id") == brand3), None)
+    step("sale7预结行在册", bool(st7), st7)
+    if not st7:
+        return finish()
+    api_ok("sale7改厂结值+厂结", "PUT", "/api/sales/settlements/%s/vbalance" % st7["id"],
+           tok_admin, {"value": 100000})
+    api_ok("sale7厂结", "POST", "/api/sales/settlements/%s/vpost" % st7["id"], tok_admin)
+    api_ok("sale7改结算值(95000)", "PUT", "/api/sales/settlements/%s/pbalance" % st7["id"],
+           tok_admin, {"value": 95000})
+    api_ok("sale7结算(post)", "POST", "/api/sales/settlements/%s/post" % st7["id"], tok_admin)
+    time.sleep(3)
+    slist = api_ok("结算列表(sales 来源)", "GET",
+                   "/api/balance/settlements?settlementType=sales%3Asettlement", tok_admin)
+    sbucket = next((s for s in (slist or {}).get("rows", []) if s.get("brand_id") == brand3), None)
+    ok = bool(sbucket) and sbucket.get("status") == 0 and sbucket.get("item_count") == 1 \
+        and sbucket.get("payment") == 95000 and str(sbucket.get("no", "")).startswith("JS")
+    step("sales post 事件吸附(快照=结算值)", ok, sbucket)
+
+    api_ok("解绑sales明细(退回上游)", "POST", "/api/balance/settlements/%s/unbind-item" % sbucket["id"],
+           tok_admin, {"sourceAddon": "sales", "sourceType": "settlement",
+                       "sourceItemId": str(st7["id"]), "reason": "冒烟解绑"})
+    sbucket2 = api_ok("解绑后复查", "GET", "/api/balance/settlements/%s" % sbucket["id"], tok_admin)
+    step("解绑摘行", sbucket2.get("item_count") == 0, sbucket2)
+    ev_rel = db_exec("select status from yz_event_task where event_key = %s",
+                     ("settle-item:sales:settlement:%d:released" % st7["id"],))
+    step("退回事件发布(无消费者归档)", bool(ev_rel) and ev_rel[0][0] == 1, ev_rel)
+    api_ok("删除空桶", "DELETE", "/api/balance/settlements/%s" % sbucket["id"], tok_admin)
+    slist = api_ok("删除复查", "GET",
+                   "/api/balance/settlements?settlementType=sales%3Asettlement&no=" + sbucket["no"],
+                   tok_admin)
+    step("空桶已删", (slist or {}).get("total", 0) == 0, slist)
+
+    # 轨迹全覆盖(结算动作必留痕,修老 record 结算不写)
+    b_b = api_ok("轨迹复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+    b_actions = [t.get("action") for t in (b_b.get("tracks") or [])]
+    step("轨迹全覆盖(ready/lock/audit/settle/enter/pay/payMark/finish)", "ready" in b_actions
+         and "lock" in b_actions and "settle" in b_actions and "enter" in b_actions
+         and "pay" in b_actions and "payMark" in b_actions and "finish" in b_actions, b_actions)
+
     # 对账:全域事件零滞留 + 额度流水 + 单号计数器
     conn = db_conn()
     try:
@@ -2149,7 +2513,8 @@ def main():
                        or event_type like concat('Construction', '%%')
                        or event_type like concat('Decoration', '%%')
                        or event_type like concat('Payment', '%%')
-                       or event_type like concat('Sales', '%%'))
+                       or event_type like concat('Sales', '%%')
+                       or event_type like concat('Settlement', '%%'))
                   and status not in (1, 3)
                   and payload not like %s
             """, ("%" + str(item2) + "%",))

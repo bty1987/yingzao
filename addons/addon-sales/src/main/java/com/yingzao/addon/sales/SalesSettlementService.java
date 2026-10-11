@@ -9,6 +9,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.yingzao.addons.api.event.SettlementItemReadyEvent;
+import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.web.BizException;
 
 /**
@@ -16,7 +18,9 @@ import com.yingzao.core.web.BizException;
  * (全部行1→主单2,全部行2→主单3)。双值人工修正保留:vbalance 厂结前可改、pbalance 厂结态可改,
  * 服务端强校验非零且与金额同向(修老"厂结值未填拦截纯前端"缺陷,API 直调带 0 过不去);
  * 老三套让利公式量纲不自洽不迁:V1 balance=total(让利源 V2),difference=total-balance 恒 0;
- * 驳回 = 原子删除该单全部预继行+主单回 0(修老只删当前行兄弟品牌残留可复活)。
+ * 驳回 = 原子删除该单全部预继行+主单回 0(修老只删当前行兄弟品牌残留可复活);
+ * 行结算(post)完成即发布 SettlementItemReadyEvent(金额终值快照交 addon-balance 应付闭环,
+ * 替代老 SALES_AUTO_BALANCE 跨模块服务直调;厂结值未定故 vpost 不发,退货行负值照发由 balance 加总)。
  */
 @Service
 public class SalesSettlementService {
@@ -26,6 +30,9 @@ public class SalesSettlementService {
     public static final int CODE_BAD_STATE = 300015;
     public static final int CODE_REJECT_GUARD = 300031;
 
+    /** 明细可结算事件 source 协议键(sourceAddon=sales,sourceType=settlement,sourceItemId=结算行id)。 */
+    public static final String SOURCE_TYPE_SETTLEMENT = "settlement";
+
     // 行类型
     public static final int TYPE_PURCHASE = 0;
     public static final int TYPE_REFUND_PRE = 1;
@@ -34,10 +41,12 @@ public class SalesSettlementService {
 
     private final JdbcTemplate jdbc;
     private final SalesOrderService orders;
+    private final YzEventBus eventBus;
 
-    public SalesSettlementService(JdbcTemplate jdbc, SalesOrderService orders) {
+    public SalesSettlementService(JdbcTemplate jdbc, SalesOrderService orders, YzEventBus eventBus) {
         this.jdbc = jdbc;
         this.orders = orders;
+        this.eventBus = eventBus;
     }
 
     public Map<String, Object> page(long orgId, String saleCode, Integer status, Integer type,
@@ -70,7 +79,7 @@ public class SalesSettlementService {
                        s.pbalance, s.difference, s.status, s.vposted_at, s.posted_at, s.created_at
                 from sales_settlement s join sales_order o on o.id = s.sale_id"""
                 + w + " order by s.id desc limit ? offset ?",
-                SalesOrderService.appendArgs(args, safeSize, (safePage - 1) * safeSize));
+                SalesOrderService.appendArgs(args, safeSize, (safePage - 1) * safeSize).toArray());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", count == null ? 0 : count);
         result.put("rows", rows);
@@ -114,7 +123,7 @@ public class SalesSettlementService {
         trackSale(row, "pbalance", "调整结算值 " + pbalance, operatorId);
     }
 
-    /** 结算:行 1→2;全部行结算后主单轴 3(终态)。 */
+    /** 结算:行 1→2;全部行结算后主单轴 3(终态);发布明细可结算事件(快照=行终值)。 */
     @Transactional
     public void post(long orgId, long id, long operatorId) {
         Map<String, Object> row = load(orgId, id);
@@ -129,6 +138,20 @@ public class SalesSettlementService {
         }
         recomputeBalanceStatus(orgId, ((Number) row.get("sale_id")).longValue());
         trackSale(row, "post", "结算", operatorId);
+        publishReady(orgId, row, operatorId);
+    }
+
+    /** 结算行金额终值快照交 addon-balance(事件只带 id 与不可变快照;supplier 随 addon-supplier 排期传空)。 */
+    private void publishReady(long orgId, Map<String, Object> row, long operatorId) {
+        long rowId = ((Number) row.get("id")).longValue();
+        long total = ((Number) row.get("total")).longValue();
+        long pbalance = ((Number) row.get("pbalance")).longValue();
+        eventBus.publish(new SettlementItemReadyEvent(orgId, SalesOrderService.BIZ_ADDON,
+                SOURCE_TYPE_SETTLEMENT, String.valueOf(rowId),
+                ((Number) row.get("brand_id")).longValue(),
+                String.valueOf(row.get("brand_name")), "", "", "A",
+                0L, 0L, total, 0L, pbalance,
+                "销售结算行 " + rowId + " 结算"), "settle-item:sales:settlement:" + rowId + ":ready");
     }
 
     /** 驳回(整单原子):该单全部预继行(0 态)物理删除+主单结算轴回 0;任一行已厂结则拒绝。 */

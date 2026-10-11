@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.yingzao</groupId>
+        <artifactId>yingzao</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>addon-balance</artifactId>
+    <name>addon-balance</name>
+    <description>结算 addon:结算汇聚域(厂商应付闭环)——明细可结算事件携快照落行(零动态聚合/零跨域 JOIN)+统一结算单四态机+账户双腿+扣款池三守卫+完结唯一定义(错误码段 320000)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-addons-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

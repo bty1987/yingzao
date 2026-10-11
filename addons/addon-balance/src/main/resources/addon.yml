@@ -1,0 +1,53 @@
+addon:
+  id: balance
+  name: 结算
+  version: 0.1.0
+  error-code-segment: 320000
+  menus:
+    - path: /balance/settlements
+      title: 结算工作台
+      icon: money
+    - path: /balance/cutpays
+      title: 扣款池
+      icon: wallet
+    - path: /balance/accounts
+      title: 结算账户
+      icon: credit-card
+  dicts:
+    settlementStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 锁定 }
+      - { key: '2', label: 待审 }
+      - { key: '3', label: 已结算 }
+      - { key: '4', label: 已完结 }
+    settlementType:
+      - { key: 'sales:settlement', label: 销售结算 }
+      - { key: 'quotation:selection', label: 选材结算 }
+      - { key: 'sales:oales', label: 外销结算 }
+    accountType:
+      - { key: '0', label: 结算账户 }
+      - { key: '1', label: 出纳账户 }
+    accountStatus:
+      - { key: '0', label: 有效 }
+      - { key: '1', label: 停用 }
+    cutpayType:
+      - { key: '0', label: 扣款 }
+      - { key: '1', label: 返款 }
+    cutpayStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已绑定 }
+    poolType:
+      - { key: '0', label: 通用 }
+      - { key: '1', label: 合作费 }
+      - { key: '2', label: 活动费 }
+      - { key: '3', label: 管理费 }
+      - { key: '4', label: 保证金 }
+      - { key: '5', label: 年返 }
+    poolStatus:
+      - { key: '0', label: 有效 }
+      - { key: '1', label: 停用 }
+    detailAction:
+      - { key: 'cashIn', label: 出纳入金 }
+      - { key: 'settleEnter', label: 结算入账 }
+      - { key: 'payCash', label: 出纳付款 }
+      - { key: 'lazySync', label: 归属账户同步 }

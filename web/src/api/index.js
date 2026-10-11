@@ -322,3 +322,42 @@ export const pageSalesDeliveries = (params) => http.get('/api/sales/deliveries',
 export const fetchSalesDelivery = (id) => http.get(`/api/sales/deliveries/${id}`)
 export const advanceSalesDeliveryItem = (id, data) =>
   http.post(`/api/sales/delivery-items/${id}/advance`, data)
+
+// 结算(addon-balance):结算工作台/资金双腿/账户/扣款池
+export const pageBalanceSettlements = (params) => http.get('/api/balance/settlements', { params })
+export const fetchBalanceSettlement = (id) => http.get(`/api/balance/settlements/${id}`)
+export const lockBalanceSettlement = (id) => http.post(`/api/balance/settlements/${id}/lock`)
+export const unlockBalanceSettlement = (id) => http.post(`/api/balance/settlements/${id}/unlock`)
+export const auditBalanceSettlement = (id) => http.post(`/api/balance/settlements/${id}/audit`)
+export const unauditBalanceSettlement = (id) => http.post(`/api/balance/settlements/${id}/unaudit`)
+export const settleBalanceSettlement = (id) => http.post(`/api/balance/settlements/${id}/settle`)
+export const updateBalanceDiscount = (id, data) =>
+  http.put(`/api/balance/settlements/${id}/discount`, data)
+export const unbindBalanceItem = (id, data) =>
+  http.post(`/api/balance/settlements/${id}/unbind-item`, data)
+export const deleteBalanceSettlement = (id) => http.delete(`/api/balance/settlements/${id}`)
+export const enterBalanceSettlement = (id, data) =>
+  http.post(`/api/balance/settlements/${id}/enter`, data)
+export const payBalanceSettlement = (id, data) =>
+  http.post(`/api/balance/settlements/${id}/pay`, data)
+export const payMarkBalanceSettlements = (ids) =>
+  http.post('/api/balance/settlements/pay-mark', { ids })
+export const finishBalanceSettlement = (id) => http.post(`/api/balance/settlements/${id}/finish`)
+export const pageBalanceAccounts = (params) => http.get('/api/balance/accounts', { params })
+export const createBalanceAccount = (data) => http.post('/api/balance/accounts', data)
+export const updateBalanceAccountStatus = (id, data) =>
+  http.post(`/api/balance/accounts/${id}/status`, data)
+export const cashInBalanceAccount = (id, data) =>
+  http.post(`/api/balance/accounts/${id}/cash-in`, data)
+export const listBalanceAccountDetails = (id) =>
+  http.get(`/api/balance/accounts/${id}/details`)
+export const pageCutpayPools = (params) => http.get('/api/balance/cutpay-pools', { params })
+export const createCutpayPool = (data) => http.post('/api/balance/cutpay-pools', data)
+export const updateCutpayPoolStatus = (id, data) =>
+  http.post(`/api/balance/cutpay-pools/${id}/status`, data)
+export const pageCutpays = (params) => http.get('/api/balance/cutpays', { params })
+export const fetchCutpay = (id) => http.get(`/api/balance/cutpays/${id}`)
+export const createCutpay = (data) => http.post('/api/balance/cutpays', data)
+export const bindCutpay = (id, data) => http.post(`/api/balance/cutpays/${id}/bind`, data)
+export const unbindCutpay = (id, data) => http.post(`/api/balance/cutpays/${id}/unbind`, data)
+export const deductCutpay = (id, data) => http.post(`/api/balance/cutpays/${id}/deduct`, data)
