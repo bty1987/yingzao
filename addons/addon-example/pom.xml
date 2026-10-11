@@ -17,6 +17,11 @@
     <dependencies>
         <dependency>
             <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-addons-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.yingzao</groupId>
             <artifactId>yingzao-core</artifactId>
         </dependency>
     </dependencies>

@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +18,19 @@ BASE = os.environ.get("YINGZAO_BASE", "http://127.0.0.1:8080").rstrip("/")
 PASSWORD = "yingzao123"
 
 passed, failed = [], []
+
+
+def db_conn():
+    """dev 库直连(仅死信链注入与余额对账用;接口断言全走 urllib)。"""
+    import pymysql
+    return pymysql.connect(
+        host=os.environ.get("YINGZAO_DB_HOST", "192.168.5.21"),
+        port=int(os.environ.get("YINGZAO_DB_PORT", "3306")),
+        database=os.environ.get("YINGZAO_DB_NAME", "yingzao"),
+        user=os.environ.get("YINGZAO_DB_USER", "root"),
+        password=os.environ.get("YINGZAO_DB_PASSWORD", "Neusoft!"),
+        charset="utf8mb4",
+    )
 
 
 def step(name, ok, detail=""):
@@ -488,6 +502,228 @@ def main():
                    "/api/basedata/packages?keyword=%s&page=1&size=10" % stamp3, tok_admin)
     levels = sorted(str(r.get("level")) for r in (mpkgs or {}).get("rows", []))
     step("主数据行与引用行同时可见", bool(mpkgs) and mpkgs.get("total", 0) >= 2 and levels == ["0", "1"], mpkgs)
+
+    print("== 款项(addon-payment V1:三件套)==")
+    stamp4 = time.strftime("%Y%m%d%H%M%S")
+    dep_code, con_code = "smokedep" + stamp4[-6:], "smokecon" + stamp4[-6:]
+    type_dep = api_ok("建款项类型(顺序1)", "POST", "/api/payment/bill-types", tok_admin,
+                      {"code": dep_code, "name": "烟测定金", "sort": 1})
+    if type_dep is None:
+        return finish()
+    api_err("同编码类型拒绝 270005", "POST", "/api/payment/bill-types", tok_admin,
+            {"code": dep_code, "name": "重复编码", "sort": 1}, 270005)
+    type_con = api_ok("建款项类型(顺序2,比例模板)", "POST", "/api/payment/bill-types", tok_admin,
+                      {"code": con_code, "name": "烟测合同款", "sort": 2,
+                       "scaleTemplate": json.dumps([{"sort": 1, "scale": 600000},
+                                                    {"sort": 2, "scale": 400000}], ensure_ascii=False)})
+    api_err("非法模板 JSON 拒绝 270001", "POST", "/api/payment/bill-types", tok_admin,
+            {"code": "smokebad" + stamp4[-6:], "name": "坏模板", "scaleTemplate": "{not-json"}, 270001)
+    types = api_ok("类型字典回显", "GET", "/api/payment/bill-types?includeDisabled=true", tok_admin)
+    codes = [t.get("code") for t in (types or [])]
+    step("两类型在册", dep_code in codes and con_code in codes, types)
+
+    biz3 = {"bizAddon": "example", "bizType": "smoke", "bizId": "SO" + stamp4}
+    bill_dep = api_ok("登记定金款项单(1000元)", "POST", "/api/payment/bills", tok_admin,
+                      dict(biz3, typeCode=dep_code, amount=1000000))
+    if bill_dep is None:
+        return finish()
+    api_err("金额为零拒绝 270001", "POST", "/api/payment/bills", tok_admin,
+            dict(biz3, bizId="ZERO" + stamp4, typeCode=dep_code, amount=0), 270001)
+    api_err("重复建单拒绝 270006", "POST", "/api/payment/bills", tok_admin,
+            dict(biz3, typeCode=dep_code, amount=1000000), 270006)
+    api_err("类型不存在拒绝 270004", "POST", "/api/payment/bills", tok_admin,
+            dict(biz3, bizId="NT" + stamp4, typeCode="nosuchtype", amount=1000), 270004)
+    bill_con = api_ok("登记合同款项单(2000元,顺序2)", "POST", "/api/payment/bills", tok_admin,
+                      dict(biz3, typeCode=con_code, amount=2000000))
+    if bill_con is None:
+        return finish()
+
+    api_err("顺序门控:前置未收拒绝 270010", "POST", "/api/payment/bills/%s/collect" % bill_con, tok_admin,
+            {"channels": [{"channelCode": "cash", "amount": 2000000}]}, 270010)
+    api_err("渠道合计不符拒绝 270007", "POST", "/api/payment/bills/%s/collect" % bill_dep, tok_admin,
+            {"channels": [{"channelCode": "cash", "amount": 999999}]}, 270007)
+    api_err("渠道金额为零拒绝 270008", "POST", "/api/payment/bills/%s/collect" % bill_dep, tok_admin,
+            {"channels": [{"channelCode": "cash", "amount": 0}]}, 270008)
+    api_err("非法渠道拒绝 270009", "POST", "/api/payment/bills/%s/collect" % bill_dep, tok_admin,
+            {"channels": [{"channelCode": "wechat", "amount": 1000000}]}, 270009)
+
+    rcpt = api_ok("收款成功(现金600+银行400)", "POST", "/api/payment/bills/%s/collect" % bill_dep, tok_admin,
+                  {"channels": [{"channelCode": "cash", "amount": 600000},
+                                {"channelCode": "bank", "amount": 400000}]})
+    step("收据号 R 前缀生成", bool(rcpt) and str(rcpt.get("receiptNo", "")).startswith("R"), rcpt)
+    api_err("重复收款拒绝 270003", "POST", "/api/payment/bills/%s/collect" % bill_dep, tok_admin,
+            {"channels": [{"channelCode": "cash", "amount": 1000000}]}, 270003)
+    dep_detail = api_ok("定金单详情", "GET", "/api/payment/bills/%s" % bill_dep, tok_admin)
+    rc = ((dep_detail or {}).get("receipts") or [{}])
+    ok = dep_detail and dep_detail.get("status") == 1 and len(rc[0].get("channels") or []) == 2 \
+        and rc[0].get("collector_name")
+    step("单据已收+收据双人留痕第一半+双渠道行", ok, dep_detail)
+
+    api_ok("财务确认(1→2 终态)", "POST", "/api/payment/bills/%s/confirm" % bill_dep, tok_admin)
+    api_err("重复确认拒绝 270003", "POST", "/api/payment/bills/%s/confirm" % bill_dep, tok_admin, None, 270003)
+    dep_detail2 = api_ok("确认后详情", "GET", "/api/payment/bills/%s" % bill_dep, tok_admin)
+    rc2 = ((dep_detail2 or {}).get("receipts") or [{}])
+    step("留痕第二半(确认人回填)", dep_detail2 and dep_detail2.get("status") == 2
+         and bool(rc2[0].get("confirmer_name")), dep_detail2)
+
+    api_ok("合同款顺序解锁后收款", "POST", "/api/payment/bills/%s/collect" % bill_con, tok_admin,
+           {"channels": [{"channelCode": "scan", "amount": 2000000}]})
+    api_ok("合同款确认", "POST", "/api/payment/bills/%s/confirm" % bill_con, tok_admin)
+
+    print("== 事件总线三件套(消费确认+重试+死信)==")
+    api_err("非管理员查事件拒绝 123001", "GET", "/api/events", tok_b, None, 123001)
+    ev_col = api_ok("收款事件已消费确认", "GET",
+                    "/api/events?eventType=PaymentCollectedEvent&status=1&page=1&size=5", tok_admin)
+    step("PaymentCollected 消费行存在", bool(ev_col) and ev_col.get("total", 0) >= 1, ev_col)
+    ev_con = api_ok("确认事件已消费确认", "GET",
+                    "/api/events?eventType=PaymentConfirmedEvent&status=1&page=1&size=5", tok_admin)
+    step("PaymentConfirmed 消费行存在", bool(ev_con) and ev_con.get("total", 0) >= 1, ev_con)
+    notifs_admin = api_ok("操作人通知列表", "GET", "/api/notifications?page=1&size=50", tok_admin)
+    hit_demo = [n for n in (notifs_admin or [])
+                if n.get("source_type") == "payment.collected.consumed"]
+    step("示范消费器留痕(收款事件→通知)", len(hit_demo) >= 1, len(hit_demo or []))
+
+    # 死信链:直插一条坏载荷事件(服务以快退避+快轮询环境变量启动),等调度器重试至死信
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            dead_key = "smoke-dead-" + stamp4
+            cur.execute(
+                "insert into yz_event_task(event_type, payload, event_key, max_retries)"
+                " values ('PaymentCollectedEvent', 'not-json', %s, 2)", (dead_key,))
+        conn.commit()
+    finally:
+        conn.close()
+    time.sleep(12)
+    ev_dead = api_ok("死信列表", "GET", "/api/events?status=3&page=1&size=50", tok_admin)
+    dead_rows = [r for r in ((ev_dead or {}).get("rows") or []) if r.get("event_key") == dead_key]
+    step("坏载荷经重试转死信(重试计数+错误可见)",
+         len(dead_rows) == 1 and dead_rows[0].get("retry_count", 0) >= 2 and bool(dead_rows[0].get("last_error")),
+         dead_rows)
+    if dead_rows:
+        api_ok("死信 requeue 回 pending", "POST", "/api/events/%s/requeue" % dead_rows[0]["id"], tok_admin)
+    ev_re = api_ok("requeue 后再消费确认", "GET",
+                   "/api/events?eventType=PaymentCollectedEvent&status=1&page=1&size=5", tok_admin)
+    step("消费确认行仍在(重投递幂等)", bool(ev_re) and ev_re.get("total", 0) >= 1, ev_re)
+
+    print("== 退款统一走内核审批 ==")
+    refund1 = api_ok("定金单发起退款(审批人 example_c)", "POST", "/api/payment/bills/%s/refund" % bill_dep,
+                     tok_admin, {"assigneeId": uid_c, "reason": "冒烟退款"})
+    if refund1 is None:
+        return finish()
+    api_err("重复退款拒绝 270012", "POST", "/api/payment/bills/%s/refund" % bill_dep, tok_admin,
+            {"assigneeId": uid_c, "reason": "再退"}, 270012)
+    ref_detail = api_ok("退款单回读", "GET", "/api/payment/bills/%s" % refund1, tok_admin)
+    approval_r1 = (ref_detail or {}).get("refund_approval_id")
+    ok = ref_detail and ref_detail.get("direction") == 1 and ref_detail.get("status") == 0 \
+        and ref_detail.get("origin_status_snapshot") == 2
+    step("退款单审批中+原款项状态快照", ok, ref_detail)
+    if not approval_r1:
+        return finish()
+    todo_r = api_ok("审批人待办含退款单", "GET", "/api/approvals?role=todo", tok_c)
+    step("待办可见", any(str(a.get("id")) == str(approval_r1) for a in (todo_r or [])), todo_r)
+    api_ok("退款审批通过", "POST", "/api/approvals/%s/approve" % approval_r1, tok_c, {"comment": "冒烟同意退款"})
+    time.sleep(2)
+    dep_after = api_ok("退款执行后原单回读", "GET", "/api/payment/bills/%s" % bill_dep, tok_admin)
+    rf1 = [r for r in ((dep_after or {}).get("refunds") or []) if str(r.get("id")) == str(refund1)]
+    step("原款项置已退款(3)+退款单已执行(3,共享状态词表)",
+         dep_after and dep_after.get("status") == 3 and rf1 and rf1[0].get("status") == 3, dep_after)
+    ev_ref = api_ok("退款事件已消费确认", "GET",
+                    "/api/events?eventType=PaymentRefundedEvent&status=1&page=1&size=5", tok_admin)
+    step("PaymentRefunded 消费行存在", bool(ev_ref) and ev_ref.get("total", 0) >= 1, ev_ref)
+
+    refund2 = api_ok("合同单发起退款(走驳回路径)", "POST", "/api/payment/bills/%s/refund" % bill_con,
+                     tok_admin, {"assigneeId": uid_c, "reason": "冒烟驳回退款"})
+    ref2_detail = api_ok("退款单二回读", "GET", "/api/payment/bills/%s" % refund2, tok_admin)
+    approval_r2 = (ref2_detail or {}).get("refund_approval_id")
+    if not approval_r2:
+        step("驳回路径前置(退款单二创建)", False, ref2_detail)
+        return finish()
+    api_ok("退款审批驳回", "POST", "/api/approvals/%s/reject" % approval_r2, tok_c, {"comment": "冒烟驳回"})
+    time.sleep(2)
+    con_after = api_ok("驳回后原单回读", "GET", "/api/payment/bills/%s" % bill_con, tok_admin)
+    rf2 = [r for r in ((con_after or {}).get("refunds") or []) if str(r.get("id")) == str(refund2)]
+    step("驳回不改原款项状态(仍2已确认)+退款单作废(4)",
+         con_after and con_after.get("status") == 2 and rf2 and rf2[0].get("status") == 4, con_after)
+
+    print("== 预付款科目化台账 ==")
+    subjects = api_ok("科目列表(懒预置三科目)", "GET", "/api/payment/advance/subjects", tok_admin)
+    sub_codes = [s.get("code") for s in (subjects or [])]
+    step("合同/工程/主材 三科目在册", {"contract", "engineering", "material"} <= set(sub_codes), subjects)
+    api_err("同编码科目拒绝 270015", "POST", "/api/payment/advance/subjects", tok_admin,
+            {"code": "engineering", "name": "重复"}, 270015)
+    api_ok("自定义科目", "POST", "/api/payment/advance/subjects", tok_admin,
+           {"code": "smokesub" + stamp4[-6:], "name": "烟测科目"})
+    api_err("科目不存在拒绝 270014", "POST", "/api/payment/advance/charge", tok_admin,
+            {"subjectCode": "nosuch", "refType": "decoration", "refId": "DO" + stamp4, "amount": 100}, 270014)
+    do_no = "DO" + stamp4
+    api_err("金额为零拒绝 270018", "POST", "/api/payment/advance/charge", tok_admin,
+            {"subjectCode": "engineering", "refType": "decoration", "refId": do_no, "amount": 0}, 270018)
+    api_err("金额为负拒绝 270018", "POST", "/api/payment/advance/charge", tok_admin,
+            {"subjectCode": "engineering", "refType": "decoration", "refId": do_no, "amount": -1000}, 270018)
+    api_ok("收入 500 元", "POST", "/api/payment/advance/charge", tok_admin,
+           {"subjectCode": "engineering", "refType": "decoration", "refId": do_no, "amount": 500000,
+            "remark": "冒烟充值"})
+    api_ok("划扣 200 元(带溯源三元组)", "POST", "/api/payment/advance/deduct", tok_admin,
+           {"subjectCode": "engineering", "refType": "decoration", "refId": do_no, "amount": 200000,
+            "bizAddon": "example", "bizType": "smoke", "bizId": "USE" + stamp4})
+    api_err("余额不足拒绝 270017", "POST", "/api/payment/advance/deduct", tok_admin,
+            {"subjectCode": "engineering", "refType": "decoration", "refId": do_no, "amount": 999999,
+             "bizAddon": "example", "bizType": "smoke", "bizId": "OVER"}, 270017)
+    api_ok("提现 100 元", "POST", "/api/payment/advance/withdraw", tok_admin,
+           {"subjectCode": "engineering", "refType": "decoration", "refId": do_no, "amount": 100000})
+    accs = api_ok("账户台账", "GET",
+                  "/api/payment/advance/accounts?refType=decoration&refId=%s" % do_no, tok_admin)
+    step("余额=200 元(500-200-100)", len(accs or []) == 1 and accs[0].get("balance") == 200000, accs)
+    if not accs:
+        return finish()
+    account_id = accs[0]["id"]
+
+    conc_results = []
+    def _conc_deduct():
+        status, res = call("POST", "/api/payment/advance/deduct", tok_admin,
+                           {"subjectCode": "engineering", "refType": "decoration", "refId": do_no,
+                            "amount": 150000, "bizAddon": "example", "bizType": "smoke", "bizId": "CONC"})
+        conc_results.append(res.get("code") if isinstance(res, dict) else None)
+    threads = [threading.Thread(target=_conc_deduct) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    conc_accs = api_ok("并发扣减后账户回读", "GET",
+                       "/api/payment/advance/accounts?refType=decoration&refId=%s" % do_no, tok_admin)
+    step("两并发扣减 150 元只成功一次(200→50,不超支)",
+         sorted(conc_results) == [0, 270017] and conc_accs and conc_accs[0].get("balance") == 50000,
+         (conc_results, conc_accs))
+
+    flows = api_ok("流水列表", "GET", "/api/payment/advance/accounts/%s/flows?page=1&size=20" % account_id,
+                   tok_admin)
+    step("四笔流水(收/扣/提/并发扣)", bool(flows) and flows.get("total", 0) == 4, flows)
+
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select balance from payment_advance_account where id = %s", (account_id,))
+            db_balance = cur.fetchone()[0]
+            cur.execute("""
+                select coalesce(sum(case when flow_type in (1, 4) then amount else -amount end), 0)
+                from payment_advance_flow where account_id = %s
+            """, (account_id,))
+            flow_sum = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    step("对账红线:余额==Σ带符号流水", db_balance == flow_sum == 50000, (db_balance, flow_sum))
+    ev_adv = api_ok("预付款事件已消费确认", "GET",
+                    "/api/events?eventType=AdvancePaymentChangedEvent&status=1&page=1&size=5", tok_admin)
+    step("AdvancePaymentChanged 消费行存在", bool(ev_adv) and ev_adv.get("total", 0) >= 4, ev_adv)
+
+    print("== 款项作废 ==")
+    bill_cancel = api_ok("登记待作废款项单", "POST", "/api/payment/bills", tok_admin,
+                         dict(biz3, bizId="CX" + stamp4, typeCode=dep_code, amount=500))
+    api_ok("作废未收款项单", "POST", "/api/payment/bills/%s/cancel" % bill_cancel, tok_admin)
+    api_err("已作废不可收款 270003", "POST", "/api/payment/bills/%s/collect" % bill_cancel, tok_admin,
+            {"channels": [{"channelCode": "cash", "amount": 500}]}, 270003)
 
     return finish()
 

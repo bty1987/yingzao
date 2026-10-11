@@ -1,0 +1,36 @@
+addon:
+  id: payment
+  name: 款项
+  version: 0.1.0
+  error-code-segment: 270000
+  menus:
+    - path: /payment/bills
+      title: 款项工作台
+      icon: money
+    - path: /payment/advance
+      title: 预付款台账
+      icon: wallet
+  dicts:
+    billStatus:
+      - { key: '0', label: 未收 }
+      - { key: '1', label: 已收 }
+      - { key: '2', label: 已确认 }
+      - { key: '3', label: 已退款 }
+      - { key: '4', label: 已作废 }
+    billDirection:
+      - { key: '0', label: 收款 }
+      - { key: '1', label: 退款 }
+    refundStatus:
+      - { key: '0', label: 退款审批中 }
+      - { key: '3', label: 已退款 }
+      - { key: '4', label: 已作废 }
+    flowType:
+      - { key: '1', label: 收入 }
+      - { key: '2', label: 划扣 }
+      - { key: '3', label: 提现 }
+      - { key: '4', label: 退回 }
+    channel:
+      - { key: 'cash', label: 现金 }
+      - { key: 'bank', label: 银行转账 }
+      - { key: 'scan', label: 扫码 }
+      - { key: 'other', label: 其他 }
