@@ -61,4 +61,19 @@ public class PaymentApiImpl implements PaymentApi {
             return view;
         }).toList();
     }
+
+    @Override
+    public List<BillSummary> listBills(long orgId, String bizAddon, String bizType, String bizId) {
+        return bills.listByBiz(orgId, bizAddon, bizType, bizId).stream()
+                .map(row -> new BillSummary(((Number) row.get("id")).longValue(),
+                        (String) row.get("type_code"), (String) row.get("type_name"),
+                        ((Number) row.get("direction")).intValue(), ((Number) row.get("amount")).longValue(),
+                        ((Number) row.get("sort")).intValue(), ((Number) row.get("status")).intValue()))
+                .toList();
+    }
+
+    @Override
+    public void cancelBill(long orgId, long billId) {
+        bills.cancel(orgId, billId);
+    }
 }

@@ -132,3 +132,24 @@ export const listAdvanceFlows = (id, params) => http.get(`/api/payment/advance/a
 export const chargeAdvance = (data) => http.post('/api/payment/advance/charge', data)
 export const deductAdvance = (data) => http.post('/api/payment/advance/deduct', data)
 export const withdrawAdvance = (data) => http.post('/api/payment/advance/withdraw', data)
+
+// 装修单(addon-decoration):登记/四线状态/合同线流转/确认线/量房/归属
+export const pageDecorations = (params) => http.get('/api/decoration/orders', { params })
+export const fetchDecoration = (id) => http.get(`/api/decoration/orders/${id}`)
+export const createDecoration = (data) => http.post('/api/decoration/orders', data)
+export const saveDecorationProfile = (id, data) => http.post(`/api/decoration/orders/${id}/profile`, data)
+export const presignDecoration = (id) => http.post(`/api/decoration/orders/${id}/presign`)
+export const signDecoration = (id, data) => http.post(`/api/decoration/orders/${id}/sign`, data)
+export const resignDecoration = (id) => http.post(`/api/decoration/orders/${id}/resign`)
+export const obsoleteDecoration = (id) => http.post(`/api/decoration/orders/${id}/obsolete`)
+export const terminateDecoration = (id, data) => http.post(`/api/decoration/orders/${id}/terminate`, data)
+export const accountDecoration = (id) => http.post(`/api/decoration/orders/${id}/account`)
+export const finishDecoration = (id) => http.post(`/api/decoration/orders/${id}/finish`)
+export const designConfirmDecoration = (id, data) =>
+  http.post(`/api/decoration/orders/${id}/design-confirm`, data)
+export const drawlineConfirmDecoration = (id) => http.post(`/api/decoration/orders/${id}/drawline-confirm`)
+export const applyDecorationMeasure = (id, data) => http.post(`/api/decoration/orders/${id}/measures`, data)
+export const successDecorationMeasure = (mid) => http.post(`/api/decoration/measures/${mid}/success`)
+export const failDecorationMeasure = (mid, data) => http.post(`/api/decoration/measures/${mid}/fail`, data)
+export const transferDecorationBelong = (id, data) =>
+  http.post(`/api/decoration/orders/${id}/belong/transfer`, data)

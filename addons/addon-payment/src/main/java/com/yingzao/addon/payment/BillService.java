@@ -239,6 +239,16 @@ public class BillService {
 
     // ---- 查询 ----
 
+    /** 业务对象的款项单全行(任意状态与方向;PaymentApi.listBills 委派,业务门槛校验/拆分去重用)。 */
+    public List<Map<String, Object>> listByBiz(long orgId, String bizAddon, String bizType, String bizId) {
+        return jdbc.queryForList("""
+                select id, type_code, type_name, direction, amount, sort, status
+                from payment_bill
+                where org_id = ? and biz_addon = ? and biz_type = ? and biz_id = ?
+                order by sort, id
+                """, orgId, bizAddon, bizType, bizId);
+    }
+
     public Map<String, Object> page(long orgId, String bizAddon, String bizType, String bizId,
             Integer status, Integer direction, int page, int size) {
         int safePage = Math.max(page, 1);

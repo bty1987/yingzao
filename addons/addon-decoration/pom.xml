@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.yingzao</groupId>
+        <artifactId>yingzao</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>addon-decoration</artifactId>
+    <name>addon-decoration</name>
+    <description>装修单 addon:四条状态线(合同/工程/设计/确认)独立推进+显式迁移表白名单(修老裸写状态机)+登记七联动+签约款线经 PaymentApi 比例模板拆分+首收升定金(事件回程车)+终止走内核审批(驳回零改动);事件契约入 addons-api(错误码段 250000)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-addons-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

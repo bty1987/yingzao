@@ -92,6 +92,7 @@ def main():
         return 1
     tok_b, tok_c, tok_admin = user_b["token"], user_c["token"], user_admin["token"]
     uid_c, uid_admin = user_c["userId"], user_admin["userId"]
+    uid_b = user_b["userId"]
     step("双账号不同身份", user_b["userId"] != user_c["userId"], (user_b, user_c))
     step("admin 登录含内置角色", "admin" in (user_admin.get("roles") or []), user_admin)
 
@@ -594,7 +595,8 @@ def main():
         conn.commit()
     finally:
         conn.close()
-    time.sleep(12)
+    # 调度器 10s 一轮+指数退避(1s 基数):坏载荷走完 max_retries=2 需跨两轮轮询,等 25s 保证转死信
+    time.sleep(25)
     ev_dead = api_ok("死信列表", "GET", "/api/events?status=3&page=1&size=50", tok_admin)
     dead_rows = [r for r in ((ev_dead or {}).get("rows") or []) if r.get("event_key") == dead_key]
     step("坏载荷经重试转死信(重试计数+错误可见)",
@@ -724,6 +726,226 @@ def main():
     api_ok("作废未收款项单", "POST", "/api/payment/bills/%s/cancel" % bill_cancel, tok_admin)
     api_err("已作废不可收款 270003", "POST", "/api/payment/bills/%s/collect" % bill_cancel, tok_admin,
             {"channels": [{"channelCode": "cash", "amount": 500}]}, 270003)
+
+    print("== 装修单(addon-decoration V1:四线状态机+签约拆分+事件回程车)==")
+    stamp5 = time.strftime("%Y%m%d%H%M%S")
+    # 款项类型前置:协议键 deposit(幂等确保存在)+ 本次签约模板类型(600‰);历史模板类型停用归拢
+    all_types = api_ok("类型字典全量(含停用)", "GET", "/api/payment/bill-types?includeDisabled=true", tok_admin)
+    dep_codes = [t.get("code") for t in (all_types or [])]
+    if "deposit" not in dep_codes:
+        api_ok("协议键 deposit 类型登记", "POST", "/api/payment/bill-types", tok_admin,
+               {"code": "deposit", "name": "定金", "sort": 1})
+    tmpl_code = "smokedec" + stamp5[-6:]
+    api_ok("签约模板类型登记(600‰)", "POST", "/api/payment/bill-types", tok_admin,
+           {"code": tmpl_code, "name": "烟测装修合同款", "sort": 2,
+            "scaleTemplate": json.dumps([{"sort": 1, "scale": 600}], ensure_ascii=False)})
+    all_types2 = api_ok("类型字典复查", "GET", "/api/payment/bill-types", tok_admin)
+    for t in (all_types2 or []):
+        # API 行键为蛇形 scale_template(BillTypeService.list 口径)
+        if (t.get("scale_template") or t.get("scaleTemplate")) and t.get("code") != tmpl_code:
+            api_ok("停用历史模板类型归拢(%s)" % t.get("code"),
+                   "POST", "/api/payment/bill-types/%s/status" % t.get("id"), tok_admin, {"status": 1})
+
+    # 登记守卫族(档案经 CustomerProfileApi 只读契约校验)
+    api_err("客户不存在拒绝 250004", "POST", "/api/decoration/orders", tok_admin,
+            {"customerId": 99999999, "houseId": house_id, "type": 0,
+             "designerId": uid_b, "salesmanId": uid_c}, 250004)
+    api_err("房屋不存在拒绝 250005", "POST", "/api/decoration/orders", tok_admin,
+            {"customerId": cust_id, "houseId": 99999999, "type": 0,
+             "designerId": uid_b, "salesmanId": uid_c}, 250005)
+    api_err("定金为零拒绝 250007", "POST", "/api/decoration/orders", tok_admin,
+            {"customerId": cust_id, "houseId": house_id, "type": 0, "depositAmount": 0,
+             "designerId": uid_b, "salesmanId": uid_c}, 250007)
+    order_a = api_ok("登记装修单A(整装+定金3万+补充信息)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_id, "houseId": house_id, "type": 2,
+                      "designerId": uid_b, "salesmanId": uid_c, "depositAmount": 30000000,
+                      "innerArea": 88000, "houseType": "三室两厅", "style": "现代简约",
+                      "note": "冒烟需求:北欧风全屋", "remark": "冒烟主链单"})
+    if order_a is None:
+        return finish()
+    api_err("同客户同楼盘在途拒绝 250003", "POST", "/api/decoration/orders", tok_admin,
+            {"customerId": cust_id, "houseId": house_id, "type": 0,
+             "designerId": uid_b, "salesmanId": uid_c}, 250003)
+    det_a = api_ok("单A详情(七联动回显)", "GET", "/api/decoration/orders/%s" % order_a, tok_admin)
+    ok = det_a and str(det_a.get("order_no", "")).startswith("YZ" + stamp5[2:8]) \
+        and det_a.get("customer_name") and det_a.get("house_label") \
+        and len(det_a.get("team") or []) == 2 and len(det_a.get("belongs") or []) == 2 \
+        and (det_a.get("profile") or {}).get("note") == "冒烟需求:北欧风全屋"
+    step("单号前缀+客户房屋快照+团队归属双行+补充信息", ok, det_a)
+    step("建单即生成定金款线(经 PaymentApi 契约)",
+         any(b.get("typeCode") == "deposit" and b.get("status") == 0 for b in (det_a or {}).get("bills") or []),
+         (det_a or {}).get("bills"))
+
+    # 显式迁移表白名单
+    api_err("状态0完工拒绝 250002", "POST", "/api/decoration/orders/%s/finish" % order_a, tok_admin, None, 250002)
+    api_err("未收款签约拒绝 250009", "POST", "/api/decoration/orders/%s/sign" % order_a, tok_admin,
+            {"contractAmount": 100000000}, 250009)
+
+    # 定金收款 → PaymentCollectedEvent 回程车首收升定金
+    bills_a = api_ok("单A款项单列表(业务三元组反查)", "GET",
+                     "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_a, tok_admin)
+    dep_rows = [b for b in (bills_a or {}).get("rows", []) if b.get("type_code") == "deposit"]
+    if not dep_rows:
+        step("定金款项单可反查", False, bills_a)
+        return finish()
+    api_ok("定金收款(现金)", "POST", "/api/payment/bills/%s/collect" % dep_rows[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 30000000}]})
+    time.sleep(2)
+    det_a2 = api_ok("事件回程车:首收定金后单A回读", "GET", "/api/decoration/orders/%s" % order_a, tok_admin)
+    step("合同线 0→1 定金(事件回写)+定金时间落", det_a2 and det_a2.get("status") == 1
+         and bool(det_a2.get("deposit_time")), det_a2 and det_a2.get("status"))
+
+    api_ok("预签 1→2", "POST", "/api/decoration/orders/%s/presign" % order_a, tok_admin)
+
+    # 确认线(0 → 21大改 → 2;不可跳步不可倒退)
+    api_ok("合同方案确认(大改变体 0→21)", "POST", "/api/decoration/orders/%s/design-confirm" % order_a,
+           tok_admin, {"variant": 2})
+    api_err("重复确认拒绝 250014", "POST", "/api/decoration/orders/%s/design-confirm" % order_a,
+            tok_admin, {"variant": 0}, 250014)
+    api_ok("放线确认 21→2", "POST", "/api/decoration/orders/%s/drawline-confirm" % order_a, tok_admin)
+    api_err("放线后再确认倒退拒绝 250014", "POST", "/api/decoration/orders/%s/drawline-confirm" % order_a,
+            tok_admin, None, 250014)
+
+    # 量房:申请→成功联动工程线开工;失败线另测
+    api_ok("量房申请(预签后可发起)", "POST", "/api/decoration/orders/%s/measures" % order_a, tok_admin,
+           {"planTime": stamp5[0:4] + "-" + stamp5[4:6] + "-20T10:00:00", "remark": "冒烟量房"})
+    api_err("重复申请拒绝 250017", "POST", "/api/decoration/orders/%s/measures" % order_a, tok_admin, {}, 250017)
+    det_a3 = api_ok("单A回读取量房计划", "GET", "/api/decoration/orders/%s" % order_a, tok_admin)
+    ms = [m for m in (det_a3 or {}).get("measures", []) if m.get("status") == 1]
+    if not ms:
+        step("量房计划在册", False, det_a3)
+        return finish()
+    api_ok("量房成功(联动工程线开工)", "POST", "/api/decoration/measures/%s/success" % ms[0]["id"], tok_admin)
+    api_err("已办结量房再操作拒绝 250017", "POST", "/api/decoration/measures/%s/success" % ms[0]["id"],
+            tok_admin, None, 250017)
+    det_a4 = api_ok("单A回读验证工程线", "GET", "/api/decoration/orders/%s" % order_a, tok_admin)
+    step("工程线 0→1 开工(量房联动,四线独立)", det_a4 and det_a4.get("project_status") == 1, det_a4)
+
+    # 签约:款线按比例模板拆分
+    api_err("合同总额为零拒绝 250010", "POST", "/api/decoration/orders/%s/sign" % order_a, tok_admin,
+            {"contractAmount": 0}, 250010)
+    api_ok("签约(合同10万,模板600‰拆6万)", "POST", "/api/decoration/orders/%s/sign" % order_a, tok_admin,
+           {"contractAmount": 100000000})
+    bills_a2 = api_ok("签约后款项单复查", "GET",
+                      "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_a, tok_admin)
+    tmpl_rows = [b for b in (bills_a2 or {}).get("rows", [])
+                 if b.get("type_code") == tmpl_code and b.get("direction") == 0]
+    dep_rows2 = [b for b in (bills_a2 or {}).get("rows", []) if b.get("type_code") == "deposit"]
+    step("款线拆分一张6万+定金不重建", len(tmpl_rows) == 1 and tmpl_rows[0].get("amount") == 60000000
+         and len(dep_rows2) == 1, bills_a2)
+    det_a5 = api_ok("签约后单A回读", "GET", "/api/decoration/orders/%s" % order_a, tok_admin)
+    step("签约不覆盖已完成设计线(四线独立)", det_a5 and det_a5.get("status") == 3
+         and det_a5.get("design_status") == 2, det_a5)
+
+    api_ok("重签 3→4", "POST", "/api/decoration/orders/%s/resign" % order_a, tok_admin)
+    api_ok("重签后再签约 4→3", "POST", "/api/decoration/orders/%s/sign" % order_a, tok_admin,
+           {"contractAmount": 100000000})
+    bills_a3 = api_ok("再签约后款项单复查", "GET",
+                      "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_a, tok_admin)
+    tmpl_rows3 = [b for b in (bills_a3 or {}).get("rows", [])
+                  if b.get("type_code") == tmpl_code and b.get("direction") == 0]
+    step("重签循环款线不重建(修老硬删重建)", len(tmpl_rows3) == 1, bills_a3)
+
+    # 收齐款线 → 决算 → 完工
+    api_err("决算前置:款项未收齐拒绝 250016", "POST", "/api/decoration/orders/%s/account" % order_a,
+            tok_admin, None, 250016)
+    api_ok("合同款线收款", "POST", "/api/payment/bills/%s/collect" % tmpl_rows[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "bank", "amount": 60000000}]})
+    api_ok("决算 3→7(款项已收齐)", "POST", "/api/decoration/orders/%s/account" % order_a, tok_admin)
+    api_err("重复决算拒绝 250002", "POST", "/api/decoration/orders/%s/account" % order_a, tok_admin, None, 250002)
+    api_ok("完工 7→8", "POST", "/api/decoration/orders/%s/finish" % order_a, tok_admin)
+    api_err("完工后转归属拒绝 250020", "POST", "/api/decoration/orders/%s/belong/transfer" % order_a,
+            tok_admin, {"line": 0, "userId": uid_c}, 250020)
+
+    # 终止链(单C,同客户同房屋——A 已完工终态不挡重建):驳回零改动+通过联动
+    order_c = api_ok("登记装修单C(终止链,带定金)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_id, "houseId": house_id, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c, "depositAmount": 10000000})
+    if order_c is None:
+        return finish()
+    bills_c = api_ok("单C款项单反查", "GET",
+                     "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_c, tok_admin)
+    dep_c = [b for b in (bills_c or {}).get("rows", []) if b.get("type_code") == "deposit"]
+    api_ok("单C定金收款", "POST", "/api/payment/bills/%s/collect" % dep_c[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 10000000}]})
+    time.sleep(2)
+    api_ok("单C预签", "POST", "/api/decoration/orders/%s/presign" % order_c, tok_admin)
+    api_ok("单C签约(拆款线)", "POST", "/api/decoration/orders/%s/sign" % order_c, tok_admin,
+           {"contractAmount": 50000000})
+    term1 = api_ok("单C提交终止审批(处理人 example_c)", "POST", "/api/decoration/orders/%s/terminate" % order_c,
+                   tok_admin, {"assigneeId": uid_c, "reason": "冒烟终止"})
+    if term1 is None:
+        return finish()
+    api_err("重复提交终止拒绝 250013", "POST", "/api/decoration/orders/%s/terminate" % order_c,
+            tok_admin, {"assigneeId": uid_c, "reason": "再提交"}, 250013)
+    api_err("审批未清重签拒绝 250012", "POST", "/api/decoration/orders/%s/resign" % order_c,
+            tok_admin, None, 250012)
+    api_ok("终止审批驳回", "POST", "/api/approvals/%s/reject" % term1, tok_c, {"comment": "冒烟驳回终止"})
+    time.sleep(2)
+    det_c1 = api_ok("驳回后单C回读(修老驳回顶态)", "GET", "/api/decoration/orders/%s" % order_c, tok_admin)
+    step("驳回零改动(仍3签约)", det_c1 and det_c1.get("status") == 3, det_c1)
+    term2 = api_ok("单C再次提交终止审批", "POST", "/api/decoration/orders/%s/terminate" % order_c,
+                   tok_admin, {"assigneeId": uid_c, "reason": "冒烟终止二次"})
+    if term2 is None:
+        return finish()
+    api_ok("终止审批通过", "POST", "/api/approvals/%s/approve" % term2, tok_c, {"comment": "冒烟同意终止"})
+    time.sleep(2)
+    det_c2 = api_ok("终止通过后单C回读", "GET", "/api/decoration/orders/%s" % order_c, tok_admin)
+    bills_c2 = api_ok("终止后款项单复查", "GET",
+                      "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_c, tok_admin)
+    dep_c2 = [b for b in (bills_c2 or {}).get("rows", []) if b.get("type_code") == "deposit"]
+    tmpl_c2 = [b for b in (bills_c2 or {}).get("rows", []) if b.get("type_code") == tmpl_code]
+    ok = det_c2 and det_c2.get("status") == 6 \
+        and all(b.get("status") == 2 for b in (det_c2.get("belongs") or [])) \
+        and dep_c2 and dep_c2[0].get("status") == 1 \
+        and tmpl_c2 and tmpl_c2[0].get("status") == 4
+    step("合同线 3→6 终止+归属全失效+已收定金保留+未收款线作废", ok, (det_c2, bills_c2))
+
+    # 废单链(单B,同客户同房屋——C 已终止不挡重建)
+    order_b = api_ok("登记装修单B(废单链,无定金)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_id, "houseId": house_id, "type": 1,
+                      "designerId": uid_b, "salesmanId": uid_c})
+    if order_b is None:
+        return finish()
+    api_ok("废单 0→5(排除法白名单化)", "POST", "/api/decoration/orders/%s/obsolete" % order_b, tok_admin)
+    api_err("废单后预签拒绝 250002", "POST", "/api/decoration/orders/%s/presign" % order_b, tok_admin, None, 250002)
+    api_ok("废单仍可转归属(业绩留痕,老规则)", "POST", "/api/decoration/orders/%s/belong/transfer" % order_b,
+           tok_admin, {"line": 1, "userId": uid_b})
+    det_b = api_ok("单B回读", "GET", "/api/decoration/orders/%s" % order_b, tok_admin)
+    sales_active = [b for b in (det_b or {}).get("belongs", []) if b.get("line") == 1 and b.get("status") == 1]
+    ok = det_b and det_b.get("status") == 5 and det_b.get("salesman_id") == uid_b and len(sales_active) == 1
+    step("销售线归属已转移(新行有效+主单同步)", ok, det_b)
+
+    # 通知回程车(设计师收建单通知)+ 事件总线消费确认
+    notifs_b = api_ok("设计师通知列表", "GET", "/api/notifications?page=1&size=50", tok_b)
+    hit_created = [n for n in (notifs_b or [])
+                   if n.get("source_type") == "notify" and "装修单" in str(n.get("title", ""))]
+    step("事件总线消费:设计师收建单/状态通知", len(hit_created) >= 1, len(hit_created or []))
+    time.sleep(3)
+    ev_dec = api_ok("装修单事件消费查询", "GET",
+                    "/api/events?eventType=DecorationStatusChangedEvent&status=1&page=1&size=5", tok_admin)
+    step("DecorationStatusChanged 消费行存在", bool(ev_dec) and ev_dec.get("total", 0) >= 1, ev_dec)
+
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select count(*) from yz_event_task
+                where event_type like 'Decoration%%' and status != 1
+            """)
+            undelivered = cur.fetchone()[0]
+            cur.execute("select order_no, status from decoration_order where id = %s", (order_a,))
+            row_a = cur.fetchone()
+            cur.execute("""
+                select count(*) from decoration_order_track
+                where order_id = %s and action = 'deposit'
+            """, (order_a,))
+            deposit_tracks = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    step("总线对账:decoration 事件零滞留(全消费确认)", undelivered == 0, undelivered)
+    step("轨迹留痕:首收定金动作在册", row_a and row_a[1] == 8 and deposit_tracks >= 1, row_a)
 
     return finish()
 

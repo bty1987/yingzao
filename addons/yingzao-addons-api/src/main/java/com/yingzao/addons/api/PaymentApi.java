@@ -26,6 +26,17 @@ public interface PaymentApi {
     /** 款项类型字典(启用行,含顺序 sort 与比例模板 scaleTemplate JSON,签约拆分数据源)。 */
     List<Map<String, Object>> listBillTypes(long orgId);
 
+    /** 业务对象的款项单列表(任意状态与方向;业务门槛校验/签约拆分去重用,禁直查 payment 表)。 */
+    List<BillSummary> listBills(long orgId, String bizAddon, String bizType, String bizId);
+
+    /** 作废未收款项单(仅 direction=0 且 status=0;废单/终止联动)。已收款项走退款,不在此列。 */
+    void cancelBill(long orgId, long billId);
+
+    /** 款项单摘要(业务插件视角;status 口径见 addon-payment 字典)。 */
+    record BillSummary(long billId, String typeCode, String typeName, int direction,
+                       long amount, int sort, int status) {
+    }
+
     /** 创建款项单命令:typeCode 必须是组织内启用类型。 */
     record CreateBillCmd(long orgId, String bizAddon, String bizType, String bizId,
                          String typeCode, long amount, String remark) {

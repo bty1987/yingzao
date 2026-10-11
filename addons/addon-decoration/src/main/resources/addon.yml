@@ -1,0 +1,73 @@
+addon:
+  id: decoration
+  name: 装修单
+  version: 0.1.0
+  error-code-segment: 250000
+  menus:
+    - path: /decoration/orders
+      title: 装修单
+      icon: house
+  dicts:
+    orderStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 定金 }
+      - { key: '2', label: 预签 }
+      - { key: '3', label: 签约 }
+      - { key: '4', label: 重签 }
+      - { key: '5', label: 废单 }
+      - { key: '6', label: 终止 }
+      - { key: '7', label: 决算 }
+      - { key: '8', label: 完工 }
+    orderType:
+      - { key: '0', label: 半包 }
+      - { key: '1', label: 包干 }
+      - { key: '2', label: 整装 }
+    projectStatus:
+      - { key: '0', label: 未开工 }
+      - { key: '1', label: 已开工 }
+      - { key: '2', label: 已完工 }
+    designStatus:
+      - { key: '0', label: 待设计 }
+      - { key: '1', label: 设计中 }
+      - { key: '2', label: 已完成 }
+    sourceStatus:
+      - { key: '0', label: 待确认 }
+      - { key: '1', label: 合同确认 }
+      - { key: '11', label: 合同确认(微改) }
+      - { key: '21', label: 合同确认(大改) }
+      - { key: '2', label: 放线确认 }
+    measureStatus:
+      - { key: '0', label: 排队 }
+      - { key: '1', label: 已申请 }
+      - { key: '2', label: 成功 }
+      - { key: '3', label: 失败 }
+    teamRole:
+      - { key: 'designer', label: 设计师 }
+      - { key: 'salesman', label: 销售顾问 }
+      - { key: 'escort', label: 监理 }
+      - { key: 'other', label: 其他 }
+    belongLine:
+      - { key: '0', label: 设计师线 }
+      - { key: '1', label: 销售线 }
+    belongStatus:
+      - { key: '0', label: 未生效 }
+      - { key: '1', label: 有效 }
+      - { key: '2', label: 失效 }
+    trackAction:
+      - { key: 'create', label: 登记建单 }
+      - { key: 'deposit', label: 首收定金 }
+      - { key: 'presign', label: 预签 }
+      - { key: 'sign', label: 签约 }
+      - { key: 'resign', label: 重签 }
+      - { key: 'obsolete', label: 废单 }
+      - { key: 'terminateSubmit', label: 提交终止审批 }
+      - { key: 'terminate', label: 终止 }
+      - { key: 'account', label: 决算 }
+      - { key: 'finish', label: 完工 }
+      - { key: 'designConfirm', label: 合同方案确认 }
+      - { key: 'drawlineConfirm', label: 放线确认 }
+      - { key: 'measureApply', label: 量房申请 }
+      - { key: 'measureSuccess', label: 量房成功 }
+      - { key: 'measureFail', label: 量房失败 }
+      - { key: 'profileSave', label: 补充信息 }
+      - { key: 'belongTransfer', label: 转归属 }
