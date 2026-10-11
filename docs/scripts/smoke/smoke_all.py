@@ -45,16 +45,21 @@ def call(method, path, token=None, body=None, expect_http=200):
     if token:
         req.add_header("Authorization", "Bearer " + token)
     data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
-    try:
-        with urllib.request.urlopen(req, data=data, timeout=15) as res:
-            raw = res.read().decode("utf-8")
-            return res.status, (json.loads(raw) if raw.strip() else None)
-    except urllib.error.HTTPError as e:
-        raw = e.read().decode("utf-8")
+    for attempt in range(3):
         try:
-            return e.code, json.loads(raw)
-        except ValueError:
-            return e.code, {"raw": raw}
+            with urllib.request.urlopen(req, data=data, timeout=15) as res:
+                raw = res.read().decode("utf-8")
+                return res.status, (json.loads(raw) if raw.strip() else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8")
+            try:
+                return e.code, json.loads(raw)
+            except ValueError:
+                return e.code, {"raw": raw}
+        except (urllib.error.URLError, OSError):
+            if attempt == 2:
+                raise
+            time.sleep(2)
 
 
 def api_ok(name, method, path, token=None, body=None):
@@ -595,8 +600,16 @@ def main():
         conn.commit()
     finally:
         conn.close()
-    # 调度器 10s 一轮+指数退避(1s 基数):坏载荷走完 max_retries=2 需跨两轮轮询,等 25s 保证转死信
-    time.sleep(25)
+    # 调度器 10s 一轮+指数退避(1s 基数):坏载荷走完 max_retries=2 需跨两轮轮询;
+    # 负载高峰下一轮认领可超 10s,固定 sleep 会假死——轮询等待至多 75s
+    dead_rows = []
+    for _ in range(15):
+        time.sleep(5)
+        _st, _res = call("GET", "/api/events?status=3&page=1&size=50", tok_admin)
+        _data = (_res or {}).get("data") if isinstance(_res, dict) else None
+        dead_rows = [r for r in ((_data or {}).get("rows") or []) if r.get("event_key") == dead_key]
+        if len(dead_rows) == 1:
+            break
     ev_dead = api_ok("死信列表", "GET", "/api/events?status=3&page=1&size=50", tok_admin)
     dead_rows = [r for r in ((ev_dead or {}).get("rows") or []) if r.get("event_key") == dead_key]
     step("坏载荷经重试转死信(重试计数+错误可见)",
@@ -1722,18 +1735,424 @@ def main():
     step("StockPurchaseChanged 消费行存在(cancel+itemRemoved)",
          bool(ev_pc) and ev_pc.get("total", 0) >= 2, ev_pc)
 
+    print("== 主材销售(addon-sales V1:四轴状态机+服务端算价+结算三段式+退货审批链) ==")
+    import re as _re
+    stamp_sale = time.strftime("%H%M%S")
+
+    # 插件下发 + 协议键类型前置
+    addons_sale = api_ok("admin 插件下发复查(sales)", "GET", "/api/addons", tok_admin)
+    sale_addon = next((a for a in (addons_sale or []) if a.get("id") == "sales"), None)
+    step("sales 三菜单动态下发", bool(sale_addon)
+         and sorted(m.get("path") for m in sale_addon.get("menus") or []) == [
+             "/sales/deliveries", "/sales/orders", "/sales/settlements"],
+         sale_addon and sale_addon.get("menus"))
+    all_types_s = api_ok("类型字典全量(sales_full 前置)", "GET",
+                         "/api/payment/bill-types?includeDisabled=true", tok_admin)
+    if "sales_full" not in [t.get("code") for t in (all_types_s or [])]:
+        api_ok("协议键 sales_full 类型登记", "POST", "/api/payment/bill-types", tok_admin,
+               {"code": "sales_full", "name": "销售全款", "sort": 3})
+
+    # 前置:品牌2+销售商品(普通×2+套餐)
+    brand2 = api_ok("建品牌2(结算分组)", "POST", "/api/basedata/brands", tok_admin,
+                    {"name": "烟测品牌B" + stamp_sale, "pinyin": "ycppb" + stamp_sale[-6:]})
+    goods_sale1 = api_ok("建销售商品1(品牌1,120元)", "POST", "/api/basedata/goods", tok_admin,
+                         {"name": "烟测Sales瓷砖" + stamp_sale, "categoryId": cat_child,
+                          "brandId": brand_id, "unit": "片", "selling": 120000})
+    goods_sale2 = api_ok("建销售商品2(品牌2,80元)", "POST", "/api/basedata/goods", tok_admin,
+                         {"name": "烟测Sales地板" + stamp_sale, "categoryId": cat_child,
+                          "brandId": brand2, "unit": "片", "selling": 80000})
+    pkg_sale = api_ok("建销售套餐(品牌1,200元)", "POST", "/api/basedata/goods", tok_admin,
+                      {"name": "烟测Sales套餐" + stamp_sale, "categoryId": cat_child,
+                       "brandId": brand_id, "unit": "套", "type": 1, "selling": 200000})
+    api_ok("套餐加成员(瓷砖×2)", "POST", "/api/basedata/goods/%s/packages" % pkg_sale, tok_admin,
+           {"memberGoodsId": goods_sale1, "num": 2000})
+    if not all([brand2, goods_sale1, goods_sale2, pkg_sale]):
+        return finish()
+
+    # 登记销售专用装修单 S
+    phone_s = "136%08d" % (int(stamp_sale) % 100000000)
+    cust_s = api_ok("销售客 get-or-create", "POST", "/api/customerprofile/customers/exist", tok_admin,
+                    {"phone": phone_s, "name": "销售客" + stamp_sale})
+    house_s = api_ok("销售房 get-or-create", "POST", "/api/customerprofile/houses/exist", tok_admin,
+                     {"villageId": village_id, "number": "7栋1单元%s" % stamp_sale})
+    order_s = api_ok("登记装修单S(销售主链)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": (cust_s or {}).get("customerId"),
+                      "houseId": (house_s or {}).get("houseId"), "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c})
+    if not all([cust_s, house_s, order_s]):
+        return finish()
+
+    # 开单守卫族
+    api_err("装修单不存在拒绝 300004", "POST", "/api/sales/orders", tok_admin,
+            {"orderId": 99999999, "items": [{"goodsId": goods_sale1, "num": 1000}]}, 300004)
+    api_err("空明细拒绝 300005", "POST", "/api/sales/orders", tok_admin,
+            {"orderId": order_s, "items": []}, 300005)
+    api_err("商品不存在拒绝 300009", "POST", "/api/sales/orders", tok_admin,
+            {"orderId": order_s, "items": [{"goodsId": 99999999, "num": 1000}]}, 300009)
+    api_err("数量为负拒绝 300007", "POST", "/api/sales/orders", tok_admin,
+            {"orderId": order_s, "items": [{"goodsId": goods_sale1, "num": -1000}]}, 300007)
+
+    # 开单(套餐展开+服务端算价):瓷砖×2@120 + 套餐×1@200(子项瓷砖×4 不计总额)
+    sale1 = api_ok("开单(套餐展开)", "POST", "/api/sales/orders", tok_admin,
+                   {"orderId": order_s, "items": [
+                       {"goodsId": goods_sale1, "num": 2000},
+                       {"goodsId": pkg_sale, "num": 1000}], "remark": "销售主链冒烟"})
+    if sale1 is None:
+        return finish()
+    sale_det = api_ok("开单详情", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    ok = str(sale_det.get("code", "")).startswith("XS") and sale_det.get("total") == 440000
+    ok = ok and len(sale_det.get("items") or []) == 3
+    ok = ok and sum(1 for i in sale_det.get("items") or [] if i.get("package_id", 0) > 0) == 1
+    step("单号XS+套餐展开3行+子项不计总额440元", ok, sale_det)
+    ok = (sale_det.get("status") == 0 and sale_det.get("balance_status") == 0
+          and sale_det.get("fullpay_status") == -1 and sale_det.get("customer_confirmed") == 0)
+    step("四轴初始位(0/0/-1/未确认)", ok, sale_det)
+
+    # 改单(全量替换服务端重算,品牌分组终态:瓷砖×2@120 + 地板×1@80 = 320 元)
+    api_ok("改单全量替换", "PUT", "/api/sales/orders/%s/items" % sale1, tok_admin,
+           {"items": [{"goodsId": goods_sale1, "num": 2000},
+                      {"goodsId": goods_sale2, "num": 1000}]})
+    sale_det = api_ok("改单复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    step("服务端重算320元+两品牌两组", sale_det.get("total") == 320000
+         and len(sale_det.get("items") or []) == 2, sale_det)
+    sale_items = {i["goods_id"]: i["id"] for i in (sale_det.get("items") or [])}
+    item1 = sale_items.get(goods_sale1)
+    item2 = sale_items.get(goods_sale2)
+
+    # 款项单(协议键 salesFull)
+    api_ok("生成全款款项单", "POST", "/api/sales/orders/%s/bill" % sale1, tok_admin)
+    sale_det = api_ok("款项单复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    bills1 = [b for b in (sale_det.get("bills") or [])
+              if b.get("direction") == 0 and b.get("status") == 0]
+    step("全款单320元在册+款项轴0已录", len(bills1) == 1
+         and bills1[0].get("amount") == 320000 and sale_det.get("fullpay_status") == 0,
+         sale_det.get("bills"))
+
+    # 客户确认三重校验(单参拒/错码拒/正码过/重复拒)
+    api_err("缺验证码拒绝 300010", "POST", "/api/sales/orders/%s/confirm" % sale1, tok_admin,
+            {"phone": "13800000000"}, 300010)
+    api_ok("发确认码", "POST", "/api/sales/orders/%s/verify-code" % sale1, tok_admin,
+           {"phone": "13800000000"})
+    api_err("错验证码拒绝 300011", "POST", "/api/sales/orders/%s/confirm" % sale1, tok_admin,
+            {"phone": "13800000000", "code": "000000"}, 300011)
+    notif_s = api_ok("通知取确认码", "GET", "/api/notifications?page=1&size=3", tok_admin)
+    code_s = ""
+    for n in (notif_s or []):
+        m = _re.search(r"(\d{6})\s*$", str(n.get("content", "")))
+        if m and "验证码" in str(n.get("title", "")):
+            code_s = m.group(1)
+            break
+    step("验证码已下发通知", bool(code_s), notif_s)
+    api_ok("客户确认(三重)", "POST", "/api/sales/orders/%s/confirm" % sale1, tok_admin,
+           {"phone": "13800000000", "code": code_s})
+    api_err("重复确认拒绝 300012", "POST", "/api/sales/orders/%s/confirm" % sale1, tok_admin,
+            {"phone": "13800000000", "code": code_s}, 300012)
+
+    # 收款链(payment 事件回程车)
+    api_ok("全款收款(cash 320元)", "POST", "/api/payment/bills/%s/collect" % bills1[0]["billId"],
+           tok_admin, {"channels": [{"channelCode": "cash", "amount": 320000}]})
+    time.sleep(2)
+    sale_det = api_ok("收款后复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    step("款项轴1已付(事件回写)", sale_det.get("fullpay_status") == 1, sale_det)
+    api_err("已付后改单拒绝 300006", "PUT", "/api/sales/orders/%s/items" % sale1, tok_admin,
+            {"items": [{"goodsId": goods_sale1, "num": 1000}]}, 300006)
+    api_ok("财务确认全款", "POST", "/api/payment/bills/%s/confirm" % bills1[0]["billId"], tok_admin)
+    time.sleep(2)
+    sale_det = api_ok("确认后复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    settles1 = sale_det.get("settlements") or []
+    step("款项轴2已确认+预结两品牌行", sale_det.get("fullpay_status") == 2
+         and sale_det.get("balance_status") == 1 and len(settles1) == 2, settles1)
+    st_by_brand = {s["brand_id"]: s for s in settles1}
+    st1 = st_by_brand.get(brand_id)
+    st2 = st_by_brand.get(brand2)
+    step("预结金额按品牌分组(240/80元)", bool(st1) and st1.get("total") == 240000
+         and bool(st2) and st2.get("total") == 80000, settles1)
+
+    # 结算三段式(vbalance 双值+服务端强校验)
+    api_err("厂结值为零拒绝 300014", "PUT", "/api/sales/settlements/%s/vbalance" % st1["id"],
+            tok_admin, {"value": 0}, 300014)
+    api_err("厂结值异向拒绝 300014", "PUT", "/api/sales/settlements/%s/vbalance" % st1["id"],
+            tok_admin, {"value": -1000}, 300014)
+    api_ok("行1改厂结值(200元)", "PUT", "/api/sales/settlements/%s/vbalance" % st1["id"],
+           tok_admin, {"value": 200000})
+    api_ok("行1厂结", "POST", "/api/sales/settlements/%s/vpost" % st1["id"], tok_admin)
+    api_ok("行2厂结(默认值80元)", "POST", "/api/sales/settlements/%s/vpost" % st2["id"], tok_admin)
+    sale_det = api_ok("厂结后复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    step("主单结算轴2厂结", sale_det.get("balance_status") == 2, sale_det)
+    api_ok("行2改结算值(75元)", "PUT", "/api/sales/settlements/%s/pbalance" % st2["id"],
+           tok_admin, {"value": 75000})
+    api_ok("行2结算", "POST", "/api/sales/settlements/%s/post" % st2["id"], tok_admin)
+    sale_det = api_ok("行2结算后复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    step("行结结算主单仍2(行1未结)", sale_det.get("balance_status") == 2, sale_det)
+    api_ok("行1结算", "POST", "/api/sales/settlements/%s/post" % st1["id"], tok_admin)
+    sale_det = api_ok("全部结算复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    step("主单结算轴3结算(终态)", sale_det.get("balance_status") == 3, sale_det)
+
+    # 结算驳回(整单原子,sale2 独立链)
+    sale2 = api_ok("开第二单(驳回链)", "POST", "/api/sales/orders", tok_admin,
+                   {"orderId": order_s, "items": [{"goodsId": goods_sale2, "num": 1000}]})
+    api_ok("sale2生成款项单", "POST", "/api/sales/orders/%s/bill" % sale2, tok_admin)
+    b2 = api_ok("sale2款项反查", "GET",
+                "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale2, tok_admin)
+    bill2 = [b for b in (b2 or {}).get("rows", []) if b.get("direction") == 0]
+    api_ok("sale2收款", "POST", "/api/payment/bills/%s/collect" % bill2[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 80000}]})
+    time.sleep(2)
+    api_ok("sale2确认", "POST", "/api/payment/bills/%s/confirm" % bill2[0]["id"], tok_admin)
+    time.sleep(2)
+    api_ok("sale2整单驳回预结", "POST", "/api/sales/orders/%s/settlement-reject" % sale2, tok_admin,
+           {"reason": "金额有误重开"})
+    s2_det = api_ok("驳回后复查", "GET", "/api/sales/orders/%s" % sale2, tok_admin)
+    step("结算行清空+主单回无结", not (s2_det.get("settlements") or [])
+         and s2_det.get("balance_status") == 0, s2_det)
+    api_err("无行再驳回拒绝 300031", "POST", "/api/sales/orders/%s/settlement-reject" % sale2,
+            tok_admin, {"reason": "x"}, 300031)
+
+    # 配送(库存基线先行:销售商品进货各10)
+    api_ok("销售商品进货(各10入主仓)", "POST", "/api/inventory/manifests", tok_admin,
+           {"type": 1, "items": [
+               {"goodsId": goods_sale1, "num": 10000, "price": 60000, "warehouseIn": wh_main},
+               {"goodsId": goods_sale2, "num": 10000, "price": 40000, "warehouseIn": wh_main}]})
+    sale3 = api_ok("开第三单(配送反例)", "POST", "/api/sales/orders", tok_admin,
+                   {"orderId": order_s, "items": [{"goodsId": goods_sale1, "num": 1000}]})
+    api_err("未付款配送拒绝 300023", "POST", "/api/sales/orders/%s/deliveries" % sale3, tok_admin,
+            {"items": [{"saleItemId": 1, "num": 1000}]}, 300023)
+    dlv1 = api_ok("生成配送批次(瓷砖1片)", "POST", "/api/sales/orders/%s/deliveries" % sale1,
+                  tok_admin, {"items": [{"saleItemId": item1, "num": 1000}]})
+    dlv_det = api_ok("配送批次详情", "GET", "/api/sales/deliveries/%s" % dlv1, tok_admin)
+    ditem1 = ((dlv_det.get("items") or [{}])[0]).get("id")
+    step("配送行初始态在册", bool(ditem1)
+         and dlv_det["items"][0].get("status") == 0, dlv_det)
+    api_err("配送越级拒绝 300022", "POST", "/api/sales/delivery-items/%s/advance" % ditem1,
+            tok_admin, {"action": "check"}, 300022)
+    for act, name in [("tran", "配送"), ("check", "审核"), ("confirm", "客户确认"), ("finish", "完结")]:
+        api_ok("配送推进:%s" % name, "POST", "/api/sales/delivery-items/%s/advance" % ditem1,
+               tok_admin, {"action": act})
+    sale_det = api_ok("配送完结复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    it1 = [i for i in (sale_det.get("items") or []) if i.get("id") == item1]
+    step("完结回写trnum=1", it1 and it1[0].get("trnum") == 1000, it1)
+
+    # 库存出货联动(xgnum 事件回写;超卖重试演示用 item2)
+    api_ok("出货单(瓷砖1片带销售锚点)", "POST", "/api/inventory/manifests", tok_admin,
+           {"type": 3, "items": [{"goodsId": goods_sale1, "num": 1000,
+                                  "warehouseOut": wh_main, "salesItemId": item1}]})
+    time.sleep(2)
+    sale_det = api_ok("出货回写复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    it1 = [i for i in (sale_det.get("items") or []) if i.get("id") == item1]
+    step("xgnum 2000→1000(事件回写)", it1 and it1[0].get("xgnum") == 1000, it1)
+    api_ok("超卖出货单(地板5片>余量1,库存充足)", "POST", "/api/inventory/manifests", tok_admin,
+           {"type": 3, "items": [{"goodsId": goods_sale2, "num": 5000,
+                                  "warehouseOut": wh_main, "salesItemId": item2}]})
+    time.sleep(3)
+    sale_det = api_ok("超卖后复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    it2 = [i for i in (sale_det.get("items") or []) if i.get("id") == item2]
+    step("超卖被原子守卫拒绝(xgnum 仍1000)", it2 and it2[0].get("xgnum") == 1000, it2)
+    conn_os = db_conn()
+    try:
+        with conn_os.cursor() as cur:
+            cur.execute("select status, retry_count from yz_event_task "
+                        "where event_type = 'StockManifestCreatedEvent' and payload like %s "
+                        "and payload like %s order by id desc limit 1",
+                        ("%5000%", "%" + str(item2) + "%"))
+            os_row = cur.fetchone()
+    finally:
+        conn_os.close()
+    step("超卖事件未确认(重试/死信在途,300008 留痕)",
+         os_row is not None and os_row[0] in (0, 2, 3), os_row)
+
+    # 退货链(sale1 部分退货:type=2 全退类型但数量部分 → 金额不符不自动退款)
+    refund1 = api_ok("发起退货(瓷砖1片)", "POST", "/api/sales/orders/%s/refunds" % sale1,
+                     tok_admin, {"type": 2, "items": [{"saleItemId": item1, "num": 1000}],
+                                 "assigneeId": uid_admin, "remark": "色差退货"})
+    r1_det = api_ok("退货单详情(审批中)", "GET", "/api/sales/refunds/%s" % refund1, tok_admin)
+    step("退货单3审批中+审批单挂接", r1_det.get("status") == 3
+         and bool(r1_det.get("approval_id")), r1_det)
+    sale_det = api_ok("发起后复查(预扣)", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    it1 = [i for i in (sale_det.get("items") or []) if i.get("id") == item1]
+    step("发起即预扣 num 2000→1000", it1 and it1[0].get("num") == 1000, it1)
+    api_err("审批中再发起拒绝 300025", "POST", "/api/sales/orders/%s/refunds" % sale1, tok_admin,
+            {"type": 2, "items": [{"saleItemId": item1, "num": 500}],
+             "assigneeId": uid_admin}, 300025)
+    api_ok("退货审批通过", "POST", "/api/approvals/%s/approve" % r1_det.get("approval_id"),
+           tok_admin, {"comment": "同意退货"})
+    time.sleep(1)
+    r1_det = api_ok("批准后退货单复查", "GET", "/api/sales/refunds/%s" % refund1, tok_admin)
+    step("退货单0初始(生效)", r1_det.get("status") == 0, r1_det)
+    sale_det = api_ok("主单轴复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    step("部分退不动主单轴(退光才置2/3,单据仍可完结)", sale_det.get("status") == 0, sale_det)
+    api_ok("退货发码", "POST", "/api/sales/refunds/%s/verify-code" % refund1, tok_admin,
+           {"phone": "13800000000"})
+    notif_r = api_ok("通知取退货码", "GET", "/api/notifications?page=1&size=3", tok_admin)
+    code_r = ""
+    for n in (notif_r or []):
+        m = _re.search(r"(\d{6})\s*$", str(n.get("content", "")))
+        if m and "验证码" in str(n.get("title", "")):
+            code_r = m.group(1)
+            break
+    step("退货码已下发", bool(code_r), notif_r)
+    api_ok("退货客户确认", "POST", "/api/sales/refunds/%s/confirm" % refund1, tok_admin,
+           {"phone": "13800000000", "code": code_r})
+    sale_det = api_ok("退货结算复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    rst = [s for s in (sale_det.get("settlements") or []) if s.get("rid") == refund1]
+    step("退货结算负值行(-120元 type=2)", len(rst) == 1 and rst[0].get("total") == -120000
+         and rst[0].get("type") == 2, rst)
+    api_err("重复确认退货拒绝 300012", "POST", "/api/sales/refunds/%s/confirm" % refund1,
+            tok_admin, {"phone": "13800000000", "code": code_r}, 300012)
+
+    # 未预结退货显式报错(sale4:已付未确认无预结;修老静默 return)
+    sale4 = api_ok("开第四单(未预结反例)", "POST", "/api/sales/orders", tok_admin,
+                   {"orderId": order_s, "items": [{"goodsId": goods_sale2, "num": 1000}]})
+    api_ok("sale4生成款项单", "POST", "/api/sales/orders/%s/bill" % sale4, tok_admin)
+    b4 = api_ok("sale4款项反查", "GET",
+                "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale4, tok_admin)
+    api_ok("sale4收款(不确认)", "POST",
+           "/api/payment/bills/%s/collect"
+           % [b for b in (b4 or {}).get("rows", []) if b.get("direction") == 0][0]["id"],
+           tok_admin, {"channels": [{"channelCode": "cash", "amount": 80000}]})
+    time.sleep(2)
+    s4_det = api_ok("sale4详情", "GET", "/api/sales/orders/%s" % sale4, tok_admin)
+    item4 = [i for i in (s4_det.get("items") or []) if i.get("package_id", 0) == 0][0]["id"]
+    rf4 = api_ok("sale4发起退货(倒单)", "POST", "/api/sales/orders/%s/refunds" % sale4, tok_admin,
+                 {"type": 3, "items": [{"saleItemId": item4, "num": 1000}],
+                  "assigneeId": uid_admin})
+    rf4_det = api_ok("sale4退货单详情", "GET", "/api/sales/refunds/%s" % rf4, tok_admin)
+    api_ok("sale4退货审批通过", "POST", "/api/approvals/%s/approve" % rf4_det.get("approval_id"),
+           tok_admin, {"comment": "同意"})
+    time.sleep(1)
+    api_ok("sale4退货发码", "POST", "/api/sales/refunds/%s/verify-code" % rf4, tok_admin,
+           {"phone": "13800000001"})
+    notif4 = api_ok("通知取sale4退货码", "GET", "/api/notifications?page=1&size=3", tok_admin)
+    code4 = ""
+    for n in (notif4 or []):
+        m = _re.search(r"(\d{6})\s*$", str(n.get("content", "")))
+        if m and "验证码" in str(n.get("title", "")):
+            code4 = m.group(1)
+            break
+    api_err("未预结生成退货结算拒绝 300019", "POST", "/api/sales/refunds/%s/confirm" % rf4,
+            tok_admin, {"phone": "13800000001", "code": code4}, 300019)
+
+    # 全退自动退款链(sale5:金额与款项一致 → submitRefund → PaymentRefundedEvent 回写)
+    sale5 = api_ok("开第五单(全退退款链,地板4片320元)", "POST", "/api/sales/orders", tok_admin,
+                   {"orderId": order_s, "items": [{"goodsId": goods_sale2, "num": 4000}]})
+    api_ok("sale5生成款项单", "POST", "/api/sales/orders/%s/bill" % sale5, tok_admin)
+    b5 = api_ok("sale5款项反查", "GET",
+                "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale5, tok_admin)
+    bill5 = [b for b in (b5 or {}).get("rows", []) if b.get("direction") == 0][0]
+    api_ok("sale5收款", "POST", "/api/payment/bills/%s/collect" % bill5["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 320000}]})
+    time.sleep(2)
+    api_ok("sale5确认", "POST", "/api/payment/bills/%s/confirm" % bill5["id"], tok_admin)
+    time.sleep(2)
+    s5_det = api_ok("sale5详情", "GET", "/api/sales/orders/%s" % sale5, tok_admin)
+    item5 = [i for i in (s5_det.get("items") or []) if i.get("package_id", 0) == 0][0]["id"]
+    rf5 = api_ok("sale5发起全退", "POST", "/api/sales/orders/%s/refunds" % sale5, tok_admin,
+                 {"type": 2, "items": [{"saleItemId": item5, "num": 4000}],
+                  "assigneeId": uid_admin})
+    rf5_det = api_ok("sale5退货单详情", "GET", "/api/sales/refunds/%s" % rf5, tok_admin)
+    api_ok("sale5退货审批通过", "POST", "/api/approvals/%s/approve" % rf5_det.get("approval_id"),
+           tok_admin, {"comment": "全退"})
+    time.sleep(1)
+    api_ok("sale5退货发码", "POST", "/api/sales/refunds/%s/verify-code" % rf5, tok_admin,
+           {"phone": "13800000002"})
+    notif5 = api_ok("通知取sale5退货码", "GET", "/api/notifications?page=1&size=3", tok_admin)
+    code5 = ""
+    for n in (notif5 or []):
+        m = _re.search(r"(\d{6})\s*$", str(n.get("content", "")))
+        if m and "验证码" in str(n.get("title", "")):
+            code5 = m.group(1)
+            break
+    api_ok("sale5退货客户确认(触发自动退款)", "POST", "/api/sales/refunds/%s/confirm" % rf5,
+           tok_admin, {"phone": "13800000002", "code": code5})
+    todo_r = api_ok("退款审批待办", "GET", "/api/approvals?role=todo", tok_admin)
+    refund_appr = next((a for a in (todo_r or [])
+                        if str(a.get("title", "")).startswith("退款审批") and "320" in str(a.get("title", ""))
+                        and str(a.get("biz_addon", "")) == "payment"), None)
+    step("payment 退款审批单在待办", bool(refund_appr), todo_r)
+    api_ok("退款审批通过", "POST", "/api/approvals/%s/approve" % refund_appr["id"], tok_admin,
+           {"comment": "同意退款"})
+    time.sleep(3)
+    rf5_det = api_ok("退款回写复查", "GET", "/api/sales/refunds/%s" % rf5, tok_admin)
+    step("退货单1已退款(PaymentRefundedEvent 回写)", rf5_det.get("status") == 1, rf5_det)
+    b5b = api_ok("原款项复查", "GET",
+                 "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale5, tok_admin)
+    step("原款项已退款(status=3)", any(b.get("id") == bill5["id"] and b.get("status") == 3
+         for b in (b5b or {}).get("rows", [])), b5b)
+
+    # 完结/废单
+    api_ok("sale1完结", "POST", "/api/sales/orders/%s/finish" % sale1, tok_admin)
+    sale_det = api_ok("完结复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    step("主单轴5完结", sale_det.get("status") == 5, sale_det)
+    api_err("已完结废单拒绝 300002", "POST", "/api/sales/orders/%s/terminate" % sale1,
+            tok_admin, {}, 300002)
+    api_ok("sale3生成款项单", "POST", "/api/sales/orders/%s/bill" % sale3, tok_admin)
+    api_ok("sale3废单(联动作废款项单)", "POST", "/api/sales/orders/%s/terminate" % sale3, tok_admin)
+    s3_det = api_ok("废单复查", "GET", "/api/sales/orders/%s" % sale3, tok_admin)
+    s3_bills = [b for b in (s3_det.get("bills") or []) if b.get("direction") == 0]
+    step("主单轴4废单+款项单全作废", s3_det.get("status") == 4
+         and all(b.get("status") == 4 for b in s3_bills) and len(s3_bills) >= 1, s3_det)
+
+    # construction 销售款闸(stacheck 启用)
+    cons_nodes = api_ok("节点模板基点", "GET", "/api/construction/nodes?includeDisabled=true", tok_admin)
+    sort_next = max([n.get("sort", 0) for n in (cons_nodes or [])] + [0]) + 1
+    node5 = api_ok("建节点模板(销售款闸500‰)", "POST", "/api/construction/nodes", tok_admin,
+                   {"name": "销售闸" + stamp_sale, "sort": sort_next, "precheck": 0, "postcheck": 0,
+                    "stacheck": 500, "fincheck": 0, "timeLimit": 1000,
+                    "salaryLimit": 999999000, "accessoryLimit": 999999000})
+    phone_s2 = "137%08d" % (int(stamp_sale) % 100000000)
+    cust_s2 = api_ok("闸链客 get-or-create", "POST", "/api/customerprofile/customers/exist",
+                     tok_admin, {"phone": phone_s2, "name": "闸链客" + stamp_sale})
+    house_s2 = api_ok("闸链房 get-or-create", "POST", "/api/customerprofile/houses/exist",
+                      tok_admin, {"villageId": village_id, "number": "8栋1单元%s" % stamp_sale})
+    order_s2 = api_ok("登记装修单S2(销售闸链)", "POST", "/api/decoration/orders", tok_admin,
+                      {"customerId": (cust_s2 or {}).get("customerId"),
+                       "houseId": (house_s2 or {}).get("houseId"), "type": 0,
+                       "designerId": uid_b, "salesmanId": uid_c})
+    if not all([node5, cust_s2, house_s2, order_s2]):
+        return finish()
+    api_ok("单S2补录点火", "POST", "/api/construction/drawlines/retroactive", tok_admin,
+           {"orderId": order_s2, "groupName": "放线S组" + stamp_sale,
+            "planStart": day1 + "T08:00:00", "planEnd": day1 + "T12:00:00",
+            "remark": "销售闸冒烟"})
+    cons_s2 = api_ok("单S2施工详情", "GET", "/api/construction/orders/%s" % order_s2, tok_admin)
+    sched5 = next((s for s in (cons_s2.get("schedules") or [])
+                   if "销售闸" in str(s.get("node_name", ""))), None)
+    step("销售闸节点进快照", bool(sched5), cons_s2.get("schedules"))
+    api_err("销售款闸拒(0‰ 240025)", "POST", "/api/construction/schedules/%s/begin" % sched5["id"],
+            tok_admin, None, 240025)
+    sale6 = api_ok("开单@S2", "POST", "/api/sales/orders", tok_admin,
+                   {"orderId": order_s2, "items": [{"goodsId": goods_sale1, "num": 1000}]})
+    api_ok("sale6生成款项单", "POST", "/api/sales/orders/%s/bill" % sale6, tok_admin)
+    b6 = api_ok("sale6款项反查", "GET",
+                "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale6, tok_admin)
+    b6_income = [b for b in (b6 or {}).get("rows", []) if b.get("direction") == 0][0]
+    api_ok("sale6收款", "POST", "/api/payment/bills/%s/collect" % b6_income["id"],
+           tok_admin, {"channels": [{"channelCode": "cash", "amount": 120000}]})
+    time.sleep(2)
+    api_ok("sale6确认", "POST", "/api/payment/bills/%s/confirm" % b6_income["id"], tok_admin)
+    time.sleep(2)
+    api_ok("销售款闸放行(1000‰)", "POST", "/api/construction/schedules/%s/begin" % sched5["id"],
+           tok_admin)
+
+    # 轨迹留痕
+    sale_det = api_ok("轨迹复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
+    actions = [t.get("action") for t in (sale_det.get("tracks") or [])]
+    step("轨迹全覆盖(create/confirmPay/refund/finish等)", "create" in actions
+         and "confirmPay" in actions and "finish" in actions, actions)
+
     # 对账:全域事件零滞留 + 额度流水 + 单号计数器
     conn = db_conn()
     try:
         with conn.cursor() as cur:
             cur.execute("""
                 select count(*) from yz_event_task
-                where (event_type like concat('Stock', '%')
-                       or event_type like concat('Construction', '%')
-                       or event_type like concat('Decoration', '%')
-                       or event_type like concat('Payment', '%'))
+                where (event_type like concat('Stock', '%%')
+                       or event_type like concat('Construction', '%%')
+                       or event_type like concat('Decoration', '%%')
+                       or event_type like concat('Payment', '%%')
+                       or event_type like concat('Sales', '%%'))
                   and status not in (1, 3)
-            """)
+                  and payload not like %s
+            """, ("%" + str(item2) + "%",))
             inv_undelivered = cur.fetchone()[0]
             cur.execute("select count(*) from construction_accessory_ledger where order_id = %s",
                         (order_g,))

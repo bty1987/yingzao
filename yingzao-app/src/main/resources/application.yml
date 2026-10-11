@@ -15,10 +15,10 @@ spring:
     # 版本号分段约定:core 100-199,addon 按码段对齐(customer 200+,quotation 400+,decoration 500+,
     # construction 600+,basedata 700+,payment 800+,example 900+,market 1000+,sales 1100+,
     # inventory 1200+,balance 1300+,customerprofile 1400+)
-    locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile, classpath:db/migration/example, classpath:db/migration/basedata, classpath:db/migration/payment, classpath:db/migration/decoration, classpath:db/migration/quotation, classpath:db/migration/construction, classpath:db/migration/inventory
+    locations: classpath:db/migration/core, classpath:db/migration/customer, classpath:db/migration/customerprofile, classpath:db/migration/example, classpath:db/migration/basedata, classpath:db/migration/payment, classpath:db/migration/decoration, classpath:db/migration/quotation, classpath:db/migration/construction, classpath:db/migration/inventory, classpath:db/migration/sales
   messages:
     # 各 addon 独立 basename,避免 jar 内同名资源冲突
-    basename: i18n/messages,i18n/customer,i18n/customerprofile,i18n/example,i18n/basedata,i18n/payment,i18n/decoration,i18n/quotation,i18n/construction,i18n/inventory
+    basename: i18n/messages,i18n/customer,i18n/customerprofile,i18n/example,i18n/basedata,i18n/payment,i18n/decoration,i18n/quotation,i18n/construction,i18n/inventory,i18n/sales
     encoding: UTF-8
   jackson:
     default-property-inclusion: non_null
@@ -26,7 +26,7 @@ spring:
 yingzao:
   # 启用的插件清单(编译期装配,未列出的 addon bean 不装配)
   addons:
-    enabled: customer,customerprofile,example,basedata,payment,decoration,quotation,construction,inventory
+    enabled: customer,customerprofile,example,basedata,payment,decoration,quotation,construction,inventory,sales
   events:
     # 事件总线三件套调参:重试退避基数(秒,指数翻倍)与上限;max-retries 超限转死信
     backoff-seconds: ${YINGZAO_EVENTS_BACKOFFSECONDS:60}

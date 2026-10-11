@@ -59,6 +59,7 @@ public class ConstructionService {
     public static final int CODE_PROFILE_ILLEGAL = 240016;
     public static final int CODE_IGNITE_NO_NODES = 240017;
     public static final int CODE_PROFILE_REQUIRED = 240018;
+    public static final int CODE_SALES_RATIO = 240025;
 
     // ---- 状态机 ----
     /** 放线:0 排队 → 1 已排期 → 2 成功 / 3 失败(失败可重申)。 */
@@ -96,7 +97,7 @@ public class ConstructionService {
     }
 
     private record ScheduleRow(long id, long orderId, String nodeName, int sort, int precheck, int postcheck,
-            int status, int checkout, Integer workStatus) {
+            int status, int checkout, int stacheck, int fincheck, Integer workStatus) {
     }
 
     private final JdbcTemplate jdbc;
@@ -105,11 +106,13 @@ public class ConstructionService {
     private final DecorationApi decorations;
     private final QuotationApi quotations;
     private final PaymentApi payments;
+    private final com.yingzao.addons.api.SalesApi sales;
     private final ConstructionTeamService teams;
     private final ConstructionProfileService profiles;
 
     public ConstructionService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
             DecorationApi decorations, QuotationApi quotations, PaymentApi payments,
+            com.yingzao.addons.api.SalesApi sales,
             ConstructionTeamService teams, ConstructionProfileService profiles) {
         this.jdbc = jdbc;
         this.messages = messages;
@@ -117,6 +120,7 @@ public class ConstructionService {
         this.decorations = decorations;
         this.quotations = quotations;
         this.payments = payments;
+        this.sales = sales;
         this.teams = teams;
         this.profiles = profiles;
     }
@@ -393,6 +397,7 @@ public class ConstructionService {
         ScheduleRow row = loadSchedule(orgId, scheduleId);
         require(row.status() == SC_INIT, CODE_BAD_STATE, "construction.state.illegal");
         checkGate(orgId, row, row.precheck(), operatorId);
+        checkSalesGate(orgId, row, row.stacheck(), operatorId);
         int updated = jdbc.update(
                 "update construction_schedule set status = ?, start_time = now() where id = ? and status = ?",
                 SC_BEGIN, scheduleId, SC_INIT);
@@ -409,6 +414,7 @@ public class ConstructionService {
         require(row.status() == SC_BEGIN || row.status() == SC_SALARY, CODE_BAD_STATE,
                 "construction.state.illegal");
         checkGate(orgId, row, row.postcheck(), operatorId);
+        checkSalesGate(orgId, row, row.fincheck(), operatorId);
         int updated = jdbc.update(
                 "update construction_schedule set status = ?, end_time = now() where id = ? and status = ?",
                 SC_FINISH, scheduleId, row.status());
@@ -514,6 +520,18 @@ public class ConstructionService {
         if (ratio < threshold) {
             throw new BizException(CODE_PAY_RATIO,
                     msgArgs("construction.gate.payRatio", row.nodeName(), threshold, ratio));
+        }
+    }
+
+    /** 销售款比例闸(开工 stacheck/完工 fincheck):经 SalesApi 契约聚合装修单名下销售款进度。 */
+    private void checkSalesGate(long orgId, ScheduleRow row, int threshold, long operatorId) {
+        if (threshold <= 0 || row.checkout() == CHECKOUT_ON) {
+            return;
+        }
+        long ratio = sales.collectedRatio(orgId, row.orderId());
+        if (ratio < threshold) {
+            throw new BizException(CODE_SALES_RATIO,
+                    msgArgs("construction.gate.salesRatio", row.nodeName(), threshold, ratio));
         }
     }
 
@@ -760,11 +778,13 @@ public class ConstructionService {
 
     private ScheduleRow loadSchedule(long orgId, long scheduleId) {
         List<ScheduleRow> rows = jdbc.query("""
-                select id, order_id, node_name, sort, precheck, postcheck, status, checkout, work_status
+                select id, order_id, node_name, sort, precheck, postcheck, status, checkout,
+                       stacheck, fincheck, work_status
                 from construction_schedule where id = ? and org_id = ?
                 """, (rs, rowNum) -> new ScheduleRow(rs.getLong("id"), rs.getLong("order_id"),
                 rs.getString("node_name"), rs.getInt("sort"), rs.getInt("precheck"), rs.getInt("postcheck"),
-                rs.getInt("status"), rs.getInt("checkout"), rs.getInt("work_status")),
+                rs.getInt("status"), rs.getInt("checkout"), rs.getInt("stacheck"), rs.getInt("fincheck"),
+                rs.getObject("work_status") == null ? null : rs.getInt("work_status")),
                 scheduleId, orgId);
         require(!rows.isEmpty(), CODE_NOT_FOUND, "construction.notfound");
         return rows.get(0);

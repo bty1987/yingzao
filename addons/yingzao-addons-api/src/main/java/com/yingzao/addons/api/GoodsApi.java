@@ -16,10 +16,17 @@ public interface GoodsApi {
     Optional<SkuAttrSummary> querySkuAttr(long orgId, long goodsId, long attrId);
 
     record GoodsSummary(long goodsId, String no, String name, String unit, int type,
-                        long selling, int status) {
+                        long selling, int status, long brandId, String brandName) {
     }
 
     /** attrType:0 颜色 / 1 规格。 */
     record SkuAttrSummary(long attrId, int attrType, String value, int status) {
     }
+
+    /** 套餐成员行(只读);num = 单份套餐内成员件数(千分位,×1000 = 1 件)。 */
+    record PackageItem(Long itemId, long goodsId, long num) {
+    }
+
+    /** 套餐成员清单(只读);套餐商品无成员配置时返回空列表(消费方按普通商品降级落单)。 */
+    java.util.List<PackageItem> listPackageItems(long orgId, long packageGoodsId);
 }

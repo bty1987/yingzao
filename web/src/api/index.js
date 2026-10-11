@@ -292,3 +292,33 @@ export const inboundPurchase = (id, data) => http.post(`/api/inventory/purchases
 export const removePurchaseItem = (id, itemId) =>
   http.delete(`/api/inventory/purchases/${id}/items/${itemId}`)
 export const cancelPurchase = (id) => http.post(`/api/inventory/purchases/${id}/cancel`)
+
+// 主材销售(addon-sales):销售单/客户确认/结算工作台/退货/配送
+export const pageSalesOrders = (params) => http.get('/api/sales/orders', { params })
+export const fetchSalesOrder = (id) => http.get(`/api/sales/orders/${id}`)
+export const createSalesOrder = (data) => http.post('/api/sales/orders', data)
+export const updateSalesOrderItems = (id, data) => http.put(`/api/sales/orders/${id}/items`, data)
+export const generateSalesBill = (id) => http.post(`/api/sales/orders/${id}/bill`)
+export const sendSalesVerifyCode = (id, data) => http.post(`/api/sales/orders/${id}/verify-code`, data)
+export const confirmSalesOrder = (id, data) => http.post(`/api/sales/orders/${id}/confirm`, data)
+export const finishSalesOrder = (id) => http.post(`/api/sales/orders/${id}/finish`)
+export const terminateSalesOrder = (id) => http.post(`/api/sales/orders/${id}/terminate`)
+export const pageSalesSettlements = (params) => http.get('/api/sales/settlements', { params })
+export const updateSettlementVbalance = (id, data) =>
+  http.put(`/api/sales/settlements/${id}/vbalance`, data)
+export const vpostSettlement = (id) => http.post(`/api/sales/settlements/${id}/vpost`)
+export const updateSettlementPbalance = (id, data) =>
+  http.put(`/api/sales/settlements/${id}/pbalance`, data)
+export const postSettlement = (id) => http.post(`/api/sales/settlements/${id}/post`)
+export const rejectSalesSettlement = (id, data) =>
+  http.post(`/api/sales/orders/${id}/settlement-reject`, data)
+export const initiateSalesRefund = (id, data) => http.post(`/api/sales/orders/${id}/refunds`, data)
+export const pageSalesRefunds = (params) => http.get('/api/sales/refunds', { params })
+export const fetchSalesRefund = (id) => http.get(`/api/sales/refunds/${id}`)
+export const sendRefundVerifyCode = (id, data) => http.post(`/api/sales/refunds/${id}/verify-code`, data)
+export const confirmSalesRefund = (id, data) => http.post(`/api/sales/refunds/${id}/confirm`, data)
+export const createSalesDelivery = (id, data) => http.post(`/api/sales/orders/${id}/deliveries`, data)
+export const pageSalesDeliveries = (params) => http.get('/api/sales/deliveries', { params })
+export const fetchSalesDelivery = (id) => http.get(`/api/sales/deliveries/${id}`)
+export const advanceSalesDeliveryItem = (id, data) =>
+  http.post(`/api/sales/delivery-items/${id}/advance`, data)

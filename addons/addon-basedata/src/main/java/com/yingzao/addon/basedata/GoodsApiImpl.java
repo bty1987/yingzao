@@ -25,8 +25,11 @@ public class GoodsApiImpl implements GoodsApi {
     @Override
     public Optional<GoodsSummary> queryGoods(long orgId, long goodsId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select id, no, name, unit, type, selling, status
-                from basedata_goods where id = ? and org_id = ?
+                select g.id, g.no, g.name, g.unit, g.type, g.selling, g.status,
+                       b.id as brand_id, b.name as brand_name
+                from basedata_goods g
+                left join basedata_brand b on b.id = g.brand_id
+                where g.id = ? and g.org_id = ?
                 """, goodsId, orgId);
         if (rows.isEmpty()) {
             return Optional.empty();
@@ -34,7 +37,9 @@ public class GoodsApiImpl implements GoodsApi {
         Map<String, Object> row = rows.get(0);
         return Optional.of(new GoodsSummary(goodsId, (String) row.get("no"), (String) row.get("name"),
                 (String) row.get("unit"), ((Number) row.get("type")).intValue(),
-                ((Number) row.get("selling")).longValue(), ((Number) row.get("status")).intValue()));
+                ((Number) row.get("selling")).longValue(), ((Number) row.get("status")).intValue(),
+                row.get("brand_id") == null ? 0L : ((Number) row.get("brand_id")).longValue(),
+                row.get("brand_name") == null ? "" : (String) row.get("brand_name")));
     }
 
     @Override
@@ -49,5 +54,17 @@ public class GoodsApiImpl implements GoodsApi {
         Map<String, Object> row = rows.get(0);
         return Optional.of(new SkuAttrSummary(attrId, ((Number) row.get("attr_type")).intValue(),
                 (String) row.get("value"), ((Number) row.get("status")).intValue()));
+    }
+
+    @Override
+    public List<PackageItem> listPackageItems(long orgId, long packageGoodsId) {
+        return jdbc.queryForList("""
+                select id, member_goods_id, num from basedata_goods_package
+                where org_id = ? and package_goods_id = ? order by id
+                """, orgId, packageGoodsId).stream()
+                .map(row -> new PackageItem(((Number) row.get("id")).longValue(),
+                        ((Number) row.get("member_goods_id")).longValue(),
+                        ((Number) row.get("num")).longValue()))
+                .toList();
     }
 }

@@ -1,0 +1,59 @@
+addon:
+  id: sales
+  name: 主材销售
+  version: 0.1.0
+  error-code-segment: 300000
+  menus:
+    - path: /sales/orders
+      title: 销售单
+      icon: shopping-cart
+    - path: /sales/settlements
+      title: 结算工作台
+      icon: money
+    - path: /sales/deliveries
+      title: 配送履约
+      icon: van
+  dicts:
+    orderStatus:
+      - { key: '0', label: 初始 }
+      - { key: '2', label: 全退 }
+      - { key: '3', label: 倒单 }
+      - { key: '4', label: 废单 }
+      - { key: '5', label: 完结 }
+    balanceStatus:
+      - { key: '0', label: 无结 }
+      - { key: '1', label: 预结 }
+      - { key: '2', label: 厂结 }
+      - { key: '3', label: 结算 }
+    payStatus:
+      - { key: '-1', label: 未录 }
+      - { key: '0', label: 已录 }
+      - { key: '1', label: 已付 }
+      - { key: '2', label: 已确认 }
+    settleStatus:
+      - { key: '0', label: 预结 }
+      - { key: '1', label: 厂结 }
+      - { key: '2', label: 结算 }
+    settleType:
+      - { key: '0', label: 购货 }
+      - { key: '1', label: 预结退货 }
+      - { key: '2', label: 结算退货 }
+      - { key: '3', label: 定金 }
+    onetype:
+      - { key: '0', label: 正常 }
+      - { key: '2', label: 全退 }
+      - { key: '3', label: 倒单 }
+    refundStatus:
+      - { key: '3', label: 审批中 }
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已退款 }
+      - { key: '2', label: 无效 }
+    refundType:
+      - { key: '2', label: 全退 }
+      - { key: '3', label: 倒单 }
+    deliveryStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已配送 }
+      - { key: '2', label: 已审核 }
+      - { key: '3', label: 已确认 }
+      - { key: '4', label: 已完结 }

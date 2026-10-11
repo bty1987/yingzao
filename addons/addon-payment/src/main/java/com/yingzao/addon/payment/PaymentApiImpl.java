@@ -76,4 +76,10 @@ public class PaymentApiImpl implements PaymentApi {
     public void cancelBill(long orgId, long billId) {
         bills.cancel(orgId, billId);
     }
+
+    @Override
+    public long submitRefund(RefundCmd cmd) {
+        return bills.submitRefund(cmd.orgId(), cmd.billId(), cmd.applicantId(), cmd.assigneeId(),
+                cmd.reason());
+    }
 }

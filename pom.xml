@@ -23,6 +23,7 @@
         <module>addons/addon-quotation</module>
         <module>addons/addon-construction</module>
         <module>addons/addon-inventory</module>
+        <module>addons/addon-sales</module>
         <module>yingzao-app</module>
     </modules>
 
@@ -94,6 +95,11 @@
             <dependency>
                 <groupId>com.yingzao</groupId>
                 <artifactId>addon-inventory</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.yingzao</groupId>
+                <artifactId>addon-sales</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

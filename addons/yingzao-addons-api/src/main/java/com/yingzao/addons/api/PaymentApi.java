@@ -32,6 +32,17 @@ public interface PaymentApi {
     /** 作废未收款项单(仅 direction=0 且 status=0;废单/终止联动)。已收款项走退款,不在此列。 */
     void cancelBill(long orgId, long billId);
 
+    /**
+     * 对已收/已确认款项单提交退款(生成 direction=1 退款款项单 + 内核轻量审批,
+     * 通过后由 addon-payment 回写原款项并发布 PaymentRefundedEvent)。
+     * 同一原款项存在进行中退款审批时抛 270012(幂等闸)。
+     */
+    long submitRefund(RefundCmd cmd);
+
+    /** 退款提交命令:assigneeId 审批人必填(内核审批模型)。 */
+    record RefundCmd(long orgId, long billId, long applicantId, long assigneeId, String reason) {
+    }
+
     /** 款项单摘要(业务插件视角;status 口径见 addon-payment 字典)。 */
     record BillSummary(long billId, String typeCode, String typeName, int direction,
                        long amount, int sort, int status) {
