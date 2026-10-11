@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.yingzao</groupId>
+        <artifactId>yingzao</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>addon-inventory</artifactId>
+    <name>addon-inventory</name>
+    <description>库存 addon:单据即库存(12 类出入库单收敛为事件字典)+实时库存原子扣减(唯一真守卫保留)+领料单(工程额度双闸经 ConstructionAccessoryApi 契约)+外辅采购单(自闭环结算)+采购单(取消释放余量事件化);跨域计数全事件化零直写(错误码段 310000)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-addons-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

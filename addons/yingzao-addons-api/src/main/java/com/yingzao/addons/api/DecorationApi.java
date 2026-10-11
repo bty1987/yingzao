@@ -12,8 +12,13 @@ public interface DecorationApi {
     /** 装修单摘要(只读);不存在或不属本组织返回 empty。 */
     Optional<OrderSummary> queryOrder(long orgId, long orderId);
 
-    /** 装修单摘要快照(label 为房屋展示快照,与主单 house_label 同源)。 */
+    /**
+     * 装修单摘要快照(label 为房屋展示快照,与主单 house_label 同源)。
+     * status = 合同线;projectStatus = 工程线(0 未开工/1 施工中/2 竣工——工程验收后
+     * 外辅登记锁定等场景的判断依据,禁消费方直查工程表)。
+     */
     record OrderSummary(long orderId, String orderNo, String customerName, String houseLabel,
-                        int type, int status, long designerId, long salesmanId) {
+                        int type, int status, int projectStatus,
+                        long designerId, long salesmanId) {
     }
 }

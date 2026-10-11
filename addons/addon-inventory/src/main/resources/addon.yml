@@ -1,0 +1,90 @@
+addon:
+  id: inventory
+  name: 库存管理
+  version: 0.1.0
+  error-code-segment: 310000
+  menus:
+    - path: /inventory/manifests
+      title: 出入库工作台
+      icon: box
+    - path: /inventory/stocks
+      title: 库存查询
+      icon: goods
+    - path: /inventory/requisitions
+      title: 领料管理
+      icon: takeout-box
+    - path: /inventory/outsourcings
+      title: 外辅采购
+      icon: van
+    - path: /inventory/purchases
+      title: 采购入库
+      icon: shopping-cart-full
+  dicts:
+    manifestType:
+      - { key: '1', label: 进货 }
+      - { key: '2', label: 进退 }
+      - { key: '3', label: 出货 }
+      - { key: '4', label: 出返 }
+      - { key: '5', label: 调拨 }
+      - { key: '6', label: 采购入库 }
+      - { key: '7', label: 领料出库 }
+      - { key: '8', label: 领料退回 }
+      - { key: '9', label: 套合 }
+      - { key: '10', label: 套拆 }
+      - { key: '11', label: 盘盈 }
+      - { key: '12', label: 盘亏 }
+    manifestStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已确认 }
+      - { key: '2', label: 审批中 }
+      - { key: '3', label: 已驳回 }
+    requisitionStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 预出 }
+      - { key: '2', label: 已出库 }
+      - { key: '3', label: 已撤销 }
+      - { key: '4', label: 已拒绝 }
+      - { key: '6', label: 已到货 }
+    requisitionType:
+      - { key: '0', label: 普通 }
+      - { key: '1', label: 售后 }
+    outsourcingStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已分配 }
+      - { key: '2', label: 送货中 }
+      - { key: '3', label: 已到货 }
+      - { key: '4', label: 已结算 }
+      - { key: '5', label: 已完成 }
+      - { key: '6', label: 已作废 }
+    outsourcingTrackAction:
+      - { key: 'create', label: 登记 }
+      - { key: 'assign', label: 分配厂商 }
+      - { key: 'deliver', label: 送货 }
+      - { key: 'receive', label: 到货 }
+      - { key: 'balance', label: 结算 }
+      - { key: 'rejectBalance', label: 反结算 }
+      - { key: 'finish', label: 完成 }
+      - { key: 'cancel', label: 作废 }
+    yesNo:
+      - { key: '1', label: 是 }
+      - { key: '0', label: 否 }
+    loadFloor:
+      - { key: '0', label: 一层 }
+      - { key: '1', label: 二层 }
+      - { key: '-1', label: 负一 }
+      - { key: '-2', label: 负二 }
+    chargeType:
+      - { key: '0', label: 车运费 }
+      - { key: '1', label: 搬运费 }
+      - { key: '2', label: 上楼费 }
+    purchaseStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 部分入库 }
+      - { key: '2', label: 全部入库 }
+      - { key: '3', label: 已取消 }
+    warehouseStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
+    skuAttrType:
+      - { key: '0', label: 颜色 }
+      - { key: '1', label: 规格 }

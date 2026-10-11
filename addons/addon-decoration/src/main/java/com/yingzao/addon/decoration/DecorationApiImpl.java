@@ -24,7 +24,8 @@ public class DecorationApiImpl implements DecorationApi {
     @Override
     public Optional<OrderSummary> queryOrder(long orgId, long orderId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select id, order_no, customer_name, house_label, type, status, designer_id, salesman_id
+                select id, order_no, customer_name, house_label, type, status, project_status,
+                       designer_id, salesman_id
                 from decoration_order where id = ? and org_id = ?
                 """, orderId, orgId);
         if (rows.isEmpty()) {
@@ -34,7 +35,9 @@ public class DecorationApiImpl implements DecorationApi {
         return Optional.of(new OrderSummary(((Number) row.get("id")).longValue(),
                 (String) row.get("order_no"), (String) row.get("customer_name"),
                 (String) row.get("house_label"), ((Number) row.get("type")).intValue(),
-                ((Number) row.get("status")).intValue(), ((Number) row.get("designer_id")).longValue(),
+                ((Number) row.get("status")).intValue(),
+                ((Number) row.get("project_status")).intValue(),
+                ((Number) row.get("designer_id")).longValue(),
                 ((Number) row.get("salesman_id")).longValue()));
     }
 }

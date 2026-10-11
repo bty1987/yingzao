@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""营造 Yingzao 一键冒烟(2026-10-11 第 7 次运行沉淀为资产,第 8 次扩展 RBAC+多级审批,第 9 次扩展转交×多级串联)。
+"""营造 Yingzao 一键冒烟(2026-10-11 第 7 次运行沉淀为资产,第 8 次扩展 RBAC+多级审批,第 9 次扩展转交×多级串联,第 23 次扩展库存域)。
 
 覆盖:认证 → RBAC 菜单/功能点过滤 → 客源中文登记 → 手动分配 → 机会状态机 → 站内通知 → 轻量审批闭环 → 多级审批串联 → 转交×多级串联。
 前置:服务已起(docs/scripts/smoke/README.md),python ensure_users.py 已跑(smoke_all 会自动先跑)。
@@ -1361,6 +1361,390 @@ def main():
         conn.close()
     step("总线对账:construction 事件零滞留(全消费确认)", c_undelivered == 0, c_undelivered)
     step("免检留痕:轨迹在册(修老完全绕闸无痕)", checkout_tracks >= 1, checkout_tracks)
+
+    print("== 库存(addon-inventory V1:单据即库存+原子守卫+领料双闸契约+外辅+采购)==")
+    stamp_inv = time.strftime("%H%M%S")
+
+    # 插件下发:admin 见五菜单;user_b(未授权)不可见
+    addons_inv = api_ok("admin 插件下发复查", "GET", "/api/addons", tok_admin)
+    inv_addon = next((a for a in (addons_inv or []) if a.get("id") == "inventory"), None)
+    step("inventory 五菜单动态下发", bool(inv_addon)
+         and sorted(m.get("path") for m in inv_addon.get("menus") or []) == [
+             "/inventory/manifests", "/inventory/outsourcings", "/inventory/purchases",
+             "/inventory/requisitions", "/inventory/stocks"],
+         inv_addon and inv_addon.get("menus"))
+    addons_inv_b = api_ok("未授权用户插件下发", "GET", "/api/addons", tok_b)
+    step("未授权用户不可见 inventory", not any(a.get("id") == "inventory" for a in (addons_inv_b or [])),
+         addons_inv_b)
+
+    # 仓库档案:查重/停用
+    wh_main = api_ok("建主仓", "POST", "/api/inventory/warehouses", tok_admin,
+                     {"code": "M" + stamp_inv, "name": "烟测主仓" + stamp_inv})
+    wh_second = api_ok("建次仓", "POST", "/api/inventory/warehouses", tok_admin,
+                       {"code": "S" + stamp_inv, "name": "烟测次仓" + stamp_inv})
+    api_err("仓库编号重复拒绝 310011", "POST", "/api/inventory/warehouses", tok_admin,
+            {"code": "M" + stamp_inv, "name": "重复仓"}, 310011)
+    api_ok("停用次仓", "PUT", "/api/inventory/warehouses/%s" % wh_second, tok_admin, {"status": 1})
+    api_err("停用仓过账拒绝 310010", "POST", "/api/inventory/manifests", tok_admin,
+            {"type": 1, "items": [{"goodsId": goods_id, "num": 1000, "warehouseIn": wh_second}]}, 310010)
+    api_ok("恢复次仓", "PUT", "/api/inventory/warehouses/%s" % wh_second, tok_admin, {"status": 0})
+    api_ok("主仓授权给 admin", "POST", "/api/inventory/warehouses/%s/users" % wh_main, tok_admin,
+           {"userId": uid_admin})
+    api_ok("次仓授权给 admin", "POST", "/api/inventory/warehouses/%s/users" % wh_second, tok_admin,
+           {"userId": uid_admin})
+
+    # 库存商品(独立建档,避免与 basedata 段耦合)
+    goods_inv1 = api_ok("建库存商品1(水泥类,售价50元)", "POST", "/api/basedata/goods", tok_admin,
+                        {"name": "烟测水泥" + stamp_inv, "categoryId": cat_child, "brandId": brand_id,
+                         "unit": "包", "purchase": 40000, "selling": 50000})
+    goods_inv2 = api_ok("建库存商品2(乳胶漆,售价88元)", "POST", "/api/basedata/goods", tok_admin,
+                        {"name": "烟测乳胶漆" + stamp_inv, "categoryId": cat_child, "brandId": brand_id,
+                         "unit": "桶", "purchase": 70000, "selling": 88000})
+    if not all([wh_main, wh_second, goods_inv1, goods_inv2]):
+        return finish()
+
+    # 进货守卫族(修老恒假守卫 size()<0 与负数击穿)
+    api_err("空明细进货拒绝 310030", "POST", "/api/inventory/manifests", tok_admin,
+            {"type": 1, "items": []}, 310030)
+    api_err("负数数量拒绝 310031", "POST", "/api/inventory/manifests", tok_admin,
+            {"type": 1, "items": [{"goodsId": goods_inv1, "num": -1000, "warehouseIn": wh_main}]}, 310031)
+    api_err("商品不存在拒绝 310020", "POST", "/api/inventory/manifests", tok_admin,
+            {"type": 1, "items": [{"goodsId": 99999999, "num": 1000, "warehouseIn": wh_main}]}, 310020)
+    cg_id = api_ok("进货单(水泥50包x40元+漆20桶x70元,建单即过账)", "POST", "/api/inventory/manifests",
+                   tok_admin, {"type": 1, "items": [
+                       {"goodsId": goods_inv1, "num": 50000, "price": 40000, "warehouseIn": wh_main},
+                       {"goodsId": goods_inv2, "num": 20000, "price": 70000, "warehouseIn": wh_main}],
+                       "remark": "期初进货"})
+    if cg_id is None:
+        return finish()
+    cg_det = api_ok("进货单详情", "GET", "/api/inventory/manifests/%s" % cg_id, tok_admin)
+    step("单号CG前缀+初始态+两行明细", bool(cg_det) and str(cg_det.get("code", "")).startswith("CG")
+         and cg_det.get("status") == 0 and len(cg_det.get("items") or []) == 2, cg_det)
+    stocks0 = api_ok("库存查询(授权仓过滤)", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv1_rows = [x for x in (stocks0 or {}).get("rows", []) if x.get("goods_id") == goods_inv1]
+    step("水泥库存行 50.000(主仓)", len(inv1_rows) == 1 and inv1_rows[0].get("warehouse_id") == wh_main
+         and inv1_rows[0].get("num") == 50000, inv1_rows)
+    stocks_wh = api_ok("按次仓过滤查询", "GET",
+                       "/api/inventory/stocks?page=1&size=50&warehouseId=%s" % wh_second, tok_admin)
+    step("次仓无库存(过滤生效)", (stocks_wh or {}).get("total", -1) == 0, stocks_wh)
+
+    api_ok("进货确认(账面锁定)", "POST", "/api/inventory/manifests/%s/confirm" % cg_id, tok_admin)
+    cg_first_item = ((cg_det.get("items") or [{}])[0]).get("id")
+    api_err("已确认删行拒绝 310002", "DELETE",
+            "/api/inventory/manifests/%s/items/%s" % (cg_id, cg_first_item), tok_admin, None, 310002)
+
+    # 出货守卫族 + 并发超扣(唯一真守卫)
+    xg1_id = api_ok("出货单(水泥20包)", "POST", "/api/inventory/manifests", tok_admin,
+                    {"type": 3, "items": [{"goodsId": goods_inv1, "num": 20000, "warehouseOut": wh_main}]})
+    if xg1_id is None:
+        return finish()
+    stocks1 = api_ok("出库后库存复查", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv1_after = [x for x in (stocks1 or {}).get("rows", []) if x.get("goods_id") == goods_inv1]
+    step("水泥库存 30.000(原子扣减)", inv1_after and inv1_after[0].get("num") == 30000, inv1_after)
+    api_err("超扣拒绝 310022", "POST", "/api/inventory/manifests", tok_admin,
+            {"type": 3, "items": [{"goodsId": goods_inv1, "num": 31000, "warehouseOut": wh_main}]}, 310022)
+
+    xg_results = []
+
+    def _concurrent_xg():
+        status_c, res_c = call("POST", "/api/inventory/manifests", tok_admin,
+                               {"type": 3, "items": [{"goodsId": goods_inv1, "num": 20000,
+                                                      "warehouseOut": wh_main}]})
+        xg_results.append((status_c, res_c))
+
+    threads_inv = [threading.Thread(target=_concurrent_xg), threading.Thread(target=_concurrent_xg)]
+    for t in threads_inv:
+        t.start()
+    for t in threads_inv:
+        t.join()
+    ok_win = sum(1 for st, rs in xg_results if st == 200 and isinstance(rs, dict) and rs.get("code") == 0)
+    ok_lose = sum(1 for st, rs in xg_results if isinstance(rs, dict) and rs.get("code") == 310022)
+    step("两并发出货20包只成功一次(30.000 库存不超扣)", ok_win == 1 and ok_lose == 1, xg_results)
+    xg2_id = next((rs.get("data") for st, rs in xg_results
+                   if st == 200 and isinstance(rs, dict) and rs.get("code") == 0), None)
+    if xg2_id is None:
+        return finish()
+    api_ok("并发获胜单确认(冲销前置:账面锁定)", "POST",
+           "/api/inventory/manifests/%s/confirm" % xg2_id, tok_admin)
+    stocks2 = api_ok("并发后库存复查", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv1_c = [x for x in (stocks2 or {}).get("rows", []) if x.get("goods_id") == goods_inv1]
+    step("水泥库存 10.000", inv1_c and inv1_c[0].get("num") == 10000, inv1_c)
+
+    # 出返(XB):源单 surplus 原子守卫
+    xg2_det = api_ok("并发获胜出货单详情", "GET", "/api/inventory/manifests/%s" % xg2_id, tok_admin)
+    xb_src_item = ((xg2_det or {}).get("items") or [{}])[0]
+    api_err("错型源单拒绝 310003", "POST", "/api/inventory/manifests/reversals", tok_admin,
+            {"type": 4, "sourceManifestId": cg_id,
+             "lines": [{"sourceItemId": xb_src_item.get("id"), "num": 1000}]}, 310003)
+    xb1 = api_ok("出返5包(退回原出库仓)", "POST", "/api/inventory/manifests/reversals", tok_admin,
+                 {"type": 4, "sourceManifestId": xg2_id,
+                  "lines": [{"sourceItemId": xb_src_item.get("id"), "num": 5000}]})
+    if xb1 is None:
+        return finish()
+    xb_det = api_ok("出返单详情(落单即确认)", "GET", "/api/inventory/manifests/%s" % xb1, tok_admin)
+    step("XB已确认+入库仓=原出库仓", bool(xb_det) and xb_det.get("status") == 1
+         and ((xb_det.get("items") or [{}])[0]).get("warehouse_in") == wh_main, xb_det)
+    src_item_after = ((api_ok("源单复查surplus", "GET", "/api/inventory/manifests/%s" % xg2_id,
+                              tok_admin) or {}).get("items") or [{}])[0]
+    step("源明细剩余可冲 15.000", src_item_after.get("surplus") == 15000, src_item_after)
+    api_err("超冲拒绝 310033", "POST", "/api/inventory/manifests/reversals", tok_admin,
+            {"type": 4, "sourceManifestId": xg2_id,
+             "lines": [{"sourceItemId": xb_src_item.get("id"), "num": 16000}]}, 310033)
+    api_ok("出返余量15包全部退回", "POST", "/api/inventory/manifests/reversals", tok_admin,
+           {"type": 4, "sourceManifestId": xg2_id,
+            "lines": [{"sourceItemId": xb_src_item.get("id"), "num": 15000}]})
+    api_err("surplus 归零后再冲拒绝 310033", "POST", "/api/inventory/manifests/reversals", tok_admin,
+            {"type": 4, "sourceManifestId": xg2_id,
+             "lines": [{"sourceItemId": xb_src_item.get("id"), "num": 1000}]}, 310033)
+    stocks3 = api_ok("出返后库存复查", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv1_xb = [x for x in (stocks3 or {}).get("rows", []) if x.get("goods_id") == goods_inv1]
+    step("水泥库存回到 30.000(10+20退回)", inv1_xb and inv1_xb[0].get("num") == 30000, inv1_xb)
+
+    # 进退(CR)
+    cg_items = (api_ok("源进货单复查", "GET", "/api/inventory/manifests/%s" % cg_id,
+                       tok_admin) or {}).get("items") or []
+    cg_item1 = next((i for i in cg_items if i.get("goods_id") == goods_inv1), None)
+    if cg_item1 is None:
+        step("CG明细可反查", False, cg_items)
+        return finish()
+    api_ok("进退10包(退出原入库仓,单价随源单)", "POST", "/api/inventory/manifests/reversals",
+           tok_admin, {"type": 2, "sourceManifestId": cg_id,
+                       "lines": [{"sourceItemId": cg_item1.get("id"), "num": 10000}]})
+    api_err("再退超量拒绝 310033", "POST", "/api/inventory/manifests/reversals", tok_admin,
+            {"type": 2, "sourceManifestId": cg_id,
+             "lines": [{"sourceItemId": cg_item1.get("id"), "num": 41000}]}, 310033)
+
+    # 调拨(内核轻量审批:审批期不占库存,通过过账/驳回置3)
+    api_err("同仓调拨拒绝 310034", "POST", "/api/inventory/manifests/transfers", tok_admin,
+            {"lines": [{"goodsId": goods_inv2, "num": 1000, "warehouseOut": wh_main,
+                        "warehouseIn": wh_main}], "assigneeId": uid_admin}, 310034)
+    db1 = api_ok("调拨申请(漆5桶 主仓到次仓,审批人admin)", "POST", "/api/inventory/manifests/transfers",
+                 tok_admin, {"lines": [{"goodsId": goods_inv2, "num": 5000, "warehouseOut": wh_main,
+                                        "warehouseIn": wh_second}], "assigneeId": uid_admin,
+                             "remark": "门店补货"})
+    if db1 is None:
+        return finish()
+    db_det = api_ok("调拨单详情(审批中)", "GET", "/api/inventory/manifests/%s" % db1, tok_admin)
+    step("DB状态2审批中+挂审批单", db_det and db_det.get("status") == 2
+         and bool(db_det.get("approval_id")), db_det)
+    stocks_mid = api_ok("审批期库存不变", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv2_mid = [x for x in (stocks_mid or {}).get("rows", []) if x.get("goods_id") == goods_inv2]
+    step("漆主仓仍 20.000(审批期不占库存)", inv2_mid and inv2_mid[0].get("num") == 20000, inv2_mid)
+    api_ok("调拨审批通过", "POST", "/api/approvals/%s/approve" % db_det.get("approval_id"), tok_admin,
+           {"comment": "同意调拨"})
+    time.sleep(3)
+    db_det2 = api_ok("调拨单回读", "GET", "/api/inventory/manifests/%s" % db1, tok_admin)
+    step("DB已确认(过账)", db_det2 and db_det2.get("status") == 1, db_det2)
+    stocks_db = api_ok("调拨后库存复查", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv2_db = [x for x in (stocks_db or {}).get("rows", []) if x.get("goods_id") == goods_inv2]
+    ok_move = sorted([(r.get("warehouse_id"), r.get("num")) for r in inv2_db]) == \
+        sorted([(wh_main, 15000), (wh_second, 5000)])
+    step("漆 主仓15.000/次仓5.000(双向过账)", ok_move, inv2_db)
+
+    db2 = api_ok("第二笔调拨申请(漆3桶)", "POST", "/api/inventory/manifests/transfers", tok_admin,
+                 {"lines": [{"goodsId": goods_inv2, "num": 3000, "warehouseOut": wh_main,
+                             "warehouseIn": wh_second}], "assigneeId": uid_admin})
+    db2_det = api_ok("第二笔详情", "GET", "/api/inventory/manifests/%s" % db2, tok_admin)
+    api_ok("调拨审批驳回", "POST", "/api/approvals/%s/reject" % db2_det.get("approval_id"), tok_admin,
+           {"comment": "暂不调"})
+    time.sleep(3)
+    db2_det2 = api_ok("被驳调拨单回读", "GET", "/api/inventory/manifests/%s" % db2, tok_admin)
+    step("DB驳回置3+库存零改动", db2_det2 and db2_det2.get("status") == 3, db2_det2)
+
+    # 盘盈/盘亏(事件闭环)
+    api_ok("盘盈漆2桶(次仓)", "POST", "/api/inventory/manifests/adjustments", tok_admin,
+           {"type": 11, "items": [{"goodsId": goods_inv2, "warehouseId": wh_second, "num": 2000}]})
+    api_err("盘亏超量拒绝 310022", "POST", "/api/inventory/manifests/adjustments", tok_admin,
+            {"type": 12, "items": [{"goodsId": goods_inv2, "warehouseId": wh_second, "num": 99999}]}, 310022)
+    api_ok("盘亏漆1桶", "POST", "/api/inventory/manifests/adjustments", tok_admin,
+           {"type": 12, "items": [{"goodsId": goods_inv2, "warehouseId": wh_second, "num": 1000}]})
+    stocks_cp = api_ok("盘盈亏后库存复查", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv2_cp = [x for x in (stocks_cp or {}).get("rows", [])
+               if x.get("goods_id") == goods_inv2 and x.get("warehouse_id") == wh_second]
+    step("次仓漆 6.000(5+2-1)", inv2_cp and inv2_cp[0].get("num") == 6000, inv2_cp)
+
+    # 领料(工程额度双闸经 ConstructionAccessoryApi 契约;靶单 order_g 已点火未竣工)
+    api_ok("order_g 辅料总额度压至100元", "PUT",
+           "/api/construction/orders/%s/accessory-limit" % order_g, tok_admin,
+           {"accessoryLimit": 100000})
+    api_err("额度总额超限拒绝 240020", "POST", "/api/inventory/requisitions", tok_admin,
+            {"orderId": order_g, "type": 0,
+             "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 10000}]}, 240020)
+    api_ok("order_g 登记水泥 per-gid 闸5包", "POST",
+           "/api/construction/orders/%s/accessory-quotas" % order_g, tok_admin,
+           {"goodsId": goods_inv1, "checkup": 1, "numLimit": 5000})
+    api_ok("order_g 额度恢复无上限", "PUT", "/api/construction/orders/%s/accessory-limit" % order_g,
+           tok_admin, {"accessoryLimit": 999999000})
+    api_err("per-gid 登记超限拒绝 240021", "POST", "/api/inventory/requisitions", tok_admin,
+            {"orderId": order_g, "type": 0,
+             "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 10000}]}, 240021)
+    rq1 = api_ok("领料登记(水泥3包,150000厘,服务端计价)", "POST", "/api/inventory/requisitions", tok_admin,
+                 {"orderId": order_g, "type": 0,
+                  "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 3000}],
+                  "comment": "瓦工领料"})
+    if rq1 is None:
+        return finish()
+    rq1_det = api_ok("领料单详情", "GET", "/api/inventory/requisitions/%s" % rq1, tok_admin)
+    step("RQ单号+总额150000厘(服务端Σselling×num)", bool(rq1_det)
+         and str(rq1_det.get("code", "")).startswith("RQ") and rq1_det.get("total") == 150000, rq1_det)
+    acc1 = api_ok("施工侧额度台账回读", "GET", "/api/construction/orders/%s/accessory" % order_g, tok_admin)
+    step("已领 150000厘/3包(consume 记账)",
+         acc1 and acc1.get("accessoryConsumedTotal") == 150000
+         and any(q.get("consumed_num") == 3000 for q in (acc1.get("quotas") or [])), acc1)
+    api_ok("领料撤销(仅初始态,额度回退)", "POST", "/api/inventory/requisitions/%s/cancel" % rq1, tok_admin)
+    acc2 = api_ok("撤销后额度归零(refund 回退)", "GET",
+                  "/api/construction/orders/%s/accessory" % order_g, tok_admin)
+    step("consumed_total 归 0", acc2 and acc2.get("accessoryConsumedTotal") == 0, acc2)
+    api_err("撤销单再出库拒绝 310002", "POST", "/api/inventory/requisitions/%s/outbound" % rq1,
+            tok_admin, None, 310002)
+
+    rq2 = api_ok("再领水泥3包", "POST", "/api/inventory/requisitions", tok_admin,
+                 {"orderId": order_g, "type": 0,
+                  "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 3000}]})
+    api_ok("预出", "POST", "/api/inventory/requisitions/%s/preout" % rq2, tok_admin)
+    api_ok("出库(AS货单派生+库存扣减)", "POST", "/api/inventory/requisitions/%s/outbound" % rq2, tok_admin)
+    rq2_det = api_ok("出库后详情", "GET", "/api/inventory/requisitions/%s" % rq2, tok_admin)
+    step("状态2已出库+联动AS货单在册", rq2_det and rq2_det.get("status") == 2
+         and any(m.get("type") == 7 for m in (rq2_det.get("manifests") or [])), rq2_det)
+    api_ok("到货", "POST", "/api/inventory/requisitions/%s/arrive" % rq2, tok_admin)
+    rq2_item_id = ((rq2_det.get("items") or [{}])[0]).get("id")
+    api_err("退回超出库量拒绝 310043", "POST", "/api/inventory/requisitions/%s/returns" % rq2, tok_admin,
+            {"lines": [{"itemId": rq2_item_id, "num": 4000}]}, 310043)
+    api_ok("退回2包(AR货单+额度回冲)", "POST", "/api/inventory/requisitions/%s/returns" % rq2, tok_admin,
+           {"lines": [{"itemId": rq2_item_id, "num": 2000}]})
+    acc3 = api_ok("退回后额度台账", "GET", "/api/construction/orders/%s/accessory" % order_g, tok_admin)
+    step("已领回落 1包/50000厘", acc3 and acc3.get("accessoryConsumedTotal") == 50000
+         and any(q.get("consumed_num") == 1000 for q in (acc3.get("quotas") or [])), acc3)
+    rq3 = api_ok("售后领料5包(跳过额度联动)", "POST", "/api/inventory/requisitions", tok_admin,
+                 {"orderId": order_g, "type": 1,
+                  "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 5000}]})
+    acc4 = api_ok("售后单不占额度", "GET", "/api/construction/orders/%s/accessory" % order_g, tok_admin)
+    step("consumed_total 仍 50000", acc4 and acc4.get("accessoryConsumedTotal") == 50000, acc4)
+    api_ok("售后单直接出库", "POST", "/api/inventory/requisitions/%s/outbound" % rq3, tok_admin)
+    stocks_rq = api_ok("领料链库存复查", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv1_rq = [x for x in (stocks_rq or {}).get("rows", []) if x.get("goods_id") == goods_inv1]
+    # 30(出返后) -10(CR进退) -3(rq2出库) +2(rq2退回) -5(售后出库) = 14
+    step("水泥库存 14.000(进退/出库/退回/售后全链过账)", inv1_rq and inv1_rq[0].get("num") == 14000, inv1_rq)
+
+    # 外辅(向厂商定材辅料;order_d 已竣工=锁定反例,order_g 施工中可登记)
+    api_err("工程已验收登记拒绝 310051", "POST", "/api/inventory/outsourcings", tok_admin,
+            {"orderId": order_d, "items": [{"goodsId": goods_inv1, "num": 1000}]}, 310051)
+    os1 = api_ok("外辅登记(水泥4包,原结算价60元,超阶)", "POST", "/api/inventory/outsourcings", tok_admin,
+                 {"orderId": order_g, "items": [{"goodsId": goods_inv1, "num": 4000, "rbalance": 60000}],
+                  "isExceed": 1, "loadFloor": -1, "remark": "封闭阳台定材"})
+    if os1 is None:
+        return finish()
+    os_det = api_ok("外辅单详情", "GET", "/api/inventory/outsourcings/%s" % os1, tok_admin)
+    os_item_id = ((os_det.get("items") or [{}])[0]).get("id")
+    ok_os = os_det and str(os_det.get("code", "")).startswith("OS") and os_det.get("status") == 0 \
+        and os_det.get("total") == 200000 and os_det.get("rbalance") == 240000
+    step("OS单号+商品总额20万厘(实价50x40)+结算额24万厘(60x40)", ok_os, os_det)
+    api_err("未分配不可送货 310002", "POST", "/api/inventory/outsourcings/%s/deliver" % os1, tok_admin,
+            {"lines": [{"itemId": os_item_id, "num": 1000}]}, 310002)
+    api_ok("分配厂商", "POST", "/api/inventory/outsourcings/%s/assign" % os1, tok_admin,
+           {"supplierName": "鑫旺定制" + stamp_inv, "supplierPhone": "13900001111"})
+    api_err("送货超申请拒绝 310052", "POST", "/api/inventory/outsourcings/%s/deliver" % os1, tok_admin,
+            {"lines": [{"itemId": os_item_id, "num": 5000}]}, 310052)
+    api_ok("送货3包", "POST", "/api/inventory/outsourcings/%s/deliver" % os1, tok_admin,
+           {"lines": [{"itemId": os_item_id, "num": 3000}]})
+    api_err("到货超送货拒绝 310053", "POST", "/api/inventory/outsourcings/%s/receive" % os1, tok_admin,
+            {"lines": [{"itemId": os_item_id, "num": 4000}]}, 310053)
+    api_ok("到货3包", "POST", "/api/inventory/outsourcings/%s/receive" % os1, tok_admin,
+           {"lines": [{"itemId": os_item_id, "num": 3000}]})
+    api_ok("收费明细(车运费100元x2+超阶浮动50元参与计价,服务端公式重算)", "POST",
+           "/api/inventory/outsourcings/%s/charges" % os1, tok_admin,
+           {"charges": [{"itemId": os_item_id, "name": "车运费",
+                         "price": 100000, "surplus": 50000, "num": 2}]})
+    os_det2 = api_ok("收费后回读", "GET", "/api/inventory/outsourcings/%s" % os1, tok_admin)
+    step("费用300元回写单头(charge=rcharge,超阶公式(100+50)x2)",
+         os_det2 and os_det2.get("charge") == 300000 and os_det2.get("rcharge") == 300000
+         and any(i.get("charge") == 300000 for i in (os_det2.get("items") or [])), os_det2)
+    api_ok("结算", "POST", "/api/inventory/outsourcings/%s/balance" % os1, tok_admin)
+    api_err("作废仅到货前 310054(已结算)", "POST", "/api/inventory/outsourcings/%s/cancel" % os1,
+            tok_admin, {"remark": "迟了"}, 310054)
+    api_ok("反结算(4到3,结算字段复位)", "POST", "/api/inventory/outsourcings/%s/reject-balance" % os1,
+           tok_admin)
+    os_det3 = api_ok("反结算后回读", "GET", "/api/inventory/outsourcings/%s" % os1, tok_admin)
+    step("回到已到货3", os_det3 and os_det3.get("status") == 3, os_det3)
+    api_ok("再结算", "POST", "/api/inventory/outsourcings/%s/balance" % os1, tok_admin)
+    api_ok("完成(5态,补老字典缺失终态)", "POST", "/api/inventory/outsourcings/%s/finish" % os1, tok_admin)
+    os_det4 = api_ok("完成后回读", "GET", "/api/inventory/outsourcings/%s" % os1, tok_admin)
+    step("状态5已完成+轨迹在册", os_det4 and os_det4.get("status") == 5
+         and len(os_det4.get("tracks") or []) >= 5, os_det4)
+    os2 = api_ok("第二张外辅单(漆1桶)", "POST", "/api/inventory/outsourcings", tok_admin,
+                 {"orderId": order_g, "items": [{"goodsId": goods_inv2, "num": 1000}]})
+    api_ok("初始态作废", "POST", "/api/inventory/outsourcings/%s/cancel" % os2, tok_admin,
+           {"remark": "客户取消"})
+    api_err("已作废不可操作 310055", "POST", "/api/inventory/outsourcings/%s/assign" % os2, tok_admin,
+            {"supplierName": "任何人"}, 310055)
+
+    # 采购(分批入库+取消释放事件化)
+    po1 = api_ok("采购建单(水泥10包x45元)", "POST", "/api/inventory/purchases", tok_admin,
+                 {"supplierName": "水泥直供" + stamp_inv,
+                  "items": [{"goodsId": goods_inv1, "num": 10000, "inprice": 45000}]})
+    if po1 is None:
+        return finish()
+    po_det = api_ok("采购单详情取明细", "GET", "/api/inventory/purchases/%s" % po1, tok_admin)
+    po_item = ((po_det.get("items") or [{}])[0]).get("id")
+    api_err("入库超余量拒绝 310061", "POST", "/api/inventory/purchases/%s/inbound" % po1,
+            tok_admin, {"warehouseId": wh_main, "lines": [{"itemId": po_item, "num": 11000}]}, 310061)
+    api_ok("分批入库4包(主仓)", "POST", "/api/inventory/purchases/%s/inbound" % po1, tok_admin,
+           {"warehouseId": wh_main, "lines": [{"itemId": po_item, "num": 4000}]})
+    po_det2 = api_ok("部分入库回读", "GET", "/api/inventory/purchases/%s" % po1, tok_admin)
+    step("状态1部分入库+余量6包+PU货单在册", po_det2 and po_det2.get("status") == 1
+         and ((po_det2.get("items") or [{}])[0]).get("surplus") == 6000
+         and any(m.get("type") == 6 for m in (po_det2.get("manifests") or [])), po_det2)
+    api_ok("余量6包入库", "POST", "/api/inventory/purchases/%s/inbound" % po1, tok_admin,
+           {"warehouseId": wh_main, "lines": [{"itemId": po_item, "num": 6000}]})
+    po_det3 = api_ok("全部入库回读", "GET", "/api/inventory/purchases/%s" % po1, tok_admin)
+    step("状态2全部入库(Σsurplus==0 自动判定)", po_det3 and po_det3.get("status") == 2
+         and bool(po_det3.get("inbound_at")), po_det3)
+    api_err("全部入库再操作拒绝 310062", "POST", "/api/inventory/purchases/%s/inbound" % po1, tok_admin,
+            {"warehouseId": wh_main, "lines": [{"itemId": po_item, "num": 1000}]}, 310062)
+    stocks_po = api_ok("采购入库库存复查", "GET", "/api/inventory/stocks?page=1&size=50", tok_admin)
+    inv1_po = [x for x in (stocks_po or {}).get("rows", []) if x.get("goods_id") == goods_inv1]
+    step("水泥库存 24.000(14+10采购入库)", inv1_po and inv1_po[0].get("num") == 24000, inv1_po)
+
+    po2 = api_ok("第二张采购单(漆3桶)", "POST", "/api/inventory/purchases", tok_admin,
+                 {"items": [{"goodsId": goods_inv2, "num": 3000}]})
+    api_ok("取消采购(余量释放走事件)", "POST", "/api/inventory/purchases/%s/cancel" % po2, tok_admin)
+    po2_det = api_ok("取消单复查", "GET", "/api/inventory/purchases/%s" % po2, tok_admin)
+    po2_item = ((po2_det.get("items") or [{}])[0]).get("id")
+    api_err("已取消不可操作 310063", "POST", "/api/inventory/purchases/%s/inbound" % po2, tok_admin,
+            {"warehouseId": wh_main, "lines": [{"itemId": po2_item, "num": 1000}]}, 310063)
+    po3 = api_ok("第三张采购单(删项链)", "POST", "/api/inventory/purchases", tok_admin,
+                 {"items": [{"goodsId": goods_inv2, "num": 2000}]})
+    po3_det = api_ok("第三张详情", "GET", "/api/inventory/purchases/%s" % po3, tok_admin)
+    api_ok("初始态删项(释放余量)", "DELETE", "/api/inventory/purchases/%s/items/%s" % (
+        po3, ((po3_det.get("items") or [{}])[0]).get("id")), tok_admin)
+    ev_pc = api_ok("采购变更事件查询", "GET",
+                   "/api/events?eventType=StockPurchaseChangedEvent&status=1&page=1&size=10", tok_admin)
+    step("StockPurchaseChanged 消费行存在(cancel+itemRemoved)",
+         bool(ev_pc) and ev_pc.get("total", 0) >= 2, ev_pc)
+
+    # 对账:全域事件零滞留 + 额度流水 + 单号计数器
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select count(*) from yz_event_task
+                where (event_type like concat('Stock', '%')
+                       or event_type like concat('Construction', '%')
+                       or event_type like concat('Decoration', '%')
+                       or event_type like concat('Payment', '%'))
+                  and status not in (1, 3)
+            """)
+            inv_undelivered = cur.fetchone()[0]
+            cur.execute("select count(*) from construction_accessory_ledger where order_id = %s",
+                        (order_g,))
+            ledger_rows = cur.fetchone()[0]
+            cur.execute("select count(*) from inventory_counter where org_id = 1")
+            counter_rows = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("总线对账:全域事件零滞留(全消费确认)", inv_undelivered == 0, inv_undelivered)
+    step("额度流水 append-only 在册(consume/refund 多轮)", ledger_rows >= 4, ledger_rows)
+    step("单号计数器多前缀在册", counter_rows >= 4, counter_rows)
 
     return finish()
 

@@ -239,3 +239,56 @@ export const listConstructionProfiles = (orderId) => http.get(`/api/construction
 export const fillConstructionProfileItem = (id, itemId, data) =>
   http.put(`/api/construction/profiles/${id}/items/${itemId}`, data)
 export const completeConstructionProfile = (id) => http.post(`/api/construction/profiles/${id}/complete`)
+
+// 库存(addon-inventory):仓库/授权/实时库存/出入库单/领料/外辅/采购
+export const listWarehouses = (params) => http.get('/api/inventory/warehouses', { params })
+export const createWarehouse = (data) => http.post('/api/inventory/warehouses', data)
+export const updateWarehouse = (id, data) => http.put(`/api/inventory/warehouses/${id}`, data)
+export const listWarehouseUsers = (id) => http.get(`/api/inventory/warehouses/${id}/users`)
+export const grantWarehouseUser = (id, data) => http.post(`/api/inventory/warehouses/${id}/users`, data)
+export const revokeWarehouseUser = (id, userId) =>
+  http.delete(`/api/inventory/warehouses/${id}/users/${userId}`)
+export const pageStocks = (params) => http.get('/api/inventory/stocks', { params })
+export const pageManifests = (params) => http.get('/api/inventory/manifests', { params })
+export const fetchManifest = (id) => http.get(`/api/inventory/manifests/${id}`)
+export const createManifest = (data) => http.post('/api/inventory/manifests', data)
+export const confirmManifest = (id) => http.post(`/api/inventory/manifests/${id}/confirm`)
+export const removeManifestItem = (id, itemId) =>
+  http.delete(`/api/inventory/manifests/${id}/items/${itemId}`)
+export const createReversal = (data) => http.post('/api/inventory/manifests/reversals', data)
+export const submitTransfer = (data) => http.post('/api/inventory/manifests/transfers', data)
+export const createAdjustment = (data) => http.post('/api/inventory/manifests/adjustments', data)
+export const pageRequisitions = (params) => http.get('/api/inventory/requisitions', { params })
+export const fetchRequisition = (id) => http.get(`/api/inventory/requisitions/${id}`)
+export const createRequisition = (data) => http.post('/api/inventory/requisitions', data)
+export const preoutRequisition = (id) => http.post(`/api/inventory/requisitions/${id}/preout`)
+export const outboundRequisition = (id) => http.post(`/api/inventory/requisitions/${id}/outbound`)
+export const arriveRequisition = (id) => http.post(`/api/inventory/requisitions/${id}/arrive`)
+export const cancelRequisition = (id) => http.post(`/api/inventory/requisitions/${id}/cancel`)
+export const refuseRequisition = (id) => http.post(`/api/inventory/requisitions/${id}/refuse`)
+export const returnRequisitionGoods = (id, data) =>
+  http.post(`/api/inventory/requisitions/${id}/returns`, data)
+export const pageOutsourcings = (params) => http.get('/api/inventory/outsourcings', { params })
+export const fetchOutsourcing = (id) => http.get(`/api/inventory/outsourcings/${id}`)
+export const createOutsourcing = (data) => http.post('/api/inventory/outsourcings', data)
+export const assignOutsourcing = (id, data) =>
+  http.post(`/api/inventory/outsourcings/${id}/assign`, data)
+export const deliverOutsourcing = (id, data) =>
+  http.post(`/api/inventory/outsourcings/${id}/deliver`, data)
+export const receiveOutsourcing = (id, data) =>
+  http.post(`/api/inventory/outsourcings/${id}/receive`, data)
+export const saveOutsourcingCharges = (id, data) =>
+  http.post(`/api/inventory/outsourcings/${id}/charges`, data)
+export const balanceOutsourcing = (id) => http.post(`/api/inventory/outsourcings/${id}/balance`)
+export const rejectOutsourcingBalance = (id) =>
+  http.post(`/api/inventory/outsourcings/${id}/reject-balance`)
+export const finishOutsourcing = (id) => http.post(`/api/inventory/outsourcings/${id}/finish`)
+export const cancelOutsourcing = (id, data) =>
+  http.post(`/api/inventory/outsourcings/${id}/cancel`, data)
+export const pagePurchases = (params) => http.get('/api/inventory/purchases', { params })
+export const fetchPurchase = (id) => http.get(`/api/inventory/purchases/${id}`)
+export const createPurchase = (data) => http.post('/api/inventory/purchases', data)
+export const inboundPurchase = (id, data) => http.post(`/api/inventory/purchases/${id}/inbound`, data)
+export const removePurchaseItem = (id, itemId) =>
+  http.delete(`/api/inventory/purchases/${id}/items/${itemId}`)
+export const cancelPurchase = (id) => http.post(`/api/inventory/purchases/${id}/cancel`)

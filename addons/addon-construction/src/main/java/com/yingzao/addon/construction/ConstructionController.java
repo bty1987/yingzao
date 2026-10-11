@@ -72,14 +72,23 @@ public class ConstructionController {
     public record AcceptanceRequest(List<ConstructionService.AcceptanceItemCmd> items, String remark) {
     }
 
+    public record AccessoryLimitRequest(Long accessoryLimit) {
+    }
+
+    public record AccessoryQuotaRequest(Long goodsId, Integer checkup, Long numLimit) {
+    }
+
     private final ConstructionService constructions;
     private final ConstructionTeamService teams;
+    private final ConstructionAccessoryService accessoryQuotas;
     private final org.springframework.context.MessageSource messages;
 
     public ConstructionController(ConstructionService constructions, ConstructionTeamService teams,
+            ConstructionAccessoryService accessoryQuotas,
             org.springframework.context.MessageSource messages) {
         this.constructions = constructions;
         this.teams = teams;
+        this.accessoryQuotas = accessoryQuotas;
         this.messages = messages;
     }
 
@@ -372,6 +381,45 @@ public class ConstructionController {
     public ApiResponse<Object> getAcceptance(@PathVariable long orderId, HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");
         return ApiResponse.ok(constructions.getAcceptance(orgId, orderId));
+    }
+
+    // ---- 辅料额度(V602;额度闸/台账由本域持有,消费方 addon-inventory 经契约同步调用) ----
+
+    @GetMapping("/orders/{orderId}/accessory")
+    public ApiResponse<Object> getAccessory(@PathVariable long orderId, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(accessoryQuotas.getAccessory(orgId, orderId));
+    }
+
+    @PutMapping("/orders/{orderId}/accessory-limit")
+    public ApiResponse<Void> updateAccessoryLimit(@PathVariable long orderId,
+            @RequestBody AccessoryLimitRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        accessoryQuotas.updateLimit(orgId, orderId, body == null ? null : body.accessoryLimit());
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/orders/{orderId}/accessory-quotas")
+    public ApiResponse<Void> saveAccessoryQuota(@PathVariable long orderId,
+            @RequestBody AccessoryQuotaRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        accessoryQuotas.saveQuota(orgId, orderId, body == null ? null : body.goodsId(),
+                body == null ? null : body.checkup(), body == null ? null : body.numLimit());
+        return ApiResponse.ok();
+    }
+
+    @DeleteMapping("/orders/{orderId}/accessory-quotas/{goodsId}")
+    public ApiResponse<Void> deleteAccessoryQuota(@PathVariable long orderId, @PathVariable long goodsId,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        accessoryQuotas.deleteQuota(orgId, orderId, goodsId);
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/orders/{orderId}/accessory-ledger")
+    public ApiResponse<Object> accessoryLedger(@PathVariable long orderId, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(accessoryQuotas.ledger(orgId, orderId));
     }
 
     private static ConstructionService.NodeCmd toNodeCmd(NodeRequest body) {
