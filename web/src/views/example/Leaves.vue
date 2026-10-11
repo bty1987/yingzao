@@ -16,6 +16,12 @@
           <el-tag :type="statusTag(row.status)">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="审批级别" width="90">
+        <template #default="{ row }">
+          <el-tag v-if="row.approval_level === 2" type="warning" effect="plain">二级</el-tag>
+          <span v-else class="level-plain">一级</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="created_at" label="申请时间" width="170" />
       <el-table-column label="办结时间" width="170">
         <template #default="{ row }">{{ row.finished_at || '—' }}</template>
@@ -36,6 +42,12 @@
         </el-form-item>
         <el-form-item label="天数">
           <el-input-number v-model="form.days" :min="1" :max="365" />
+          <span v-if="form.days >= 3" class="tip multi-hint">≥3 天自动升级二级审批</span>
+        </el-form-item>
+        <el-form-item v-if="form.days >= 3" label="二级审批人">
+          <el-select v-model="form.managerId" style="width: 100%" placeholder="长请假须二级审批人">
+            <el-option v-for="u in managerCandidates" :key="u.id" :label="u.display_name" :value="u.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="事由">
           <el-input v-model="form.reason" type="textarea" :rows="3" />
@@ -50,7 +62,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listLeaves, createLeave, cancelLeave, listOrgUsers } from '../../api'
 import { addons } from '../../store/addons'
@@ -60,9 +72,13 @@ const users = ref([])
 const loading = ref(false)
 const dialog = ref(false)
 const saving = ref(false)
-const form = ref({ assigneeId: null, days: 1, reason: '' })
+const form = ref({ assigneeId: null, days: 1, reason: '', managerId: null })
 
 const me = Number(localStorage.getItem('yz_user_id') || 0)
+
+// 二级审批人候选:排除自己与一级审批人(与后端 290006 守卫同口径)
+const managerCandidates = computed(() =>
+  users.value.filter((u) => u.id !== me && u.id !== form.value.assigneeId))
 
 // 状态字典来自插件下发(addon.yml dicts),前端不硬编码业务枚举
 const statusDict = ref([])
@@ -85,7 +101,7 @@ async function load() {
 }
 
 function openCreate() {
-  form.value = { assigneeId: null, days: 1, reason: '' }
+  form.value = { assigneeId: null, days: 1, reason: '', managerId: null }
   if (users.value.length === 0) {
     listOrgUsers().then((res) => {
       users.value = (res.data || []).filter((u) => u.id !== me)
@@ -96,6 +112,10 @@ function openCreate() {
 
 async function onCreate() {
   if (!form.value.assigneeId) return ElMessage.warning('请选择审批人')
+  if (form.value.days >= 3 && !form.value.managerId) return ElMessage.warning('≥3 天请选择二级审批人')
+  if (form.value.days >= 3 && form.value.managerId === form.value.assigneeId) {
+    return ElMessage.warning('二级审批人不能与一级相同')
+  }
   if (!form.value.reason || !form.value.reason.trim()) return ElMessage.warning('请填写请假事由')
   saving.value = true
   try {
@@ -134,4 +154,6 @@ onMounted(() => {
 
 <style scoped>
 .tip { margin-left: 12px; color: #909399; font-size: 12px; }
+.level-plain { color: #909399; font-size: 12px; }
+.multi-hint { margin-left: 8px; }
 </style>

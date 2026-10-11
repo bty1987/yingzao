@@ -20,6 +20,13 @@
         </view>
         <text class="arrow">›</text>
       </view>
+      <view class="cell" @click="go('/pages/leave/leave')">
+        <view class="cell-main">
+          <text class="cell-title">请假示例</text>
+          <text class="cell-sub">插件接入轻量审批的示范(days≥3 两级审批)</text>
+        </view>
+        <text class="arrow">›</text>
+      </view>
       <view class="cell" @click="go('/pages/notifications/notifications')">
         <view class="cell-main">
           <text class="cell-title">通知</text>

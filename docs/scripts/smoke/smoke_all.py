@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""营造 Yingzao 一键冒烟(2026-10-11 第 7 次运行沉淀为资产,第 8 次扩展 RBAC+多级审批)。
+"""营造 Yingzao 一键冒烟(2026-10-11 第 7 次运行沉淀为资产,第 8 次扩展 RBAC+多级审批,第 9 次扩展转交×多级串联)。
 
-覆盖:认证 → RBAC 菜单/功能点过滤 → 客源中文登记 → 手动分配 → 机会状态机 → 站内通知 → 轻量审批闭环 → 多级审批串联。
+覆盖:认证 → RBAC 菜单/功能点过滤 → 客源中文登记 → 手动分配 → 机会状态机 → 站内通知 → 轻量审批闭环 → 多级审批串联 → 转交×多级串联。
 前置:服务已起(docs/scripts/smoke/README.md),python ensure_users.py 已跑(smoke_all 会自动先跑)。
 用法:python smoke_all.py   → 逐步 ✓/✗,汇总 N/N PASS,任何 ✗ 退出码 1。
 """
@@ -247,6 +247,58 @@ def main():
     ml_rows3 = [l for l in (leaves3 or []) if l.get("id") == ml_leave]
     step("业务单两级走完回写通过(1)", len(ml_rows3) == 1 and ml_rows3[0].get("status") == 1
          and ml_rows3[0].get("approval_level") == 2, ml_rows3)
+
+    print("== 转交 × 多级串联(转交不改状态,派生链与处理人无关)==")
+    tf_stamp = time.strftime("%Y%m%d%H%M%S")
+    tf_leave = api_ok("转交链登记长请假(L1=c/L2=admin)", "POST", "/api/example/leaves", tok_b,
+                      {"reason": "冒烟转交链" + tf_stamp, "days": 4, "assigneeId": uid_c,
+                       "managerId": uid_admin})
+    if tf_leave is None:
+        return finish()
+    leaves_t0 = api_ok("转交链业务单回读", "GET", "/api/example/leaves", tok_b)
+    t_rows0 = [l for l in (leaves_t0 or []) if l.get("id") == tf_leave]
+    ta1 = t_rows0[0].get("approval_id") if t_rows0 else None
+    step("初始挂一级审批单", bool(ta1) and t_rows0 and t_rows0[0].get("approval_level") == 1, t_rows0)
+    if not ta1:
+        return finish()
+
+    api_err("非处理人转交拒绝 121002", "POST", "/api/approvals/%s/transfer" % ta1, tok_b,
+            {"toUserId": uid_admin, "comment": "越权转交"}, 121002)
+    api_ok("一级转交给 admin(处理人=c)", "POST", "/api/approvals/%s/transfer" % ta1, tok_c,
+           {"toUserId": uid_admin, "comment": "一级转交"})
+    todo_c_t = api_ok("c 待办(转交后)", "GET", "/api/approvals?role=todo", tok_c)
+    todo_admin_t = api_ok("admin 待办(转交后)", "GET", "/api/approvals?role=todo", tok_admin)
+    step("转交后待办迁移(c 失/admin 得)",
+         not any(str(a.get("id")) == str(ta1) for a in (todo_c_t or []))
+         and any(str(a.get("id")) == str(ta1) for a in (todo_admin_t or [])),
+         (todo_c_t, todo_admin_t))
+
+    api_ok("admin 通过一级(转交后的处理人)", "POST", "/api/approvals/%s/approve" % ta1, tok_admin,
+           {"comment": "一级通过"})
+    leaves_t1 = api_ok("一级通过后回读", "GET", "/api/example/leaves", tok_b)
+    t_rows1 = [l for l in (leaves_t1 or []) if l.get("id") == tf_leave]
+    ta2 = t_rows1[0].get("approval_id") if t_rows1 else None
+    ok = ta2 and str(ta2) != str(ta1) and t_rows1[0].get("approval_level") == 2 \
+        and t_rows1[0].get("status") == 0
+    step("转交后的一级通过仍触发派生二级", ok, t_rows1)
+    if not ta2:
+        return finish()
+
+    api_ok("二级转交给 example_c(处理人=admin)", "POST", "/api/approvals/%s/transfer" % ta2, tok_admin,
+           {"toUserId": uid_c, "comment": "二级转交"})
+    todo_admin_t2 = api_ok("admin 待办(二级转交后)", "GET", "/api/approvals?role=todo", tok_admin)
+    todo_c_t2 = api_ok("c 待办(二级转交后)", "GET", "/api/approvals?role=todo", tok_c)
+    step("二级转交后待办迁移(admin 失/c 得)",
+         not any(str(a.get("id")) == str(ta2) for a in (todo_admin_t2 or []))
+         and any(str(a.get("id")) == str(ta2) for a in (todo_c_t2 or [])),
+         (todo_admin_t2, todo_c_t2))
+
+    api_ok("example_c 通过二级(转交后的处理人)", "POST", "/api/approvals/%s/approve" % ta2, tok_c,
+           {"comment": "二级通过"})
+    leaves_t2 = api_ok("转交链终态回读", "GET", "/api/example/leaves", tok_b)
+    t_rows2 = [l for l in (leaves_t2 or []) if l.get("id") == tf_leave]
+    step("转交链两级走完回写通过(1)", len(t_rows2) == 1 and t_rows2[0].get("status") == 1
+         and t_rows2[0].get("approval_level") == 2, t_rows2)
 
     return finish()
 

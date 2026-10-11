@@ -21,6 +21,11 @@ export const fetchUnreadCount = () => get('/api/notifications/unread-count')
 export const markNotificationRead = (id) => post(`/api/notifications/${id}/read`)
 export const markAllNotificationsRead = () => post('/api/notifications/read-all')
 
+// 请假示例(addon-example 示范工程):我的请假单/发起/撤回;days≥3 须二级审批人 managerId
+export const listLeaves = () => get('/api/example/leaves')
+export const createLeave = (data) => post('/api/example/leaves', data)
+export const cancelLeave = (id) => post(`/api/example/leaves/${id}/cancel`)
+
 // 轻量审批(内核):三视角列表/详情/通过/驳回/转交/撤回
 export const listApprovals = (params) => get('/api/approvals', params)
 export const fetchApprovalDetail = (id) => get(`/api/approvals/${id}`)

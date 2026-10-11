@@ -29,6 +29,14 @@
       "style": { "navigationBarTitleText": "登记客源" }
     },
     {
+      "path": "pages/leave/leave",
+      "style": { "navigationBarTitleText": "我的请假", "enablePullDownRefresh": true }
+    },
+    {
+      "path": "pages/leave/create",
+      "style": { "navigationBarTitleText": "发起请假" }
+    },
+    {
       "path": "pages/mine/mine",
       "style": { "navigationBarTitleText": "我的" }
     }

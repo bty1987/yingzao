@@ -66,19 +66,22 @@
 - 🔴 冒烟请求含中文必须用 python urllib(UTF-8),Git Bash 的 curl 发中文 = GBK 炸 JSON;
 - jar 被锁:按 8080 端口找 PID `taskkill //PID x //F`。
 
-## 当前进度(2026-10-11 夜间自动任务更新,第 8 次运行)
+## 当前进度(2026-10-11 夜间自动任务更新,第 9 次运行)
 
 - ✅ 41 模块过堂终版;插件框架六点代码化;客源→客户细链冒烟 7/7(b1bde89);客源 V2 分配链冒烟 12/12(9689f13);内核通知中心冒烟 16/16(0d7c914);内核轻量审批状态机冒烟 25/25(b68eb4f);示范插件 addon-example+Web 通知/审批工程页冒烟 28/28(e148667);
 - ✅ **uni-app 移动端骨架 `app/`**(第 6 次,一码三出):uni-app + Vue3 + Vite(@dcloudio 统一 3.0.0-alpha-5030120260930001,vite 5.2.8);八页 = 登录/工作台/客源登记/我的机会/我的审批(三视角+详情全操作)/通知列表/我的;API_BASE 条件编译;`build:h5`/`build:mp-weixin`/`build:app` 三端构建全绿;真机运行待 uni-app 账号与 appid;
 - ✅ **Web 客源分配 + 机会列表工程页(第 7 次,customer V2 web 侧闭环)**:`api/index.js` 接线 assign/chances/confirm/complete 四接口;Leads.vue 加分配弹窗(manual 选人走 GET /api/users filterable / auto 轮询);新增 Chances.vue 机会列表(状态机 0→3→4 徽章 + 确认接单/标记完成);addon-customer 0.2.1 addon.yml 下发 `/customer/chances` 菜单,动态路由零硬编码注册;dev 库一键冒烟全绿;
 - ✅ **内核 RBAC 最小设施(第 8 次)**:`yz_role/yz_user_role/yz_role_menu/yz_role_capability` 四表(V103 core 段)+ `/api/roles` 管理七端点(列表/建/删/详情/菜单·功能点·成员全量替换授权,错误码 122000-122005 双语);授权只存身份字符串(菜单=addon.yml path/功能点=mounts capability),授权不随插件启停漂移(修老 functionright 散装实现);内置 admin 角色旁路全部过滤且不可删改授权;`GET /api/addons` 去白名单改按登录人过滤(管理员全量/普通用户授权并集/无菜单无挂载插件整体隐藏),登录回显角色编码;Web 新增 Roles.vue 角色管理工程页(/roles 静态路由,侧栏仅 admin 可见)+ 登录存 yz_roles;
 - ✅ **多级审批组合方式示范(第 8 次,RFC §6.8 兑现,纯插件侧)**:addon-example 升 0.2.0——days≥3 长请假须二级审批(290006 缺二级审批人拒绝),L1 通过的 Finished 事件在监听里调内核 submit 派生 L2 审批单并改挂 approval_id(approval_level 1→2),任一级驳回/撤回即终态,全部回写带 approval_id 守卫,竞态悬置单走内核 cancel 兜底;内核审批单零改动;
-- ✅ **冒烟扩至 70/70(第 8 次)**:smoke_all.py 新增 RBAC 15 步(旁路/过滤/122003/建角色/122004/三类授权/详情回显/按人可见/删除回落)+ 多级审批 13 步(290006/L1 通过派生 L2/改挂守卫/L2 待办/121002/两级走完回写);MySQL 5.6 utf8mb4 索引 767 字节坑实锤(RFC §6.9,索引列 varchar ≤189);首轮 69/70 唯一失败为冒烟断言口径错(capability 授权后挂载随插件条目合法出现)非后端缺陷;
-- ✅ docs/prd/addon-basedata.md(主材计划独立设计,未写码待确认);四域知识资产齐(rules customer/quotation/decoration/construction;PRD 六份含 basedata);三决策已定(组织单层/轻量自研/building 滞后);RFC §6 新坑 6-9 条;
+- ✅ **款项域 L2 规则清单(第 9 次,docs/rules/payment.md,五域知识资产)**:payment 模块 185 文件/19 ServiceImpl 四路并行深读——通用收款生命周期 0→1→2 全族同构(守卫三件套/收据双人留痕/"收款即确认"实为前端联动);金额口径全库厘(1e3)实锤+渠道缩放黑魔法(paytran ×10000/×1000 并存);装修款线五态+双类型位+sort 顺序门控+比例双闸+退款三轨并存;预付款四科目台账(三条路径写同一余额、原子扣减 SQL 是死代码、负数可反转余额);主材/销售款批量 N:1 收据挂接+先写后验反模式;paytran=渠道枢纽(makePayment 分发六族/分次支付静默 return/外销 paytran 永不置 USED);PaymentFunction 功能字典三层结构(思想收编 RBAC v2);钱包族实锤半成品(绑卡状态机断裂+卡明文)建议不迁;跨模块写表面全集→营造切领域事件架构红线;缺陷 10 条(错误码漂移一族/confirmPayment NPE/服务款退款清零)+方林嫌疑机制级 11 条;§13 待业务确认 10 条;
+- ✅ **RBAC v2 设计稿(第 9 次,docs/03-RBAC端点鉴权与数据权限设计.md,纯文档未实施)**:业务 API 端点级鉴权 = addon.yml 新增 `api` 段声明(prefix/exact → require 菜单 path 或 capability,复用 v1 身份字符串授权,角色 UI 零新增维度)+ 内核 RbacInterceptor 统一拦截(管理员旁路/122006 双语/授权并集 Caffeine 缓存+变更主动失效);两阶段收紧(observe 观察期留审计日志 → enforce 未声明即拒);数据权限三层(L0 org 硬边界+L1 归属可见 V2 落地、L2 部门范围等内核组织架构 V3);§8 五项决策待拍板后按 §9 实施清单开工;
+- ✅ **addon-example 多级审批前端对齐 + 转交串联冒烟(第 9 次)**:web Leaves.vue 补**二级审批人选择器**(此前 days≥3 长请假在 web 根本发不出,真缺口)+列表审批级别徽章;uni-app 新增请假页(pages/leave 列表含二级徽章/撤回 + create 发起含二级审批人 picker,工作台入口,镜像 addon.yml 状态字典);app 全局样式补 btn-mini.warn;冒烟 70→**88 步**:新增「转交×多级串联」18 步——非处理人转交 121002/L1 转交后待办迁移、转交后处理人通过仍触发派生 L2(派生链与处理人无关实证)/L2 二次转交/两级走完回写通过;
+- ✅ 冒烟扩至 **88/88 全绿**(dev 库 192.168.5.21 yingzao);mvn clean package 全绿;web npm build 全绿;app 三端构建全绿;
+- ✅ docs/prd/addon-basedata.md(主材计划独立设计,未写码待确认);五域知识资产齐(rules customer/quotation/decoration/construction/payment;PRD 六份含 basedata);三决策已定(组织单层/轻量自研/building 滞后);RFC §6 新坑 6-9 条;
 - ✅ 风格三方向初稿(`docs/design/`)仍 🔴 未选定,选定前不做正式视觉(web 与 app 同批重做);
-- ⏳ 待用户:风格三选一(docs/design/index.html)/ 客源 5 条 + 报价 8 条 + 装修单 10 条 + 施工 15 条规则确认 / PRD 确认(客源/客源分配/报价/装修单/施工五份 + basedata 材料计划 7 条)——确认后对应 addon 进入写码 / 企微钉钉凭证 / uni-app 账号与 appid / Docker 环境;
-- ⏳ 可自动推进(下一晚建议,与视觉零耦合):①老代码规则提取补域(如 payment 款项域/marketing 营销域,四域之外新增 L2 清单)②addon-example 补「审批转交在多级串联中的表现」与 uni-app 端请假示例页对齐多级 ③业务 API 端点级鉴权设计(RBAC v2:菜单路径→API 前缀映射,01 清单 right 域"重设计"的下半场)④任一 PRD 确认后对应 addon 进入写码(basedata 最成熟:规则 CRUD+生成/推算/回填三件套已设计到位,确认即开工);
-- 📋 每晚自动任务收尾:`docs/reports/<日期>-总结.md`(同日多运行按次序号区分),最新=2026-10-11-第8次运行总结.md。
+- ⏳ 待用户:风格三选一(docs/design/index.html)/ 规则确认:客源 5 + 报价 8 + 装修单 10 + 施工 15 + **款项 10(新增)** / PRD 确认(客源/客源分配/报价/装修单/施工五份 + basedata 7 条)——确认后对应 addon 进入写码 / **RBAC v2 设计稿 §8 五项决策**(声明位置/观察期时长/method 维度/数据权限 L2 时机/字段脱敏)/ 企微钉钉凭证 / uni-app 账号与 appid / Docker 环境;
+- ⏳ 可自动推进(下一晚建议,与视觉零耦合):①payment PRD 起草(规则底座已就绪,码段建议 270000/迁移 800+,闭环=统一收据+款项单+预付款科目化三件套)②marketing(营销获客)等新域 L2 规则提取③RBAC v2 拍板后按 §9 实施清单写码④任一 PRD 确认后对应 addon 进入写码(basedata 最成熟);
+- 📋 每晚自动任务收尾:`docs/reports/<日期>-总结.md`(同日多运行按次序号区分),最新=2026-10-11-第9次运行总结.md。
 
 ## Git 纪律
 

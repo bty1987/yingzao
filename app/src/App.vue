@@ -70,6 +70,7 @@ page {
 
 .btn-mini.success { color: #1f9d61; border-color: #b5e3ca; }
 .btn-mini.danger { color: #d84a45; border-color: #f3c1bf; }
+.btn-mini.warn { color: #c47b1d; border-color: #f0d5ad; }
 
 .empty {
   text-align: center;
