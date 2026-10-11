@@ -1,0 +1,46 @@
+addon:
+  id: quotation
+  name: 报价管理
+  version: 0.1.0
+  error-code-segment: 230000
+  menus:
+    - path: /quotation/quotations
+      title: 报价管理
+      icon: edit
+  dicts:
+    quotationStatus:
+      - { key: '0', label: 编辑中 }
+      - { key: '1', label: 已锁定 }
+    attStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 已提交 }
+      - { key: '2', label: 已审核 }
+      - { key: '3', label: 已完成 }
+    areaType:
+      - { key: '0', label: 管理区 }
+      - { key: '1', label: 工程量 }
+      - { key: '2', label: 功能区总价 }
+      - { key: '3', label: 不计算 }
+      - { key: '7', label: 综合区 }
+    itemType:
+      - { key: '0', label: 常规 }
+      - { key: '1', label: 自定义 }
+      - { key: '2', label: 搬运费 }
+      - { key: '3', label: 管理费 }
+      - { key: '4', label: 忽略 }
+      - { key: '8', label: 税金 }
+    itemSubtype:
+      - { key: '0', label: 工程 }
+      - { key: '1', label: 材料 }
+    versionStatus:
+      - { key: '0', label: 停用 }
+      - { key: '1', label: 启用 }
+    trackAction:
+      - { key: 'create', label: 建报价 }
+      - { key: 'lock', label: 定稿锁定 }
+      - { key: 'unlock', label: 解锁 }
+      - { key: 'submit', label: 提交审核 }
+      - { key: 'audit', label: 审核通过 }
+      - { key: 'finish', label: 审核完成 }
+      - { key: 'setDefault', label: 设为默认 }
+      - { key: 'areaSave', label: 明细变更 }

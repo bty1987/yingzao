@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yingzao.addons.api.CustomerProfileApi;
 import com.yingzao.addons.api.PaymentApi;
+import com.yingzao.addons.api.QuotationApi;
 import com.yingzao.addons.api.event.DecorationCreatedEvent;
 import com.yingzao.addons.api.event.DecorationSignedEvent;
 import com.yingzao.addons.api.event.DecorationStatusChangedEvent;
@@ -64,6 +65,7 @@ public class DecorationService {
     public static final int CODE_BELONG_NOT_FOUND = 250019;
     public static final int CODE_BELONG_BAD_STATE = 250020;
     public static final int CODE_NO_CONFLICT = 250021;
+    public static final int CODE_PRESIGN_NO_QUOTATION = 250022;
 
     // ---- 合同线状态(老 DecorationPO:51-113;跳号过渡态不迁,审批用内核显式审批单) ----
     public static final int STATUS_INIT = 0;
@@ -133,16 +135,18 @@ public class DecorationService {
     private final YzEventBus eventBus;
     private final PaymentApi payments;
     private final CustomerProfileApi profiles;
+    private final QuotationApi quotations;
     private final ApprovalService approvals;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DecorationService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
-            PaymentApi payments, CustomerProfileApi profiles, ApprovalService approvals) {
+            PaymentApi payments, CustomerProfileApi profiles, QuotationApi quotations, ApprovalService approvals) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.eventBus = eventBus;
         this.payments = payments;
         this.profiles = profiles;
+        this.quotations = quotations;
         this.approvals = approvals;
     }
 
@@ -206,7 +210,8 @@ public class DecorationService {
 
     // ---- 合同线流转 ----
 
-    /** 预签:0/1 → 2。门槛 V1 = 补充信息已登记(报价锁定/活动锁定门槛随 addon-quotation 回补,报告已注明)。 */
+    /** 预签:0/1 → 2。门槛 = 补充信息已登记 + 存在已锁定报价(经 QuotationApi 只读契约回补,修老门槛缺位;
+     *  活动锁定门槛随会员营销插件再议)。 */
     @Transactional
     public void presign(long orgId, long orderId, long operatorId) {
         OrderRow order = load(orgId, orderId);
@@ -215,6 +220,9 @@ public class DecorationService {
                 "select count(*) from decoration_order_profile where order_id = ?", Integer.class, orderId);
         if (profileCount == null || profileCount == 0) {
             throw new BizException(CODE_PRESIGN_NO_PROFILE, msg("decoration.order.presign.noProfile"));
+        }
+        if (!quotations.hasLockedQuotation(orgId, orderId)) {
+            throw new BizException(CODE_PRESIGN_NO_QUOTATION, msg("decoration.order.presign.noQuotation"));
         }
         transition(orgId, order, STATUS_PRESIGNED, "presign", operatorId, null);
     }

@@ -20,6 +20,7 @@
         <module>addons/addon-basedata</module>
         <module>addons/addon-payment</module>
         <module>addons/addon-decoration</module>
+        <module>addons/addon-quotation</module>
         <module>yingzao-app</module>
     </modules>
 
@@ -76,6 +77,11 @@
             <dependency>
                 <groupId>com.yingzao</groupId>
                 <artifactId>addon-decoration</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.yingzao</groupId>
+                <artifactId>addon-quotation</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

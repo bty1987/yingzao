@@ -153,3 +153,29 @@ export const successDecorationMeasure = (mid) => http.post(`/api/decoration/meas
 export const failDecorationMeasure = (mid, data) => http.post(`/api/decoration/measures/${mid}/fail`, data)
 export const transferDecorationBelong = (id, data) =>
   http.post(`/api/decoration/orders/${id}/belong/transfer`, data)
+
+// 报价(addon-quotation):版本字典/报价单/定稿线/审核线/明细管理
+export const listQuotationVersions = (params) => http.get('/api/quotation/versions', { params })
+export const createQuotationVersion = (data) => http.post('/api/quotation/versions', data)
+export const updateQuotationVersion = (id, data) => http.put(`/api/quotation/versions/${id}`, data)
+export const updateQuotationVersionStatus = (id, data) =>
+  http.post(`/api/quotation/versions/${id}/status`, data)
+export const pageQuotations = (params) => http.get('/api/quotation/quotations', { params })
+export const fetchQuotation = (id) => http.get(`/api/quotation/quotations/${id}`)
+export const createQuotation = (data) => http.post('/api/quotation/quotations', data)
+export const updateQuotationPricing = (id, data) => http.post(`/api/quotation/quotations/${id}/pricing`, data)
+export const lockQuotation = (id) => http.post(`/api/quotation/quotations/${id}/lock`)
+export const unlockQuotation = (id) => http.post(`/api/quotation/quotations/${id}/unlock`)
+export const submitQuotation = (id) => http.post(`/api/quotation/quotations/${id}/submit`)
+export const auditQuotation = (id) => http.post(`/api/quotation/quotations/${id}/audit`)
+export const finishQuotation = (id) => http.post(`/api/quotation/quotations/${id}/finish`)
+export const setDefaultQuotation = (id) => http.post(`/api/quotation/quotations/${id}/default`)
+export const addQuotationArea = (id, data) => http.post(`/api/quotation/quotations/${id}/areas`, data)
+export const updateQuotationArea = (id, areaId, data) =>
+  http.put(`/api/quotation/quotations/${id}/areas/${areaId}`, data)
+export const deleteQuotationArea = (id, areaId) => http.delete(`/api/quotation/quotations/${id}/areas/${areaId}`)
+export const addQuotationItem = (id, areaId, data) =>
+  http.post(`/api/quotation/quotations/${id}/areas/${areaId}/items`, data)
+export const updateQuotationItem = (id, itemId, data) =>
+  http.put(`/api/quotation/quotations/${id}/items/${itemId}`, data)
+export const deleteQuotationItem = (id, itemId) => http.delete(`/api/quotation/quotations/${id}/items/${itemId}`)

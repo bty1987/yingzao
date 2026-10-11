@@ -795,6 +795,57 @@ def main():
     step("合同线 0→1 定金(事件回写)+定金时间落", det_a2 and det_a2.get("status") == 1
          and bool(det_a2.get("deposit_time")), det_a2 and det_a2.get("status"))
 
+    # 报价前置(addon-quotation):预签门槛回补「存在已锁定报价」(经 QuotationApi 只读契约,250022)
+    api_err("预签门槛:无锁定报价拒绝 250022", "POST", "/api/decoration/orders/%s/presign" % order_a,
+            tok_admin, None, 250022)
+    q_ver = api_ok("报价版本登记(费率三元组+启税)", "POST", "/api/quotation/versions", tok_admin,
+                   {"name": "烟测版本" + stamp5, "busitype": 2, "manageRate": 50, "manageDiscount": 10000,
+                    "carryRate": 30, "carryDiscount": 10000, "taxRate": 10, "taxDiscount": 10000})
+    if q_ver is None:
+        return finish()
+    api_err("同名词本拒绝 230018", "POST", "/api/quotation/versions", tok_admin,
+            {"name": "烟测版本" + stamp5, "manageRate": 50}, 230018)
+    api_err("装修单不存在拒绝 230005", "POST", "/api/quotation/quotations", tok_admin,
+            {"orderId": 99999999, "name": "幽灵报价"}, 230005)
+    quota_a = api_ok("单A建报价(版本费率快照带出)", "POST", "/api/quotation/quotations", tok_admin,
+                     {"orderId": order_a, "name": "整装方案一", "versionId": q_ver})
+    if quota_a is None:
+        return finish()
+    det_q = api_ok("报价详情(自动费率区)", "GET", "/api/quotation/quotations/%s" % quota_a, tok_admin)
+    auto_areas = [a for a in (det_q or {}).get("areas", []) if a.get("name") == "生成项目"]
+    auto_items = {i.get("type"): i for i in (auto_areas[0].get("items") if auto_areas else [])}
+    ok = len(auto_areas) == 1 and set(auto_items) == {2, 3, 8} \
+        and (det_q or {}).get("manage_rate") == 50 and (det_q or {}).get("tax_rate") == 10
+    step("自动生成费率区(搬运/管理/税金,版本费率快照)", ok, det_q)
+
+    q_area = api_ok("加功能区(全屋工程)", "POST", "/api/quotation/quotations/%s/areas" % quota_a,
+                    tok_admin, {"name": "全屋工程", "type": 1})
+    if q_area is None:
+        return finish()
+    api_ok("加功能项(乳胶漆 100m²×25元)", "POST",
+           "/api/quotation/quotations/%s/areas/%s/items" % (quota_a, q_area), tok_admin,
+           {"name": "墙面乳胶漆", "subtype": 0, "unit": "m²", "num": 100000, "price": 25000})
+    api_err("数量为零拒绝 230001", "POST",
+            "/api/quotation/quotations/%s/areas/%s/items" % (quota_a, q_area), tok_admin,
+            {"name": "坏行", "num": 0, "price": 100}, 230001)
+    api_ok("加功能项(定制柜体 1项×3万元)", "POST",
+           "/api/quotation/quotations/%s/areas/%s/items" % (quota_a, q_area), tok_admin,
+           {"name": "定制柜体", "subtype": 1, "unit": "项", "num": 1000, "price": 30000000})
+    det_q2 = api_ok("报价回读(服务端聚合)", "GET", "/api/quotation/quotations/%s" % quota_a, tok_admin)
+    # 聚合口径:undis=100×25+1×30000=32500元;管理=×50‰=162.5;搬运=×30‰=97.5;税=(三者和)×10‰=32.76
+    ok = det_q2 and det_q2.get("undis_price") == 32500000 and det_q2.get("discount_price") == 32500000 \
+        and det_q2.get("total_price") == 32792760
+    step("服务端聚合(修老信任前端总价):32500+162.5+97.5+32.76=32792.76元", ok, det_q2)
+    api_err("费率自动项改价拒绝 230016", "PUT",
+            "/api/quotation/quotations/%s/items/%s" % (quota_a, auto_items[3]["id"]), tok_admin,
+            {"name": "管理费", "num": 1000, "price": 1}, 230016)
+
+    api_ok("报价锁定(定稿 0→1)", "POST", "/api/quotation/quotations/%s/lock" % quota_a, tok_admin)
+    api_err("重复锁定拒绝 230007", "POST", "/api/quotation/quotations/%s/lock" % quota_a, tok_admin, None, 230007)
+    api_err("锁定后加项拒绝 230003", "POST",
+            "/api/quotation/quotations/%s/areas/%s/items" % (quota_a, q_area), tok_admin,
+            {"name": "锁后项", "num": 1000, "price": 100}, 230003)
+
     api_ok("预签 1→2", "POST", "/api/decoration/orders/%s/presign" % order_a, tok_admin)
 
     # 确认线(0 → 21大改 → 2;不可跳步不可倒退)
@@ -869,6 +920,11 @@ def main():
     api_ok("单C定金收款", "POST", "/api/payment/bills/%s/collect" % dep_c[0]["id"], tok_admin,
            {"channels": [{"channelCode": "cash", "amount": 10000000}]})
     time.sleep(2)
+    quota_c = api_ok("单C建报价(预签门槛前置)", "POST", "/api/quotation/quotations", tok_admin,
+                     {"orderId": order_c, "name": "半包方案一", "versionId": q_ver})
+    if quota_c is None:
+        return finish()
+    api_ok("单C报价锁定", "POST", "/api/quotation/quotations/%s/lock" % quota_c, tok_admin)
     api_ok("单C预签", "POST", "/api/decoration/orders/%s/presign" % order_c, tok_admin)
     api_ok("单C签约(拆款线)", "POST", "/api/decoration/orders/%s/sign" % order_c, tok_admin,
            {"contractAmount": 50000000})
@@ -946,6 +1002,74 @@ def main():
         conn.close()
     step("总线对账:decoration 事件零滞留(全消费确认)", undelivered == 0, undelivered)
     step("轨迹留痕:首收定金动作在册", row_a and row_a[1] == 8 and deposit_tracks >= 1, row_a)
+
+    print("== 报价(addon-quotation V1:双态位审核线+费率域守卫+切默认)==")
+    api_err("费率越界拒绝 230020", "POST", "/api/quotation/versions", tok_admin,
+            {"name": "坏费率" + stamp5, "manageRate": 2000}, 230020)
+    ver_off = api_ok("建停用测试版本", "POST", "/api/quotation/versions", tok_admin,
+                     {"name": "烟测停用版" + stamp5, "manageRate": 50})
+    api_ok("停用版本", "POST", "/api/quotation/versions/%s/status" % ver_off, tok_admin, {"status": 0})
+    api_err("停用版本建报价拒绝 230019", "POST", "/api/quotation/quotations", tok_admin,
+            {"orderId": order_c, "name": "停用版报价", "versionId": ver_off}, 230019)
+
+    # 审核线(用单A已锁定报价):提交→审核→完成,不可跳步不可重复
+    api_err("未审核跳步完成拒绝 230011", "POST", "/api/quotation/quotations/%s/finish" % quota_a,
+            tok_admin, None, 230011)
+    api_ok("提交审核 0→1(定稿送审)", "POST", "/api/quotation/quotations/%s/submit" % quota_a, tok_admin)
+    api_err("重复提交拒绝 230009", "POST", "/api/quotation/quotations/%s/submit" % quota_a, tok_admin, None, 230009)
+    api_ok("审核通过 1→2", "POST", "/api/quotation/quotations/%s/audit" % quota_a, tok_admin)
+    api_err("未提交先审核拒绝 230010", "POST", "/api/quotation/quotations/%s/audit" % quota_c, tok_admin, None, 230010)
+    api_ok("审核完成 2→3(记完成时间)", "POST", "/api/quotation/quotations/%s/finish" % quota_a, tok_admin)
+    api_err("已完成再操作拒绝 230012", "POST", "/api/quotation/quotations/%s/finish" % quota_a,
+            tok_admin, None, 230012)
+    api_ok("设默认(仅锁定报价,同单唯一)", "POST", "/api/quotation/quotations/%s/default" % quota_a, tok_admin)
+    quota_c2 = api_ok("单C第二份报价(不锁定)", "POST", "/api/quotation/quotations", tok_admin,
+                      {"orderId": order_c, "name": "半包方案二"})
+    api_err("未锁定报价设默认拒绝 230013", "POST", "/api/quotation/quotations/%s/default" % quota_c2,
+            tok_admin, None, 230013)
+    det_qa = api_ok("审核线终态回读", "GET", "/api/quotation/quotations/%s" % quota_a, tok_admin)
+    ok = det_qa and det_qa.get("status") == 1 and det_qa.get("attstatus") == 3 \
+        and det_qa.get("is_default") == 1 and bool(det_qa.get("finish_time"))
+    step("双态位终态:锁定+审核完成+默认+完成时间", ok, det_qa)
+
+    # 上限(单C已 2 份,第 3 份到默认上限,第 4 份拒绝)
+    quota_c3 = api_ok("单C第三份报价(达上限)", "POST", "/api/quotation/quotations", tok_admin,
+                      {"orderId": order_c, "name": "半包方案三"})
+    api_err("超上限拒绝 230004", "POST", "/api/quotation/quotations", tok_admin,
+            {"orderId": order_c, "name": "半包方案四"}, 230004)
+
+    # 解锁线:解锁后重锁,lockTime 首次幂等
+    qdet_c = api_ok("单C报价回读(记首锁时间)", "GET", "/api/quotation/quotations/%s" % quota_c, tok_admin)
+    lock_time0 = (qdet_c or {}).get("lock_time")
+    api_ok("解锁 1→0", "POST", "/api/quotation/quotations/%s/unlock" % quota_c, tok_admin)
+    api_err("未锁定状态解锁拒绝 230008", "POST", "/api/quotation/quotations/%s/unlock" % quota_c,
+            tok_admin, None, 230008)
+    api_ok("重新锁定(lockTime 幂等不覆盖)", "POST", "/api/quotation/quotations/%s/lock" % quota_c, tok_admin)
+    qdet_c2 = api_ok("重锁后回读", "GET", "/api/quotation/quotations/%s" % quota_c, tok_admin)
+    step("lockTime 首次幂等", qdet_c2 and qdet_c2.get("lock_time") == lock_time0,
+         (lock_time0, (qdet_c2 or {}).get("lock_time")))
+
+    time.sleep(3)
+    ev_q = api_ok("报价事件消费查询", "GET",
+                  "/api/events?eventType=QuotationStatusChangedEvent&status=1&page=1&size=5", tok_admin)
+    step("QuotationStatusChanged 消费行存在", bool(ev_q) and ev_q.get("total", 0) >= 1, ev_q)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select count(*) from yz_event_task
+                where event_type like 'Quotation%%' and status != 1
+            """)
+            q_undelivered = cur.fetchone()[0]
+            cur.execute("""
+                select count(*) from quotation_track where quotation_id = %s and action = 'lock'
+            """, (quota_a,))
+            lock_tracks = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    step("总线对账:quotation 事件零滞留(全消费确认)", q_undelivered == 0, q_undelivered)
+    step("轨迹留痕:锁定动作在册", lock_tracks >= 1, lock_tracks)
 
     return finish()
 
