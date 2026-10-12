@@ -7,7 +7,7 @@ import Roles from '../views/Roles.vue'
 // 静态路由:登录 + 主布局 + 内核平台页(审批中心/角色权限)。业务路由由插件菜单动态注册(见 registerAddonRoutes)。
 const routes = [
   { path: '/login', component: Login },
-  { path: '/', component: Layout, children: [] },
+  { path: '/', name: 'layout', component: Layout, children: [] },
   { path: '/approvals', component: Layout, children: [{ path: '', component: ApprovalCenter, meta: { title: '审批中心' } }] },
   { path: '/roles', component: Layout, children: [{ path: '', component: Roles, meta: { title: '角色权限' } }] },
   { path: '/:pathMatch(.*)*', redirect: '/' }
@@ -32,7 +32,8 @@ export function registerAddonRoutes(addons) {
       const compKey = `../views/${segs[0]}/${page.charAt(0).toUpperCase()}${page.slice(1)}.vue`
       const comp = views[compKey]
       if (!comp) continue
-      router.addRoute('/', { path: menu.path, component: comp, meta: { addon: addon.id, title: menu.title } })
+      // 挂在 layout 名下(修:'/' 无 name 时按父名挂载失败,业务页被注册成顶层路由脱离布局,导航消失)
+      router.addRoute('layout', { path: menu.path, component: comp, meta: { addon: addon.id, title: menu.title } })
       existing.add(menu.path)
     }
   }
