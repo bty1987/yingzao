@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """确保双测试账号存在(dev 库直连,仅冒烟环境用)。
 
-账号口径:example_b / example_c,密码 yingzao123(sha256),org_id=1。
-幂等:已存在即跳过,不改密码不重置。
+账号口径:example_b / example_c(org_id=1)+ example_o(org_id=2,跨组织断言用),
+密码 yingzao123(sha256)。幂等:已存在即跳过,不改密码不重置。
 """
 import hashlib
 import os
@@ -18,7 +18,8 @@ DB = dict(
     charset="utf8mb4",
 )
 
-USERS = [("example_b", "示例用户B"), ("example_c", "示例用户C")]
+USERS = [("example_b", "示例用户B", 1), ("example_c", "示例用户C", 1),
+        ("example_d", "组织一备测用户", 1), ("example_o", "组织二用户", 2)]
 PASSWORD = "yingzao123"
 
 
@@ -27,15 +28,15 @@ def ensure():
     conn = pymysql.connect(**DB)
     try:
         with conn.cursor() as cur:
-            for username, display in USERS:
+            for username, display, org in USERS:
                 cur.execute("select id from yz_user where username = %s", (username,))
                 if cur.fetchone():
                     print("exists  %s" % username)
                     continue
                 cur.execute(
                     "insert into yz_user(org_id, username, password_sha256, display_name)"
-                    " values (1, %s, %s, %s)",
-                    (username, sha, display),
+                    " values (%s, %s, %s, %s)",
+                    (org, username, sha, display),
                 )
                 print("created %s -> id %s" % (username, cur.lastrowid))
         conn.commit()

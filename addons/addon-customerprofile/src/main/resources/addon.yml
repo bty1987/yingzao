@@ -19,3 +19,9 @@ addon:
       - { key: '1', label: 对公 }
   mounts:
     - { slot: customerprofile.profile.detail.footer, component: ProfileTag, capability: customerprofile:view }
+  api:
+    # 档案域全部数据源归「客户档案」菜单;exist 幂等回显另挂 capability 示范功能点型 require
+    - prefix: /api/customerprofile
+      require: /customerprofile/customers
+    - exact: /api/customerprofile/customers/exist
+      require: customerprofile:view

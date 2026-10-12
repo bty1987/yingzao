@@ -60,6 +60,13 @@ public class AddonRegistry {
                 .map(m -> new AddonDescriptor.Mount((String) m.get("slot"), (String) m.get("component"),
                         (String) m.get("capability")))
                 .toList();
+        List<Map<String, Object>> apis = (List<Map<String, Object>>) a.getOrDefault("api", List.of());
+        List<AddonDescriptor.Api> parsedApis = apis.stream()
+                .map(r -> new AddonDescriptor.Api((String) r.get("prefix"), (String) r.get("exact"),
+                        (String) r.get("require"),
+                        r.get("methods") == null ? List.of()
+                                : ((List<Object>) r.get("methods")).stream().map(String::valueOf).toList()))
+                .toList();
         return new AddonDescriptor(
                 (String) a.get("id"),
                 (String) a.get("name"),
@@ -67,6 +74,7 @@ public class AddonRegistry {
                 a.get("error-code-segment") == null ? 0 : (Integer) a.get("error-code-segment"),
                 parsedMenus,
                 parsedMounts,
+                parsedApis,
                 (Map<String, Object>) a.getOrDefault("dicts", Map.of()));
     }
 

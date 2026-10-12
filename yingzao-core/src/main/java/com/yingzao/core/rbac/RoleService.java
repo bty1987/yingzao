@@ -4,7 +4,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -30,6 +34,7 @@ public class RoleService {
     public static final int CODE_ROLE_FORBIDDEN = 122003;
     public static final int CODE_ROLE_DUP = 122004;
     public static final int CODE_ROLE_USER_INVALID = 122005;
+    public static final int CODE_API_FORBIDDEN = 122006;
 
     public static final String ADMIN_CODE = "admin";
     private static final Pattern CODE_PATTERN = Pattern.compile("^[a-z][a-z0-9_]{0,49}$");
@@ -40,9 +45,30 @@ public class RoleService {
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
 
+    /** 授权快照缓存(RBAC v2):userId → (admin, menus, capabilities);TTL 60s 兜底 + 变更主动逐出。 */
+    private final Cache<Long, Grants> grantCache = Caffeine.newBuilder()
+            .expireAfterWrite(60, TimeUnit.SECONDS)
+            .maximumSize(10_000)
+            .build();
+
+    /** 授权快照:管理员判定与菜单/功能点并集一次查齐(RbacInterceptor/AddonController 共用)。 */
+    public record Grants(boolean admin, Set<String> menus, Set<String> capabilities) {
+    }
+
     public RoleService(JdbcTemplate jdbc, MessageSource messages) {
         this.jdbc = jdbc;
         this.messages = messages;
+    }
+
+    /** 带缓存的授权快照(管理员判定包在缓存内,避免每请求两查 yz_user_role)。 */
+    public Grants grantsCached(long orgId, long userId) {
+        return grantCache.get(userId, id -> new Grants(
+                isAdmin(orgId, id), grantedMenus(id), grantedCapabilities(id)));
+    }
+
+    /** 变更主动逐出:管理操作低频,直接清空全缓存(简单粗暴够用,设计 §4 原话)。 */
+    public void evictGrantCache() {
+        grantCache.invalidateAll();
     }
 
     /** 角色列表(本组织,含成员/菜单计数)。 */
@@ -100,6 +126,7 @@ public class RoleService {
         jdbc.update("delete from yz_role_menu where role_id = ?", id);
         jdbc.update("delete from yz_role_capability where role_id = ?", id);
         jdbc.update("delete from yz_role where id = ?", id);
+        evictGrantCache();
     }
 
     /** 菜单授权全量替换(传入集合即目标态,幂等)。 */
@@ -112,6 +139,7 @@ public class RoleService {
         for (String path : normalized) {
             jdbc.update("insert into yz_role_menu(role_id, menu_path) values (?,?)", id, path);
         }
+        evictGrantCache();
     }
 
     /** 功能点授权全量替换。 */
@@ -124,6 +152,7 @@ public class RoleService {
         for (String capability : normalized) {
             jdbc.update("insert into yz_role_capability(role_id, capability) values (?,?)", id, capability);
         }
+        evictGrantCache();
     }
 
     /** 成员绑定全量替换;成员必须存在且属于本组织。 */
@@ -144,6 +173,7 @@ public class RoleService {
         for (Long userId : ids) {
             jdbc.update("insert into yz_user_role(user_id, role_id) values (?,?)", userId, id);
         }
+        evictGrantCache();
     }
 
     /** 是否平台管理员(绑定内置 admin 角色)。 */

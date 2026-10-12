@@ -13,6 +13,7 @@ public record AddonDescriptor(
         int errorCodeSegment,
         List<Menu> menus,
         List<Mount> mounts,
+        List<Api> apis,
         Map<String, Object> dicts) {
 
     /** 插件菜单声明:前端据此动态注册路由与侧栏菜单项。 */
@@ -21,5 +22,23 @@ public record AddonDescriptor(
 
     /** 前端槽位挂载声明:component 由插件前端包导出,capability 为渲染所需权限。 */
     public record Mount(String slot, String component, String capability) {
+    }
+
+    /**
+     * 业务 API 端点鉴权声明(RBAC v2)。require 三类取值——
+     * 菜单 path(授权该菜单的角色可调)/ capability(授权该功能点的角色可调)/
+     * authenticated(登录即可)。exact 优先于 prefix,prefix 取最长匹配;
+     * methods 可选,默认不限。
+     */
+    public record Api(String prefix, String exact, String require, List<String> methods) {
+
+        /** 声明的匹配模式(exact 优先)。 */
+        public String pattern() {
+            return exact != null && !exact.isBlank() ? exact : prefix;
+        }
+
+        public boolean exactMatch() {
+            return exact != null && !exact.isBlank();
+        }
     }
 }

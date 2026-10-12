@@ -109,6 +109,27 @@ def main():
     status, res = call("GET", "/api/addons")
     step("addons 去白名单:无 token 401", status == 401, (status, res))
 
+    # RBAC v2 员工角色:example_b/c 全菜单+全功能点授权(业务流不受端点鉴权阻断;幂等=先删后建)
+    addons_emp = api_ok("拉全量插件清单(员工角色授权源)", "GET", "/api/addons", tok_admin)
+    all_menus = sorted({m["path"] for a in (addons_emp or []) for m in (a.get("menus") or [])})
+    all_caps = sorted({m["capability"] for a in (addons_emp or []) for m in (a.get("mounts") or [])
+                       if m.get("capability")})
+    roles_emp = api_ok("角色列表(查旧员工角色)", "GET", "/api/roles", tok_admin)
+    for r in (roles_emp or []):
+        if str(r.get("code", "")).startswith("rbac_smoke_"):
+            api_ok("清理历史 RBAC 测试角色", "DELETE", "/api/roles/%s" % r["id"], tok_admin)
+    old_emp = next((r for r in (roles_emp or []) if r.get("code") == "emp_all"), None)
+    if old_emp:
+        api_ok("删旧员工角色", "DELETE", "/api/roles/%s" % old_emp["id"], tok_admin)
+    emp_id = api_ok("建员工角色 emp_all", "POST", "/api/roles", tok_admin,
+                    {"code": "emp_all", "name": "冒烟全业务员工"})
+    api_ok("员工角色全菜单授权", "PUT", "/api/roles/%s/menus" % emp_id, tok_admin,
+           {"menus": all_menus})
+    api_ok("员工角色全功能点授权", "PUT", "/api/roles/%s/capabilities" % emp_id, tok_admin,
+           {"capabilities": all_caps})
+    api_ok("员工角色绑定 b/c", "PUT", "/api/roles/%s/users" % emp_id, tok_admin,
+           {"userIds": [uid_b, uid_c]})
+
     print("== RBAC 菜单/功能点过滤 ==")
     addons_admin = api_ok("admin 插件下发(旁路)", "GET", "/api/addons", tok_admin)
     cust = next((a for a in (addons_admin or []) if a.get("id") == "customer"), None)
@@ -116,7 +137,9 @@ def main():
         and any((m.get("capability") or "") == "customerprofile:view" for m in (cust.get("mounts") or []))
     step("admin 可见双菜单+capability 挂载", ok, cust)
 
-    addons_b0 = api_ok("无角色用户插件下发", "GET", "/api/addons", tok_b)
+    user_d = login("example_d")  # org1 永不授权账号(真无角色,v1 段专用)
+    tok_d = user_d["token"] if user_d else None
+    addons_b0 = api_ok("无角色用户插件下发(example_d)", "GET", "/api/addons", tok_d)
     step("无角色用户可见为空(全量过滤)", addons_b0 == [], addons_b0)
 
     api_err("非管理员建角色拒绝 122003", "POST", "/api/roles", tok_b,
@@ -134,16 +157,16 @@ def main():
            {"menus": ["/customer/leads", "/customer/chances"]})
     api_ok("授权功能点", "PUT", "/api/roles/%s/capabilities" % role_id, tok_admin,
            {"capabilities": ["customerprofile:view"]})
-    api_ok("绑定成员 example_b", "PUT", "/api/roles/%s/users" % role_id, tok_admin,
-           {"userIds": [user_b["userId"]]})
+    api_ok("绑定成员 example_d", "PUT", "/api/roles/%s/users" % role_id, tok_admin,
+           {"userIds": [user_d["userId"]]})
 
     detail = api_ok("角色详情回显", "GET", "/api/roles/%s" % role_id, tok_admin)
     ok = detail and sorted(detail.get("menus") or []) == ["/customer/chances", "/customer/leads"] \
         and detail.get("capabilities") == ["customerprofile:view"] \
-        and [u.get("id") for u in (detail.get("users") or [])] == [user_b["userId"]]
+        and [u.get("id") for u in (detail.get("users") or [])] == [user_d["userId"]]
     step("详情含授权与成员", ok, detail)
 
-    addons_b1 = api_ok("授权后插件下发(example_b)", "GET", "/api/addons", tok_b)
+    addons_b1 = api_ok("授权后插件下发(example_d)", "GET", "/api/addons", tok_d)
     cust1 = next((a for a in (addons_b1 or []) if a.get("id") == "customer"), None)
     ok = cust1 and sorted(m.get("path") for m in cust1.get("menus") or []) == \
         ["/customer/chances", "/customer/leads"] \
@@ -154,7 +177,7 @@ def main():
     step("未授权菜单不可见(capability 挂载随授权下发)", prof1 is not None and prof1.get("menus") == [], prof1)
 
     api_ok("删除角色", "DELETE", "/api/roles/%s" % role_id, tok_admin)
-    addons_b2 = api_ok("删除后插件下发(example_b)", "GET", "/api/addons", tok_b)
+    addons_b2 = api_ok("删除后插件下发(example_d)", "GET", "/api/addons", tok_d)
     step("删除后可见回落为空", addons_b2 == [], addons_b2)
 
     print("== 客源 → 分配 → 机会 ==")
@@ -1386,7 +1409,7 @@ def main():
              "/inventory/manifests", "/inventory/outsourcings", "/inventory/purchases",
              "/inventory/requisitions", "/inventory/stocks"],
          inv_addon and inv_addon.get("menus"))
-    addons_inv_b = api_ok("未授权用户插件下发", "GET", "/api/addons", tok_b)
+    addons_inv_b = api_ok("未授权用户插件下发", "GET", "/api/addons", tok_d)
     step("未授权用户不可见 inventory", not any(a.get("id") == "inventory" for a in (addons_inv_b or [])),
          addons_inv_b)
 
@@ -2785,6 +2808,83 @@ def main():
     mi_no = db_exec("select inbound_no from market_inbound where id = %s", (ib_id,))
     step("总线对账:进线事件零滞留", mkt_pending and mkt_pending[0][0] == 0, mkt_pending)
     step("进线单号 MI 流水在册", bool(mi_no) and str(mi_no[0][0]).startswith("MI"), mi_no)
+
+    # ========= RBAC v2 端点鉴权(observe 期,第 36 次扩展)=========
+    print("\n== RBAC v2 端点鉴权(observe) ==")
+
+    # api 段下发(声明即文档)
+    addons_r2 = api_ok("插件下发复查(rbac api 段)", "GET", "/api/addons", tok_admin)
+    cust_r2 = next((a for a in (addons_r2 or []) if a.get("id") == "customer"), None)
+    prof_r2 = next((a for a in (addons_r2 or []) if a.get("id") == "customerprofile"), None)
+    cust_apis = (cust_r2 or {}).get("apis") or []
+    prof_apis = (prof_r2 or {}).get("apis") or []
+    step("customer api 段下发(菜单型 require)", any(
+        a.get("prefix") == "/api/customer/leads" and a.get("require") == "/customer/leads"
+        for a in cust_apis), cust_apis)
+    step("customerprofile api 段下发(含 capability 型 exact)", any(
+        a.get("exact") == "/api/customerprofile/customers/exist"
+        and a.get("require") == "customerprofile:view" for a in prof_apis), prof_apis)
+
+    # admin 旁路全通
+    st, res = call("GET", "/api/customer/leads", tok_admin)
+    step("admin 旁路全通", st == 200 and res.get("code") == 0, res)
+
+    # 无角色用户(example_o,org2):菜单型 require → 122006
+    user_o = login("example_o")
+    ok_o = bool(user_o and user_o.get("userId"))
+    step("组织二账号登录(example_o)", ok_o, user_o)
+    tok_o = user_o["token"] if ok_o else None
+    st, res = call("GET", "/api/customer/leads", tok_o)
+    step("无角色访问已声明 API 拒 122006(菜单型)", st == 200 and res.get("code") == 122006
+         and "customer/leads" in str(res.get("message")), res)
+
+    # 无角色用户:capability 型 require → 122006
+    st, res = call("POST", "/api/customerprofile/customers/exist", tok_o, {})
+    step("无角色访问 capability 型拒 122006", st == 200 and res.get("code") == 122006
+         and "customerprofile:view" in str(res.get("message")), res)
+
+    # 建角色(菜单 /customer/leads + capability customerprofile:view)绑 example_b
+    stamp_rbac = time.strftime("%H%M%S") + "r"
+    role_r2_id = api_ok("建 RBAC 测试角色", "POST", "/api/roles", tok_admin,
+                        {"code": "rbac_smoke_" + stamp_rbac, "name": "端点鉴权冒烟" + stamp_rbac})
+    api_ok("授权菜单+功能点", "PUT", "/api/roles/%s/menus" % role_r2_id, tok_admin,
+           {"menus": ["/customer/leads"]})
+    api_ok("授权功能点", "PUT", "/api/roles/%s/capabilities" % role_r2_id, tok_admin,
+           {"capabilities": ["customerprofile:view"]})
+    d_uid = user_d["userId"]
+    api_ok("绑定 example_d", "PUT", "/api/roles/%s/users" % role_r2_id, tok_admin,
+           {"userIds": [d_uid]})
+
+    # 授权后:菜单型通(缓存变更逐出即时生效;example_d 纯净账号,r_rbac 唯一授权源)
+    st, res = call("GET", "/api/customer/leads", tok_d)
+    step("授权后菜单型 API 通(逐出即时)", st == 200 and res.get("code") == 0, res)
+
+    # 授权后:capability 型通
+    st, res = call("POST", "/api/customerprofile/customers/exist", tok_d,
+                   {"name": "无此人" + stamp_rbac, "phone": "199%09d" % int(time.strftime("%H%M%S"))})
+    step("授权后 capability 型 API 通", st == 200 and res.get("code") == 0, res)
+
+    # 回收:清菜单授权(角色仍在)→ 122006
+    api_ok("回收菜单授权", "PUT", "/api/roles/%s/menus" % role_r2_id, tok_admin, {"menus": []})
+    st, res = call("GET", "/api/customer/leads", tok_d)
+    step("回收后菜单型拒 122006(逐出即时)", st == 200 and res.get("code") == 122006, res)
+
+    # observe 放行:未声明 API(payment bills)无角色可调
+    st, res = call("GET", "/api/payment/bills", tok_b)
+    step("observe 未声明 API 放行", st == 200 and res.get("code") == 0, res)
+
+    # 跨组织 L0:org2 用户(无授权先拒 → 绑角色后数据视角按 org 隔离)
+    if tok_o:
+        ok_o = True
+        step("登录回显 orgId=2", user_o.get("orgId") == 2, user_o)
+        st, res = call("GET", "/api/customer/leads", tok_o)
+        step("org2 无授权已声明 API 拒 122006", st == 200 and res.get("code") == 122006, res)
+        api_err("跨组织 L0:org1 角色绑 org2 用户拒绝 122005", "PUT",
+                "/api/roles/%s/users" % role_r2_id, tok_admin,
+                {"userIds": [d_uid, user_o["userId"]]}, 122005)
+
+    # 清理 RBAC 测试角色
+    api_ok("删除 RBAC 测试角色", "DELETE", "/api/roles/%s" % role_r2_id, tok_admin)
 
     return finish()
 

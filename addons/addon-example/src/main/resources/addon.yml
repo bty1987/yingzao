@@ -7,6 +7,9 @@ addon:
     - path: /example/leaves
       title: 请假示例
       icon: tickets
+  api:
+    - prefix: /api/example/leaves
+      require: /example/leaves
   dicts:
     leaveStatus:
       - { key: '0', label: 审批中 }

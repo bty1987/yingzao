@@ -17,3 +17,8 @@ addon:
       - { key: walkin, label: 自然进店 }
   mounts:
     - { slot: customer.lead.detail.footer, component: CustomerProfileCard, capability: customerprofile:view }
+  api:
+    - prefix: /api/customer/leads
+      require: /customer/leads
+    - prefix: /api/customer/chances
+      require: /customer/chances

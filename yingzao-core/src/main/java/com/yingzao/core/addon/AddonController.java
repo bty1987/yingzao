@@ -31,32 +31,39 @@ public class AddonController {
 
     public record AddonView(String id, String name, String version,
                             List<AddonDescriptor.Menu> menus,
-                            List<AddonDescriptor.Mount> mounts, Object dicts) {
+                            List<AddonDescriptor.Mount> mounts,
+                            List<ApiView> apis, Object dicts) {
+    }
+
+    /** API 鉴权声明下发(脱敏到 pattern/require):前端可据此做按钮级显隐,显隐不是闸门。 */
+    public record ApiView(String prefix, String exact, String require, List<String> methods) {
     }
 
     @GetMapping("/api/addons")
     public ApiResponse<List<AddonView>> addons(HttpServletRequest request) {
         long userId = (Long) request.getAttribute("yz.userId");
         long orgId = (Long) request.getAttribute("yz.orgId");
-        boolean admin = roleService.isAdmin(orgId, userId);
+        RoleService.Grants grants = roleService.grantsCached(orgId, userId);
+        boolean admin = grants.admin();
         List<AddonView> views = new ArrayList<>();
         for (AddonDescriptor d : registry.enabled()) {
             List<AddonDescriptor.Menu> menus = d.menus();
             List<AddonDescriptor.Mount> mounts = d.mounts();
             if (!admin) {
-                Set<String> grantedMenus = roleService.grantedMenus(userId);
-                Set<String> grantedCapabilities = roleService.grantedCapabilities(userId);
-                menus = d.menus().stream().filter(m -> grantedMenus.contains(m.path())).toList();
+                menus = d.menus().stream().filter(m -> grants.menus().contains(m.path())).toList();
                 // capability 为空的挂载 = 无权限诉求,人人可见
                 mounts = d.mounts().stream()
                         .filter(m -> m.capability() == null || m.capability().isBlank()
-                                || grantedCapabilities.contains(m.capability()))
+                                || grants.capabilities().contains(m.capability()))
                         .toList();
             }
             if (menus.isEmpty() && mounts.isEmpty()) {
                 continue;
             }
-            views.add(new AddonView(d.id(), d.name(), d.version(), menus, mounts, d.dicts()));
+            List<ApiView> apis = d.apis() == null ? List.of() : d.apis().stream()
+                    .map(a -> new ApiView(a.prefix(), a.exact(), a.require(), a.methods()))
+                    .toList();
+            views.add(new AddonView(d.id(), d.name(), d.version(), menus, mounts, apis, d.dicts()));
         }
         return ApiResponse.ok(views);
     }

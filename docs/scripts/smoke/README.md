@@ -60,4 +60,5 @@ YINGZAO_EVENTS_BACKOFFSECONDS=1 YINGZAO_EVENTS_BACKOFFCAPSECONDS=5 YINGZAO_EVENT
 ```
 
 🔴 冒烟请求含中文必须走 python urllib(UTF-8),Git Bash 的 curl 发中文 = GBK 炸 JSON。
+- RBAC v2 端点鉴权(第 36 次扩展,observe 期):api 段下发(菜单型/capability 型)→ admin 旁路 → 无角色 122006(122006 带 require 提示)→ 建角色授权后通(缓存逐出即时)→ 回收后拒 → observe 未声明放行 → 跨组织(org2 无授权拒/org1 角色绑 org2 用户 122005);测试账号:example_d=org1 永不授权(纯 v1 断言),example_o=org2(跨组织),example_b/c=emp_all 全业务员工角色(RBAC v2 后业务流不受阻断);
 - 库存域(第 23 次扩展):仓库查重/停用闸 → 进货守卫族(空明细 310030/负数 310031/停用仓 310010)→ 建单即过账 → 出货原子扣减 → 两并发超扣只成功一次(310022)→ 出返/进退 surplus 原子守卫(310033)→ 调拨审批线(审批期不占库存/通过过账/驳回置3)→ 盘盈亏事件闭环 → 领料额度双闸契约(240020/240021/售后跳过/撤销回退/退回回冲)→ 外辅全状态机(验收锁定 310051/送货到货校验/超阶收费公式/反结算/完成5态/作废闸)→ 采购分批入库自动判定/取消删项释放事件 → 全域事件零滞留+额度流水+计数器对账;

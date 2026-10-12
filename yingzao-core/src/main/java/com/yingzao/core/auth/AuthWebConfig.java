@@ -10,6 +10,10 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yingzao.core.context.YzContext;
+import com.yingzao.core.rbac.RbacInterceptor;
+import com.yingzao.core.rbac.RbacService;
+import com.yingzao.core.rbac.RoleService;
 import com.yingzao.core.web.ApiResponse;
 import com.yingzao.core.web.BizException;
 
@@ -28,16 +32,24 @@ public class AuthWebConfig implements WebMvcConfigurer {
     private final TokenStore tokenStore;
     private final MessageSource messages;
     private final ObjectMapper objectMapper;
+    private final RbacService rbac;
+    private final RoleService roleService;
 
-    public AuthWebConfig(TokenStore tokenStore, MessageSource messages, ObjectMapper objectMapper) {
+    public AuthWebConfig(TokenStore tokenStore, MessageSource messages, ObjectMapper objectMapper,
+            RbacService rbac, RoleService roleService) {
         this.tokenStore = tokenStore;
         this.messages = messages;
         this.objectMapper = objectMapper;
+        this.rbac = rbac;
+        this.roleService = roleService;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new AuthInterceptor()).addPathPatterns("/api/**");
+        // RBAC v2 端点鉴权:登录态之后同链(order 默认按注册序,Auth 在前)
+        registry.addInterceptor(new RbacInterceptor(rbac, roleService, messages, objectMapper))
+                .addPathPatterns("/api/**");
     }
 
     class AuthInterceptor implements HandlerInterceptor {
@@ -60,7 +72,14 @@ public class AuthWebConfig implements WebMvcConfigurer {
             }
             request.setAttribute("yz.userId", t.userId());
             request.setAttribute("yz.orgId", t.orgId());
+            YzContext.set(t.userId(), t.orgId());
             return true;
+        }
+
+        @Override
+        public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
+                Object handler, Exception ex) {
+            YzContext.clear();
         }
     }
 }
