@@ -112,12 +112,19 @@
 
 ## 业务全景(行业插件套件)
 
+![营造业务全景:四链](docs/screenshots/business-landscape.png)
+
+<details>
+<summary>文字版业务全景(无图环境 / 可搜索)</summary>
+
 ```text
 获客链:  渠道/进线/归因(addon-market) ─→ 线索/跟进(addon-customer) ─→ 转化建档(addon-customerprofile)
 交付链:  报价定额(addon-quotation) ─→ 装修合同(addon-decoration) ─→ 施工节点/排期/验收(addon-construction)
 供应链:  商品/材料档案(addon-basedata) ─→ 主材销售(addon-sales) ─→ 库存/材料(addon-inventory / addon-material)
 资金链:  款项/收款(addon-payment) ─→ 结算(addon-balance) ─→ 供应链协同(addon-supplier)
 ```
+
+</details>
 
 | 插件 | 业务域 | 状态 |
 |---|---|---|
