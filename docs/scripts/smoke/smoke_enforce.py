@@ -357,7 +357,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(14 插件 48 条)", len({r["addon"] for r in rules}) == 14 and len(rules) == 48,
+    step("载入 api 规则(14 插件 49 条)", len({r["addon"] for r in rules}) == 14 and len(rules) == 49,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====
@@ -387,6 +387,11 @@ def main():
     step("customerprofile GET 列表 → authenticated(exact)", r and r["require"] == "authenticated", r)
     r = mock_match(rules, "/api/customerprofile/customers/exist", "POST")
     step("customerprofile exist → capability(exact 优先)", r and r["require"] == "customerprofile:view", r)
+    r = mock_match(rules, "/api/supplier/suppliers", "GET")
+    step("supplier GET 列表 → authenticated(exact 读放开,第 45 次跨页选择器第 6 处)",
+         r and r["require"] == "authenticated", r)
+    r = mock_match(rules, "/api/supplier/suppliers", "POST")
+    step("supplier POST 建厂商 → 厂商菜单(写收权)", r and r["require"] == "/supplier/suppliers", r)
 
     # ===== 1. admin 旁路 =====
     print("\n== admin 旁路 + 内核豁免 ==")
@@ -445,6 +450,8 @@ def main():
     api_ok("放开:GET 装修单列表(exact authenticated)", "GET", "/api/decoration/orders", d3["token"])
     api_ok("放开:GET 客户列表(exact authenticated)", "GET", "/api/customerprofile/customers", d3["token"])
     api_err("收权:GET 客户详情 122006", "GET", "/api/customerprofile/customers/1", d3["token"], None, 122006)
+    api_ok("放开:GET 厂商列表(exact authenticated,外辅选择器)", "GET", "/api/supplier/suppliers", d3["token"])
+    api_err("收权:GET 厂商详情 122006", "GET", "/api/supplier/suppliers/1", d3["token"], None, 122006)
     api_err("收权:POST 商品 122006", "POST", "/api/basedata/goods", d3["token"], {"no": "x"}, 122006)
     api_err("收权:POST 装修单 122006", "POST", "/api/decoration/orders", d3["token"], {}, 122006)
     api_err("收权:POST exist 122006(capability)", "POST", "/api/customerprofile/customers/exist", d3["token"], {}, 122006)

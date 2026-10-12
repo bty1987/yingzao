@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.yingzao.addons.api.DecorationApi;
+import com.yingzao.addons.api.SupplierApi;
 import com.yingzao.core.web.BizException;
 
 /**
@@ -21,8 +22,9 @@ import com.yingzao.core.web.BizException;
  * 工程验收后锁定不可登记(projectStatus 经 DecorationApi 契约,修老 260089 直查工程表);
  * 金额全 long 服务端重算(修老 int×int 溢出 + total=0 生产事故口径);收费公式
  * =（price+超阶浮动)×num,费用编辑后服务端回写单头(修老全删全插不回写缺陷);
- * V1 金额单据内自闭环(生产即线下钱货),接 addon-payment 随 V2 评估;厂商为名称快照
- * (废「厂商即用户」,实体随 addon-supplier)。
+ * V1 金额单据内自闭环(生产即线下钱货),接 addon-payment 随 V2 评估;厂商挂单经
+ * SupplierApi 契约校验(addon-supplier 就绪后的升级:废自由名称登记,supplier_id 引用
+ * +官方名称快照,修老"任何 uid 都能被当厂商";存量自由登记行 supplier_id 为 NULL 只读保留)。
  */
 @Service
 public class OutsourcingService {
@@ -35,6 +37,8 @@ public class OutsourcingService {
     public static final int CODE_CANCELLED = 310055;
     public static final int CODE_NOT_BALANCED = 310056;
     public static final int CODE_NOT_RECEIVED = 310057;
+    public static final int CODE_SUPPLIER_NOT_FOUND = 310058;
+    public static final int CODE_SUPPLIER_DISABLED = 310059;
     public static final int CODE_BAD_STATE = 310002;
     public static final int CODE_PARAM = 310003;
 
@@ -60,14 +64,16 @@ public class OutsourcingService {
     private final StockService stocks;
     private final DecorationApi decorations;
     private final com.yingzao.addons.api.GoodsApi goods;
+    private final SupplierApi suppliers;
 
     public OutsourcingService(JdbcTemplate jdbc, MessageSource messages, StockService stocks,
-            DecorationApi decorations, com.yingzao.addons.api.GoodsApi goods) {
+            DecorationApi decorations, com.yingzao.addons.api.GoodsApi goods, SupplierApi suppliers) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.stocks = stocks;
         this.decorations = decorations;
         this.goods = goods;
+        this.suppliers = suppliers;
     }
 
     @Transactional
@@ -120,22 +126,32 @@ public class OutsourcingService {
         return outsourcingId;
     }
 
-    /** 分配厂商:{0,1}→1(厂商为名称快照;厂商账号协同端随 addon-supplier)。 */
+    /**
+     * 分配厂商:{0,1}→1。V1202 起厂商引用化:必传 supplierId,经 SupplierApi 校验存在且
+     * 启用(不存在 310058/停用 310059,修老"任何名称都能挂单"),官方名称落 supplier_name
+     * 快照(禁前端传入);supplier_phone 保留手输(厂商多联系方式,非主数据口径)。
+     * 已分配(1)可再次调用=换厂商(重分配);存量自由登记单被重分配时补挂 supplier_id。
+     */
     @Transactional
-    public void assign(long orgId, long outsourcingId, String supplierName, String supplierPhone,
+    public void assign(long orgId, long outsourcingId, Long supplierId, String supplierPhone,
             long operatorId) {
+        require(supplierId != null && supplierId > 0, CODE_PARAM, "inventory.param.invalid");
         Map<String, Object> row = load(orgId, outsourcingId);
         requireNotCancelled(row);
         int status = ((Number) row.get("status")).intValue();
         require(status == ST_INIT || status == ST_ASSIGNED, CODE_BAD_STATE, "inventory.state.illegal");
-        require(notBlank(supplierName) && supplierName.trim().length() <= 128, CODE_PARAM,
-                "inventory.param.invalid");
+        SupplierApi.SupplierSummary supplier = suppliers.querySupplier(orgId, supplierId)
+                .orElseThrow(() -> new BizException(CODE_SUPPLIER_NOT_FOUND,
+                        msg("inventory.outsourcing.supplierNotFound")));
+        require(supplier.status() == 0, CODE_SUPPLIER_DISABLED,
+                "inventory.outsourcing.supplierDisabled");
         jdbc.update("""
-                update inventory_outsourcing set status = ?, supplier_name = ?, supplier_phone = ?,
-                    assigned_at = coalesce(assigned_at, now())
+                update inventory_outsourcing set status = ?, supplier_id = ?, supplier_name = ?,
+                    supplier_phone = ?, assigned_at = coalesce(assigned_at, now())
                 where id = ?
-                """, ST_ASSIGNED, supplierName.trim(), blankToNull(supplierPhone), outsourcingId);
-        track(orgId, outsourcingId, "assign", supplierName.trim(), operatorId);
+                """, ST_ASSIGNED, supplierId, supplier.name(), blankToNull(supplierPhone),
+                outsourcingId);
+        track(orgId, outsourcingId, "assign", supplierId + ":" + supplier.name(), operatorId);
     }
 
     /** 送货:1→2,逐项 sennum 原子累计(≤申请数量,修老无校验)。 */
@@ -397,7 +413,8 @@ public class OutsourcingService {
 
     private Map<String, Object> loadDetail(long orgId, long outsourcingId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select id, code, order_id, order_no, house_label, status, supplier_name, supplier_phone,
+                select id, code, order_id, order_no, house_label, status, supplier_id,
+                       supplier_name, supplier_phone,
                        is_enter, is_lift, is_exceed, is_attic, load_floor, total, charge, rcharge,
                        rbalance, vbalance, remark, created_by_name, assigned_at, delivered_at,
                        received_at, balanced_at, finished_at, cancelled_at, created_at

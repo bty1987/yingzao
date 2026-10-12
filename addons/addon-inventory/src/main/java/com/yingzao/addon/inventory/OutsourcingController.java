@@ -28,7 +28,7 @@ public class OutsourcingController {
             String remark) {
     }
 
-    public record AssignRequest(String supplierName, String supplierPhone) {
+    public record AssignRequest(Long supplierId, String supplierPhone) {
     }
 
     public record QtyRequest(List<OutsourcingService.QtyLineCmd> lines) {
@@ -78,7 +78,7 @@ public class OutsourcingController {
             HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");
         Long userId = (Long) request.getAttribute("yz.userId");
-        outsourcings.assign(orgId, id, body == null ? null : body.supplierName(),
+        outsourcings.assign(orgId, id, body == null ? null : body.supplierId(),
                 body == null ? null : body.supplierPhone(), userId);
         return ApiResponse.ok();
     }

@@ -18,3 +18,8 @@ addon:
     # 厂商域全部数据源归「厂商管理」菜单;外部同步通道(upsert)同闸,服务账号经角色授权接入
     - prefix: /api/supplier
       require: /supplier/suppliers
+    # 厂商列表 GET authenticated 读放开(跨页选择器第 6 处:外辅采购分配厂商下拉;
+    # 仅列表搜索,详情/写操作仍归菜单闸)
+    - exact: /api/supplier/suppliers
+      require: authenticated
+      methods: [GET]

@@ -7,7 +7,13 @@ addon:
     - path: /customerprofile/customers
       title: 客户档案
       icon: user
+    - path: /customerprofile/villages
+      title: 楼盘房屋
+      icon: office-building
   dicts:
+    villageStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
     customerStatus:
       - { key: '0', label: 初始 }
       - { key: '1', label: 已实名 }

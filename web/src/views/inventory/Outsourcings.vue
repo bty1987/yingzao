@@ -110,7 +110,7 @@
 
         <div class="ops">
           <el-button v-if="[0, 1].includes(detail.status)" size="small" type="primary"
-            @click="assignDialog = true">分配厂商</el-button>
+            @click="openAssign">分配厂商</el-button>
           <el-button v-if="detail.status === 1" size="small" type="primary"
             @click="qtyDialog = { mode: 'deliver' }">送货</el-button>
           <el-button v-if="detail.status === 2" size="small" type="primary"
@@ -173,10 +173,16 @@
       </template>
     </el-drawer>
 
-    <!-- 分配厂商 -->
+    <!-- 分配厂商(厂商主数据下拉,经 SupplierApi 契约校验;自由文本登记已废) -->
     <el-dialog v-model="assignDialog" title="分配厂商" width="420px">
       <el-form label-width="80px">
-        <el-form-item label="厂商名称"><el-input v-model="assignForm.supplierName" /></el-form-item>
+        <el-form-item label="厂商">
+          <el-select v-model="assignForm.supplierId" filterable remote :remote-method="searchSuppliers"
+            :loading="supplierLoading" placeholder="输入名称/编号搜索厂商" style="width: 100%">
+            <el-option v-for="s in supplierOptions" :key="s.id" :label="s.name + (s.no ? '（' + s.no + '）' : '')"
+              :value="s.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="电话"><el-input v-model="assignForm.supplierPhone" /></el-form-item>
       </el-form>
       <template #footer>
@@ -258,7 +264,7 @@ import { ElMessage } from 'element-plus'
 import {
   pageOutsourcings, fetchOutsourcing, createOutsourcing, assignOutsourcing, deliverOutsourcing,
   receiveOutsourcing, saveOutsourcingCharges, balanceOutsourcing, rejectOutsourcingBalance,
-  finishOutsourcing, cancelOutsourcing, pageGoods, listGoodsSkuAttrs, pageDecorations
+  finishOutsourcing, cancelOutsourcing, pageGoods, listGoodsSkuAttrs, pageDecorations, pageSuppliers
 } from '../../api'
 import { addons } from '../../store/addons'
 
@@ -281,7 +287,9 @@ const createForm = reactive({ orderId: '', items: [], remark: '', isEnter: false
 const detailDrawer = ref(false)
 const detail = ref(null)
 const assignDialog = ref(false)
-const assignForm = reactive({ supplierName: '', supplierPhone: '' })
+const assignForm = reactive({ supplierId: null, supplierPhone: '' })
+const supplierOptions = ref([])
+const supplierLoading = ref(false)
 const qtyDialog = ref(false)
 const chargeDialog = ref(false)
 const chargeForm = ref([])
@@ -373,11 +381,33 @@ async function act(fn) {
   }
 }
 
+function openAssign() {
+  assignForm.supplierId = detail.value && detail.value.supplier_id || null
+  assignForm.supplierPhone = (detail.value && detail.value.supplier_phone) || ''
+  if (!supplierOptions.value.length) searchSuppliers('')
+  else if (assignForm.supplierId && !supplierOptions.value.some((s) => s.id === assignForm.supplierId)) {
+    supplierOptions.value = [{ id: assignForm.supplierId, name: detail.value.supplier_name, no: '' },
+      ...supplierOptions.value]
+  }
+  assignDialog.value = true
+}
+
+async function searchSuppliers(keyword) {
+  supplierLoading.value = true
+  try {
+    const res = await pageSuppliers({ keyword: keyword || '', page: 1, size: 20 })
+    supplierOptions.value = (res.data && res.data.rows) || []
+  } finally {
+    supplierLoading.value = false
+  }
+}
+
 async function onAssign() {
-  if (!assignForm.supplierName) return ElMessage.warning('请填厂商名称')
+  if (!assignForm.supplierId) return ElMessage.warning('请选择厂商')
   saving.value = true
   try {
-    await assignOutsourcing(detail.value.id, { ...assignForm })
+    await assignOutsourcing(detail.value.id, { supplierId: assignForm.supplierId,
+      supplierPhone: assignForm.supplierPhone || null })
     ElMessage.success('已分配')
     assignDialog.value = false
     openDetail(detail.value.id)

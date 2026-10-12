@@ -394,6 +394,12 @@ def main():
 
     print("== 客户与楼盘档案(addon-customerprofile V1)==")
     stamp2 = time.strftime("%Y%m%d%H%M%S")
+    # 楼盘房屋菜单下发(第 45 次:Villages Web 管理页挂菜单,admin 全量可见)
+    addons_cp = api_ok("admin 插件下发(楼盘菜单断言)", "GET", "/api/addons", tok_admin)
+    cp_addon = next((a for a in (addons_cp or []) if a.get("id") == "customerprofile"), None)
+    cp_paths = sorted(m.get("path") for m in (cp_addon or {}).get("menus") or [])
+    step("customerprofile 双菜单(客户档案+楼盘房屋)", cp_paths == [
+        "/customerprofile/customers", "/customerprofile/villages"], cp_paths)
     city_id = api_ok("建城市", "POST", "/api/customerprofile/cities", tok_admin,
                      {"name": "烟测市" + stamp2})
     if city_id is None:
@@ -684,10 +690,10 @@ def main():
         conn.commit()
     finally:
         conn.close()
-    # 调度器 10s 一轮+指数退避(1s 基数):坏载荷走完 max_retries=2 需跨两轮轮询;
-    # 负载高峰下一轮认领可超 10s,固定 sleep 会假死——轮询等待至多 75s
+    # 调度器 10s 一轮+指数退避:1s 基数下 max_retries=2 终态实测在 ~126s(第 45 次库中实证),
+    # 75s 窗口不足会假死——轮询等待至多 150s
     dead_rows = []
-    for _ in range(15):
+    for _ in range(30):
         time.sleep(5)
         _st, _res = call("GET", "/api/events?status=3&page=1&size=50", tok_admin)
         _data = (_res or {}).get("data") if isinstance(_res, dict) else None
@@ -1752,6 +1758,13 @@ def main():
     step("水泥库存 14.000(进退/出库/退回/售后全链过账)", inv1_rq and inv1_rq[0].get("num") == 14000, inv1_rq)
 
     # 外辅(向厂商定材辅料;order_d 已竣工=锁定反例,order_g 施工中可登记)
+    # V1202 厂商引用化:assign 必传 supplierId 经 SupplierApi 校验,外辅段自建厂商+停用厂商各一
+    sup_os1 = api_ok("外辅建引用厂商", "POST", "/api/supplier/suppliers", tok_admin,
+                     {"name": "鑫旺定制" + stamp_inv, "fullName": "鑫旺定制家居厂" + stamp_inv})
+    sup_os2 = api_ok("外辅建停用厂商", "POST", "/api/supplier/suppliers", tok_admin,
+                     {"name": "停用厂商" + stamp_inv})
+    api_ok("停用第二厂商", "POST", "/api/supplier/suppliers/%s/status" % sup_os2, tok_admin,
+           {"status": 1})
     api_err("工程已验收登记拒绝 310051", "POST", "/api/inventory/outsourcings", tok_admin,
             {"orderId": order_d, "items": [{"goodsId": goods_inv1, "num": 1000}]}, 310051)
     os1 = api_ok("外辅登记(水泥4包,原结算价60元,超阶)", "POST", "/api/inventory/outsourcings", tok_admin,
@@ -1766,8 +1779,26 @@ def main():
     step("OS单号+商品总额20万厘(实价50x40)+结算额24万厘(60x40)", ok_os, os_det)
     api_err("未分配不可送货 310002", "POST", "/api/inventory/outsourcings/%s/deliver" % os1, tok_admin,
             {"lines": [{"itemId": os_item_id, "num": 1000}]}, 310002)
-    api_ok("分配厂商", "POST", "/api/inventory/outsourcings/%s/assign" % os1, tok_admin,
-           {"supplierName": "鑫旺定制" + stamp_inv, "supplierPhone": "13900001111"})
+    # V1202 分配厂商三态:缺参 310003 / 不存在 310058 / 停用 310059(经 SupplierApi 契约)
+    api_err("分配厂商缺 supplierId 310003", "POST", "/api/inventory/outsourcings/%s/assign" % os1,
+            tok_admin, {"supplierPhone": "13900001111"}, 310003)
+    api_err("分配不存在厂商 310058", "POST", "/api/inventory/outsourcings/%s/assign" % os1,
+            tok_admin, {"supplierId": 999999999}, 310058)
+    api_err("分配停用厂商 310059", "POST", "/api/inventory/outsourcings/%s/assign" % os1,
+            tok_admin, {"supplierId": sup_os2}, 310059)
+    api_ok("分配厂商(引用+官方名快照)", "POST", "/api/inventory/outsourcings/%s/assign" % os1, tok_admin,
+           {"supplierId": sup_os1, "supplierPhone": "13900001111"})
+    os_det_as = api_ok("分配后回读(快照=官方名+supplier_id 落库)", "GET",
+                       "/api/inventory/outsourcings/%s" % os1, tok_admin)
+    step("厂商引用化快照", os_det_as and os_det_as.get("supplier_id") == sup_os1
+         and os_det_as.get("supplier_name") == "鑫旺定制" + stamp_inv, os_det_as)
+    # 跨页选择器读放开(第 6 处):无角色用户 GET 厂商列表放行(authenticated),详情仍拒
+    st_list, res_list = call("GET", "/api/supplier/suppliers", token=tok_d)
+    step("无角色读厂商列表放行(authenticated)", st_list == 200 and isinstance(res_list, dict)
+         and (res_list.get("data") or {}).get("rows") is not None, (st_list, res_list))
+    st_deny, res_deny = call("GET", "/api/supplier/suppliers/%s" % sup_os1, token=tok_d)
+    step("无角色读厂商详情仍拒 122006", st_deny == 200 and res_deny.get("code") == 122006,
+         (st_deny, res_deny))
     api_err("送货超申请拒绝 310052", "POST", "/api/inventory/outsourcings/%s/deliver" % os1, tok_admin,
             {"lines": [{"itemId": os_item_id, "num": 5000}]}, 310052)
     api_ok("送货3包", "POST", "/api/inventory/outsourcings/%s/deliver" % os1, tok_admin,
@@ -1801,7 +1832,7 @@ def main():
     api_ok("初始态作废", "POST", "/api/inventory/outsourcings/%s/cancel" % os2, tok_admin,
            {"remark": "客户取消"})
     api_err("已作废不可操作 310055", "POST", "/api/inventory/outsourcings/%s/assign" % os2, tok_admin,
-            {"supplierName": "任何人"}, 310055)
+            {"supplierId": sup_os1}, 310055)
 
     # 采购(分批入库+取消释放事件化)
     po1 = api_ok("采购建单(水泥10包x45元)", "POST", "/api/inventory/purchases", tok_admin,
@@ -2316,11 +2347,16 @@ def main():
                   1000000, 200000, 800000)
     publish_ready("bsel2" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
                   600000, 100000, 500000)
-    time.sleep(3)
-    blist = api_ok("结算单列表(来源过滤)", "GET",
-                   "/api/balance/settlements?settlementType=quotation%3Aselection", tok_admin)
-    bucket_b = next((s for s in (blist or {}).get("rows", [])
-                     if s.get("supplier") == sup_b and s.get("brand_id") == brand2), None)
+    # 直插事件走调度器认领(首延 3s+轮询 2s),固定 sleep 会扫中空窗(第 45 次实锤)改轮询至多 24s
+    bucket_b = None
+    for _ in range(12):
+        time.sleep(2)
+        blist = api_ok("结算单列表(来源过滤)", "GET",
+                       "/api/balance/settlements?settlementType=quotation%3Aselection", tok_admin)
+        bucket_b = next((s for s in (blist or {}).get("rows", [])
+                         if s.get("supplier") == sup_b and s.get("brand_id") == brand2), None)
+        if bucket_b and bucket_b.get("item_count") == 2:
+            break
     ok = bool(bucket_b) and bucket_b.get("status") == 0 and bucket_b.get("item_count") == 2 \
         and bucket_b.get("income") == 1600000 and bucket_b.get("cost") == 300000 \
         and bucket_b.get("payment") == 1300000 and bucket_b.get("profit") == 300000 \
