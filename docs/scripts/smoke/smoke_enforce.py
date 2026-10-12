@@ -310,6 +310,22 @@ ENDPOINTS = [
     ("supplier", "DELETE", "/api/supplier/suppliers/1/terms/brands/1/categories/1"),
     ("supplier", "POST", "/api/supplier/suppliers/1/terms/brands/1/goods"),
     ("supplier", "DELETE", "/api/supplier/suppliers/1/terms/brands/1/goods/1"),
+    # member(第 43 次)
+    ("member", "GET", "/api/member/activities"), ("member", "POST", "/api/member/activities"),
+    ("member", "PUT", "/api/member/activities/1"), ("member", "POST", "/api/member/activities/1/status"),
+    ("member", "POST", "/api/member/activities/1/default"),
+    ("member", "GET", "/api/member/config"), ("member", "POST", "/api/member/config"),
+    ("member", "GET", "/api/member/gifts"), ("member", "POST", "/api/member/gifts"),
+    ("member", "PUT", "/api/member/gifts/1"), ("member", "POST", "/api/member/gifts/upsert"),
+    ("member", "POST", "/api/member/gifts/1/status"), ("member", "POST", "/api/member/gifts/1/stock"),
+    ("member", "GET", "/api/member/gifts/1/records"),
+    ("member", "GET", "/api/member/exchanges"), ("member", "POST", "/api/member/exchanges"),
+    ("member", "GET", "/api/member/exchanges/1"), ("member", "POST", "/api/member/exchanges/1/cancel"),
+    ("member", "POST", "/api/member/exchanges/items/1/consume"),
+    ("member", "POST", "/api/member/exchanges/items/1/cancel"),
+    ("member", "GET", "/api/member/points/accounts"),
+    ("member", "GET", "/api/member/points/accounts/1/records"),
+    ("member", "POST", "/api/member/points/adjust"),
 ]
 
 # 12 插件代表 GET 端点(admin/全授权组用;三条读放开端点返回 200 属预期)
@@ -322,6 +338,7 @@ REP_GETS = [
     ("/api/sales/orders", "销售"), ("/api/balance/settlements", "结算"),
     ("/api/market/inbounds", "进线"),
     ("/api/supplier/suppliers", "厂商"),
+    ("/api/member/exchanges", "会员兑换单"),
 ]
 
 # 无角色拒绝面:详情/子资源/未放开列表(读放开的三条列表端点不含在内,放开行为在第 4 组断言)
@@ -334,12 +351,13 @@ REP_DENIES = [
     ("/api/sales/orders", "销售"), ("/api/balance/settlements", "结算"),
     ("/api/market/inbounds", "进线"),
     ("/api/supplier/suppliers/1", "厂商详情"),
+    ("/api/member/gifts/1", "礼品详情"),
 ]
 
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(13 插件 43 条)", len({r["addon"] for r in rules}) == 13 and len(rules) == 43,
+    step("载入 api 规则(14 插件 48 条)", len({r["addon"] for r in rules}) == 14 and len(rules) == 48,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

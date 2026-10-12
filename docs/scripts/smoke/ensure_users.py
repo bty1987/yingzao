@@ -19,7 +19,8 @@ DB = dict(
 )
 
 USERS = [("example_b", "示例用户B", 1), ("example_c", "示例用户C", 1),
-        ("example_d", "组织一备测用户", 1), ("example_o", "组织二用户", 2)]
+        ("example_d", "组织一备测用户", 1), ("example_o", "组织二用户", 2),
+        ("example_m", "积分商城服务账号", 1)]
 PASSWORD = "yingzao123"
 
 

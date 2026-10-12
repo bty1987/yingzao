@@ -21,4 +21,14 @@ public interface DecorationApi {
                         int type, int status, int projectStatus,
                         long designerId, long salesmanId) {
     }
+
+    /**
+     * 装修单归属客户只读查询(addon-member 积分记分按款项 biz 三元组反查客户;
+     * 不存在或不属本组织返回 empty)。只读契约,禁消费方直查装修单表。
+     */
+    Optional<CustomerRef> queryOrderCustomer(long orgId, long orderId);
+
+    /** 装修单归属客户引用(只读)。 */
+    record CustomerRef(long customerId, String customerName) {
+    }
 }

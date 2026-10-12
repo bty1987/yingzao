@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.yingzao</groupId>
+        <artifactId>yingzao</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>addon-member</artifactId>
+    <name>addon-member</name>
+    <description>会员营销 addon:积分商城台账(活动/积分分项账户/礼品库存/兑换单;错误码段 350000)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-addons-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>yingzao-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

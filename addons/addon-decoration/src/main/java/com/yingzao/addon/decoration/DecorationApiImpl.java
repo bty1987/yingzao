@@ -40,4 +40,17 @@ public class DecorationApiImpl implements DecorationApi {
                 ((Number) row.get("designer_id")).longValue(),
                 ((Number) row.get("salesman_id")).longValue()));
     }
+
+    @Override
+    public Optional<CustomerRef> queryOrderCustomer(long orgId, long orderId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select customer_id, customer_name from decoration_order where id = ? and org_id = ?",
+                orderId, orgId);
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, Object> row = rows.get(0);
+        return Optional.of(new CustomerRef(((Number) row.get("customer_id")).longValue(),
+                (String) row.get("customer_name")));
+    }
 }

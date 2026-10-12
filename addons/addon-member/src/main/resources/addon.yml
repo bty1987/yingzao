@@ -1,0 +1,68 @@
+addon:
+  id: member
+  name: 会员营销
+  version: 0.1.0
+  error-code-segment: 350000
+  menus:
+    - path: /member/activities
+      title: 活动管理
+      icon: trophy
+    - path: /member/gifts
+      title: 礼品库
+      icon: present
+    - path: /member/exchanges
+      title: 兑换单
+      icon: shopping-cart
+    - path: /member/points
+      title: 积分台账
+      icon: coin
+  dicts:
+    activityType:
+      - { key: '1', label: 装修积分 }
+      - { key: '2', label: 主材积分 }
+      - { key: '3', label: 销售积分 }
+    activityStatus:
+      - { key: '0', label: 有效 }
+      - { key: '1', label: 失效 }
+    giftStatus:
+      - { key: '0', label: 可用 }
+      - { key: '1', label: 禁用 }
+    switchValue:
+      - { key: '0', label: 算 }
+      - { key: '1', label: 不算 }
+    stockType:
+      - { key: '0', label: 入库 }
+      - { key: '1', label: 出库 }
+      - { key: '2', label: 盘盈 }
+      - { key: '3', label: 盘亏 }
+    pointType:
+      - { key: '1', label: 装修 }
+      - { key: '2', label: 主材 }
+      - { key: '3', label: 运营 }
+    pointRecordType:
+      - { key: '1', label: 收款记分 }
+      - { key: '2', label: 兑换扣减 }
+      - { key: '3', label: 撤销回补 }
+      - { key: '4', label: 退款冲减 }
+      - { key: '5', label: 运营调整 }
+    exchangeStatus:
+      - { key: '0', label: 已受理 }
+      - { key: '1', label: 已核销 }
+      - { key: '2', label: 已撤销 }
+    exchangeItemStatus:
+      - { key: '0', label: 受理 }
+      - { key: '1', label: 已核销 }
+      - { key: '2', label: 已撤销 }
+  api:
+    # 四菜单各闸各的数据源;商城同步落单/upsert 同闸(服务账号经角色授权对应菜单接入)
+    - prefix: /api/member/activities
+      require: /member/activities
+    - prefix: /api/member/gifts
+      require: /member/gifts
+    - prefix: /api/member/exchanges
+      require: /member/exchanges
+    - prefix: /api/member/points
+      require: /member/points
+    # 组织配置(签约自动核销开关)归活动管理页
+    - prefix: /api/member/config
+      require: /member/activities

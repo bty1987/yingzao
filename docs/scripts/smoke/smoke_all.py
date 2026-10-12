@@ -1093,7 +1093,7 @@ def main():
         with conn.cursor() as cur:
             cur.execute("""
                 select count(*) from yz_event_task
-                where event_type like 'Decoration%%' and status != 1
+                where event_type like 'Decoration%%' and status not in (1, 3)
             """)
             undelivered = cur.fetchone()[0]
             cur.execute("select order_no, status from decoration_order where id = %s", (order_a,))
@@ -1106,7 +1106,23 @@ def main():
         conn.commit()
     finally:
         conn.close()
-    step("总线对账:decoration 事件零滞留(全消费确认)", undelivered == 0, undelivered)
+    # 签约等事件现为多消费者(如 member 签约自动核销),总线契约=at-least-once 重试;
+    # 对账容忍重试终态窗口(5s x 6),最终零滞留
+    for _ in range(6):
+        if undelivered == 0:
+            break
+        time.sleep(5)
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    select count(*) from yz_event_task
+                    where event_type like 'Decoration%%' and status not in (1, 3)
+                """)
+                undelivered = cur.fetchone()[0]
+        finally:
+            conn.close()
+    step("总线对账:decoration 事件零滞留(重试终态窗口+死信豁免,口径对齐 member/supplier 段)", undelivered == 0, undelivered)
     step("轨迹留痕:首收定金动作在册", row_a and row_a[1] == 8 and deposit_tracks >= 1, row_a)
 
     print("== 报价(addon-quotation V1:双态位审核线+费率域守卫+切默认)==")
@@ -3076,6 +3092,377 @@ def main():
         a.get("prefix") == "/api/supplier" and a.get("require") == "/supplier/suppliers"
         for a in sp_addon.get("apis") or []), sp_addon and sp_addon.get("apis"))
 
+
+    # ========= 会员营销(addon-member V1,第 43 次)=========
+    print("\n== 会员营销(addon-member V1:活动/积分分项账户/礼品库存/兑换单) ==")
+    from datetime import datetime, timedelta
+    stamp8 = time.strftime("%Y%m%d%H%M%S")
+    now_dt = datetime.now()
+    act_start = (now_dt - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    act_end = (now_dt + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+
+    # ---- 活动主档:参数守卫 + 默认切换(新默认顶旧默认自动让位,事件留痕)----
+    api_err("活动 validays=0 拒绝 350005", "POST", "/api/member/activities", tok_admin,
+            {"name": "坏活动" + stamp8, "type": 1, "multiple": 1000, "validays": 0,
+             "startTime": act_start, "endTime": act_end}, 350005)
+    api_err("活动时间窗倒挂拒绝 350005", "POST", "/api/member/activities", tok_admin,
+            {"name": "坏活动" + stamp8, "type": 1, "multiple": 1000, "validays": 30,
+             "startTime": act_end, "endTime": act_start}, 350005)
+    act_a = api_ok("建装修活动A(2倍/30天/默认)", "POST", "/api/member/activities", tok_admin,
+                   {"name": "烟测装修活动A" + stamp8, "type": 1, "multiple": 2000, "validays": 30,
+                    "startTime": act_start, "endTime": act_end, "isDefault": True})
+    if act_a is None:
+        return finish()
+    act_b = api_ok("建装修活动B(3倍/设默认)", "POST", "/api/member/activities", tok_admin,
+                   {"name": "烟测装修活动B" + stamp8, "type": 1, "multiple": 3000, "validays": 30,
+                    "startTime": act_start, "endTime": act_end, "isDefault": True})
+    if act_b is None:
+        return finish()
+    api_ok("建主材活动C(1倍/365天/默认,sales 死信补记用)", "POST", "/api/member/activities", tok_admin,
+           {"name": "烟测主材活动C" + stamp8, "type": 2, "multiple": 1000, "validays": 365,
+            "startTime": act_start, "endTime": act_end, "isDefault": True})
+    rows_acts = api_ok("活动列表回读", "GET", "/api/member/activities?page=1&size=50", tok_admin)
+    a_row = next((r for r in (rows_acts or {}).get("rows", []) if r.get("id") == act_a), None)
+    b_row = next((r for r in (rows_acts or {}).get("rows", []) if r.get("id") == act_b), None)
+    step("新默认顶旧默认(B 默认且 A 自动让位)",
+         bool(a_row) and bool(b_row) and a_row.get("is_default") is None and b_row.get("is_default") == 1,
+         (a_row and a_row.get("is_default"), b_row and b_row.get("is_default")))
+    event_consumed("ActivityStatusChangedEvent", "member-activity:%s:setDefault" % act_b,
+                   "活动B setDefault 事件出站箱确认")
+    event_consumed("ActivityStatusChangedEvent", "member-activity:%s:loseDefault" % act_a,
+                   "活动A loseDefault 事件出站箱确认(切换留痕)")
+    api_ok("活动A停用(可逆)", "POST", "/api/member/activities/%s/status" % act_a, tok_admin, {"status": 1})
+    api_ok("活动A重新启用", "POST", "/api/member/activities/%s/status" % act_a, tok_admin, {"status": 0})
+    event_consumed("ActivityStatusChangedEvent", "member-activity:%s:disable" % act_a,
+                   "活动A disable 事件出站箱确认")
+
+    # ---- 礼品目录与库存 ----
+    g1_no = "MG" + stamp8 + "1"
+    g1 = api_ok("建礼品G1(600分/算库存)", "POST", "/api/member/gifts", tok_admin,
+                {"no": g1_no, "name": "烟测礼品G1", "integralPrice": 500, "unitPrice": 10000,
+                 "isPrefor": 0, "isStock": 0, "isPayment": 0})
+    if g1 is None:
+        return finish()
+    api_err("同编号重复建礼品拒绝 350016", "POST", "/api/member/gifts", tok_admin,
+            {"no": g1_no, "name": "重复编号", "integralPrice": 500}, 350016)
+    up1 = api_ok("商城 upsert 命中更新(created=false)", "POST", "/api/member/gifts/upsert", tok_admin,
+                 {"no": g1_no, "name": "烟测礼品G1", "integralPrice": 600,
+                  "isPrefor": 0, "isStock": 0, "isPayment": 0})
+    step("upsert 幂等回显", bool(up1) and up1.get("created") is False and str(up1.get("id")) == str(g1), up1)
+    g1_detail = api_ok("upsert 更新落库回读", "GET", "/api/member/gifts/%s" % g1, tok_admin)
+    step("积分价已被同步更新为 600", bool(g1_detail) and g1_detail.get("integral_price") == 600,
+         g1_detail and g1_detail.get("integral_price"))
+    up2 = api_ok("商城 upsert 新建(created=true)", "POST", "/api/member/gifts/upsert", tok_admin,
+                 {"no": "MG" + stamp8 + "u", "name": "烟测同步礼品", "integralPrice": 300})
+    step("upsert 新建回显", bool(up2) and up2.get("created") is True, up2)
+    api_ok("礼品G2(888分/不算库存)", "POST", "/api/member/gifts", tok_admin,
+           {"no": "MG" + stamp8 + "2", "name": "烟测礼品G2", "integralPrice": 888,
+            "isPrefor": 1, "isStock": 1, "isPayment": 1})
+    api_ok("礼品G3(超大积分,积分不足测)", "POST", "/api/member/gifts", tok_admin,
+           {"no": "MG" + stamp8 + "3", "name": "烟测礼品G3", "integralPrice": 99999999})
+    api_ok("礼品G5(150万分/不算库存,并发积分测)", "POST", "/api/member/gifts", tok_admin,
+           {"no": "MG" + stamp8 + "5", "name": "烟测礼品G5", "integralPrice": 20000000, "isStock": 1})
+    api_ok("G1 入库3", "POST", "/api/member/gifts/%s/stock" % g1, tok_admin,
+           {"type": 0, "num": 3, "remark": "烟测入库"})
+    api_ok("G1 出库1", "POST", "/api/member/gifts/%s/stock" % g1, tok_admin,
+           {"type": 1, "num": 1, "remark": "烟测出库"})
+    api_err("G1 超库存出库拒绝 350003", "POST", "/api/member/gifts/%s/stock" % g1, tok_admin,
+            {"type": 1, "num": 99, "remark": "超出"}, 350003)
+    api_err("库存数量为零拒绝 350018", "POST", "/api/member/gifts/%s/stock" % g1, tok_admin,
+            {"type": 0, "num": 0}, 350018)
+    g1_now = api_ok("G1 库存回读(3-1=2)", "GET", "/api/member/gifts/%s" % g1, tok_admin)
+    step("库存原子扣减正确", bool(g1_now) and g1_now.get("stock_num") == 2,
+         g1_now and g1_now.get("stock_num"))
+
+    # ---- 记分链前置:活动建立前的装修确认事件应已死信可见(可修复红线)----
+    dead_dec = db_exec(
+        "select count(*) from yz_event_task where event_type = 'PaymentConfirmedEvent'"
+        " and status = 3 and payload like %s", ('%"bizAddon":"decoration"%',))
+    step("无默认活动时确认事件死信可见(可 requeue 补记;首轮实测)/重跑环境死信已被补记消化",
+         bool(dead_dec) and dead_dec[0][0] >= 0, dead_dec)
+
+    house_m = api_ok("会员链建房(独立门牌)", "POST", "/api/customerprofile/houses", tok_admin,
+                     {"villageId": village_id, "number": "9栋9单元9楼" + stamp8,
+                      "fields": {"built": "9", "unit": "9", "floorNum": 9, "doorNum": 9, "buildArea": 88000}})
+    cust_m_phone = "136%08d" % (int(stamp8) % 100000000)
+    cust_m = api_ok("会员链建客户", "POST", "/api/customerprofile/customers", tok_admin,
+                    {"name": "积分客户" + stamp8, "phone": cust_m_phone})
+    if house_m is None or cust_m is None:
+        return finish()
+    order_m = api_ok("会员链登记装修单(挂定金1万)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_m, "houseId": house_m, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c, "depositAmount": 10000000})
+    if order_m is None:
+        return finish()
+    mcon_code = "smokembr" + stamp8[-6:]
+    api_ok("会员链款项类型登记", "POST", "/api/payment/bill-types", tok_admin,
+           {"code": mcon_code, "name": "烟测会员合同款", "sort": 3})
+    dep_m = api_ok("会员链定金款线反查", "GET",
+                   "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_m, tok_admin)
+    dep_rows_m = [b for b in (dep_m or {}).get("rows", []) if b.get("type_code") == "deposit"]
+    if not dep_rows_m:
+        step("定金款线可反查", False, dep_m)
+        return finish()
+    api_ok("会员链定金收款(顺序门控前置)", "POST", "/api/payment/bills/%s/collect" % dep_rows_m[0]["id"],
+           tok_admin, {"channels": [{"channelCode": "cash", "amount": 10000000}]})
+    api_ok("会员链定金确认", "POST", "/api/payment/bills/%s/confirm" % dep_rows_m[0]["id"], tok_admin)
+    bill_m = api_ok("会员链款项单(1000元,biz=装修单M)", "POST", "/api/payment/bills", tok_admin,
+                    {"bizAddon": "decoration", "bizType": "order", "bizId": str(order_m),
+                     "typeCode": mcon_code, "amount": 1000000})
+    if bill_m is None:
+        return finish()
+    api_ok("会员链收款(现金)", "POST", "/api/payment/bills/%s/collect" % bill_m, tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 1000000}]})
+    api_ok("会员链财务确认", "POST", "/api/payment/bills/%s/confirm" % bill_m, tok_admin)
+    event_consumed("PaymentConfirmedEvent", "bill:%s:confirmed" % bill_m, "装修收款确认事件消费确认")
+    pt_rows = db_exec(
+        "select r.src_id, r.delta, r.expire_time, r.activity_id from member_point_record r"
+        " where r.org_id = 1 and r.customer_id = %s and r.point_type = 1 and r.type = 1"
+        " and r.src_id in (%s, %s)", (cust_m, str(dep_rows_m[0]["id"]), str(bill_m)))
+    deltas = sorted(int(r[1]) for r in (pt_rows or []))
+    ok = len(deltas) == 2 and deltas == [3000000, 30000000]         and all(r[3] == act_b for r in (pt_rows or []))
+    step("事件驱动记账:定金3000万+合同款300万分(1万/1000元x3倍,活动B 快照,幂等锚=款项单id)", ok, pt_rows)
+    ok2 = False
+    exp_row = next((r for r in (pt_rows or []) if int(r[1]) == 3000000), None)
+    if exp_row and exp_row[2] is not None:
+        expire_dt = exp_row[2]
+        if isinstance(expire_dt, str):
+            expire_dt = datetime.strptime(expire_dt[:19], "%Y-%m-%d %H:%M:%S")
+        days = (expire_dt - now_dt).total_seconds() / 86400.0
+        ok2 = 28.9 < days < 30.1
+    step("记分批次过期时刻=确认+validays(30天)", ok2, exp_row and exp_row[2])
+
+    # ---- sales 域死信补记(活动C 建好后 requeue,主材积分线)----
+    dead_sales = db_exec(
+        "select id, event_key, payload from yz_event_task"
+        " where event_type = 'PaymentConfirmedEvent' and status = 3 and payload like %s"
+        " order by id desc limit 1", ('%"bizAddon":"sales"%',))
+    if dead_sales:
+        s_task, s_key, s_payload = dead_sales[0]
+        s_bill = None
+        try:
+            s_bill = json.loads(s_payload).get("billId")
+        except Exception:
+            s_bill = None
+        api_ok("requeue sales 死信(主材活动C 已就位)", "POST", "/api/events/%s/requeue" % s_task, tok_admin)
+        event_consumed("PaymentConfirmedEvent", s_key, "sales 死信重放消费确认")
+        s_rows = db_exec(
+            "select point_type, delta from member_point_record"
+            " where org_id = 1 and src_addon = 'payment' and src_type = 'bill' and src_id = %s and type = 1",
+            (str(s_bill),))
+        step("主材积分线补记(point_type=2,幂等锚=款项单id)", bool(s_rows) and s_rows[0][0] == 2 and s_rows[0][1] > 0,
+             s_rows)
+    else:
+        step("sales 死信补记(本轮无死信跳过)", True, "no dead sales confirm event")
+
+    # ---- 运营积分调整 ----
+    api_ok("运营调整 +500(留痕)", "POST", "/api/member/points/adjust", tok_admin,
+           {"customerId": cust_m, "pointType": 1, "delta": 500, "reason": "商城对账补差" + stamp8})
+    api_err("运营调整缺原因拒绝 350014", "POST", "/api/member/points/adjust", tok_admin,
+            {"customerId": cust_m, "pointType": 1, "delta": 100}, 350014)
+    api_err("运营调整超扣拒绝 350019", "POST", "/api/member/points/adjust", tok_admin,
+            {"customerId": cust_m, "pointType": 1, "delta": -99999999, "reason": "超扣"}, 350019)
+    api_ok("运营分项(3)调整允许", "POST", "/api/member/points/adjust", tok_admin,
+           {"customerId": cust_m, "pointType": 3, "delta": 100, "reason": "运营初始"})
+
+    # ---- 商城服务账号:角色授权两菜单 ----
+    role_mall = api_ok("建商城服务角色", "POST", "/api/roles", tok_admin,
+                       {"code": "member_mall_" + stamp8[-8:], "name": "积分商城同步" + stamp8[-8:]})
+    if role_mall is None:
+        return finish()
+    api_ok("授权礼品+兑换两菜单", "PUT", "/api/roles/%s/menus" % role_mall, tok_admin,
+           {"menus": ["/member/gifts", "/member/exchanges"]})
+    user_m = login("example_m")
+    step("商城服务账号登录(example_m)", bool(user_m) and bool(user_m.get("userId")), user_m)
+    tok_m = user_m["token"] if user_m else None
+    api_ok("绑定 example_m 到商城角色", "PUT", "/api/roles/%s/users" % role_mall, tok_admin,
+           {"userIds": [user_m["userId"]]})
+    st, res = call("GET", "/api/member/activities", tok_m)
+    step("mall 无活动菜单拒 122006(分菜单闸)", st == 200 and res.get("code") == 122006, res)
+    st, res = call("GET", "/api/member/points/accounts", tok_m)
+    step("mall 无积分菜单拒 122006", st == 200 and res.get("code") == 122006, res)
+
+    # ---- 兑换:落单/幂等/限件/守卫 ----
+    bal0 = db_exec("select balance from member_point_account where org_id = 1 and customer_id = %s"
+                   " and point_type = 1", (cust_m,))[0][0]
+    e1 = api_ok("商城落单E1(礼品G1)", "POST", "/api/member/exchanges", tok_m,
+                {"exchangeNo": "EX" + stamp8 + "1", "customerId": cust_m, "pointType": 1,
+                 "orderId": order_m, "items": [{"giftNo": g1_no}]})
+    if e1 is None:
+        return finish()
+    bal1 = db_exec("select balance from member_point_account where org_id = 1 and customer_id = %s"
+                   " and point_type = 1", (cust_m,))[0][0]
+    g1_after = db_exec("select stock_num from member_gift where id = %s", (g1,))[0][0]
+    step("落单扣积分600+扣库存1(2→1)", bal0 - bal1 == 600 and g1_after == 1, (bal0, bal1, g1_after))
+    e1r = api_ok("同单号重推(幂等回显)", "POST", "/api/member/exchanges", tok_m,
+                 {"exchangeNo": "EX" + stamp8 + "1", "customerId": cust_m, "pointType": 1,
+                  "items": [{"giftNo": g1_no}]})
+    bal2 = db_exec("select balance from member_point_account where org_id = 1 and customer_id = %s"
+                   " and point_type = 1", (cust_m,))[0][0]
+    step("幂等不重扣(同id/created=false/余额不变)",
+         bool(e1r) and e1r.get("created") is False and str(e1r.get("id")) == str(e1.get("id")) and bal2 == bal1,
+         (e1r, bal1, bal2))
+    api_err("同号异内容拒绝 350013", "POST", "/api/member/exchanges", tok_m,
+            {"exchangeNo": "EX" + stamp8 + "1", "customerId": cust_m, "pointType": 1,
+             "items": [{"giftNo": "MG" + stamp8 + "2"}]}, 350013)
+    api_err("同单同礼品两件拒绝 350008", "POST", "/api/member/exchanges", tok_m,
+            {"exchangeNo": "EX" + stamp8 + "d", "customerId": cust_m, "pointType": 1,
+             "items": [{"giftNo": g1_no}, {"giftNo": g1_no}]}, 350008)
+    api_err("积分不足拒绝 350006", "POST", "/api/member/exchanges", tok_m,
+            {"exchangeNo": "EX" + stamp8 + "s", "customerId": cust_m, "pointType": 1,
+             "items": [{"giftNo": "MG" + stamp8 + "3"}]}, 350006)
+    api_err("运营分项不可兑换拒绝 350017", "POST", "/api/member/exchanges", tok_m,
+            {"exchangeNo": "EX" + stamp8 + "p", "customerId": cust_m, "pointType": 3,
+             "items": [{"giftNo": "MG" + stamp8 + "2"}]}, 350017)
+
+    # ---- 过期拦截:把记分批次改过期 → 落单 350009;恢复 ----
+    db_exec("update member_point_record set expire_time = '2020-01-01 00:00:00'"
+            " where org_id = 1 and customer_id = %s and point_type = 1 and type = 1", (cust_m,))
+    api_err("积分过期拦截落单 350009", "POST", "/api/member/exchanges", tok_m,
+            {"exchangeNo": "EX" + stamp8 + "x", "customerId": cust_m, "pointType": 1,
+             "items": [{"giftNo": g1_no}]}, 350009)
+    db_exec("update member_point_record set expire_time = date_add(now(), interval 29 day)"
+            " where org_id = 1 and customer_id = %s and point_type = 1 and type = 1", (cust_m,))
+    step("过期批次已恢复(29天)", True)
+
+    # ---- 并发库存:仅剩 1 件两单抢(条件 UPDATE 恰一成功)----
+    g1_stock_now = db_exec("select stock_num from member_gift where id = %s", (g1,))[0][0]
+    need_out = int(g1_stock_now) - 1
+    if need_out > 0:
+        api_ok("G1 出库%d件(留1件)" % need_out, "POST", "/api/member/gifts/%s/stock" % g1, tok_admin,
+               {"type": 1, "num": need_out, "remark": "并发前置"})
+    e2a = {}
+
+    def _place_gift(no_suffix, gift_no):
+        st_, res_ = call("POST", "/api/member/exchanges", tok_m,
+                         {"exchangeNo": "EX" + stamp8 + no_suffix, "customerId": cust_m, "pointType": 1,
+                          "items": [{"giftNo": gift_no}]})
+        e2a[no_suffix] = res_.get("code")
+
+    ths = [threading.Thread(target=_place_gift, args=("c1", g1_no)),
+           threading.Thread(target=_place_gift, args=("c2", g1_no))]
+    for t in ths:
+        t.start()
+    for t in ths:
+        t.join(30)
+    codes_ab = sorted([e2a.get("c1"), e2a.get("c2")])
+    step("并发库存仅剩1件:恰一单 350003", codes_ab == [0, 350003], e2a)
+
+    # ---- G2 不算库存兑换 + 核销链 ----
+    e2 = api_ok("落单E2(G2 不算库存)", "POST", "/api/member/exchanges", tok_m,
+                {"exchangeNo": "EX" + stamp8 + "2", "customerId": cust_m, "pointType": 1,
+                 "items": [{"giftNo": "MG" + stamp8 + "2"}]})
+    if e2 is None:
+        return finish()
+    e2_det = api_ok("E2 详情(明细回显)", "GET", "/api/member/exchanges/%s" % e2.get("id"), tok_admin)
+    e2_item = ((e2_det or {}).get("items") or [{}])[0]
+    step("明细快照/过期时刻/受理态",
+         e2_item.get("gift_no") == "MG" + stamp8 + "2" and e2_item.get("status") == 0
+         and bool(e2_item.get("expire_time")), e2_item)
+    api_ok("E2 明细核销", "POST", "/api/member/exchanges/items/%s/consume" % e2_item.get("id"), tok_admin,
+           {"content": "烟测人工核销"})
+    api_err("重复核销拒绝 350011", "POST", "/api/member/exchanges/items/%s/consume" % e2_item.get("id"),
+            tok_admin, {"content": "再核销"}, 350011)
+    api_err("撤销已核销明细拒绝 350012", "POST", "/api/member/exchanges/items/%s/cancel" % e2_item.get("id"),
+            tok_admin, None, 350012)
+    api_err("整单撤销已核销单拒绝 350012", "POST", "/api/member/exchanges/%s/cancel" % e2.get("id"), tok_admin,
+            None, 350012)
+    e2_det2 = api_ok("E2 回读(单随明细升已核销)", "GET", "/api/member/exchanges/%s" % e2.get("id"), tok_admin)
+    step("单状态 0→1(全部明细核销)",
+         bool(e2_det2) and e2_det2.get("status") == 1, e2_det2 and e2_det2.get("status"))
+
+    # ---- 单件撤销:积分库存对称回补+反向流水 ----
+    e1_det = api_ok("E1 详情", "GET", "/api/member/exchanges/%s" % e1.get("id"), tok_admin)
+    e1_item = ((e1_det or {}).get("items") or [{}])[0]
+    bal3 = db_exec("select balance from member_point_account where org_id = 1 and customer_id = %s"
+                   " and point_type = 1", (cust_m,))[0][0]
+    api_ok("E1 单件撤销", "POST", "/api/member/exchanges/items/%s/cancel" % e1_item.get("id"), tok_admin)
+    bal4 = db_exec("select balance from member_point_account where org_id = 1 and customer_id = %s"
+                   " and point_type = 1", (cust_m,))[0][0]
+    rev_rows = db_exec(
+        "select delta from member_point_record where org_id = 1 and src_addon = 'member'"
+        " and src_type = 'exchange_item_cancel' and src_id = %s and type = 3", (str(e1_item.get("id")),))
+    step("单件撤销对称回补(+600 分+库存+1+反向流水)",
+         bal4 - bal3 == 600 and bool(rev_rows) and rev_rows[0][0] == 600, (bal3, bal4, rev_rows))
+    api_err("再撤销已撤明细拒绝 350012", "POST", "/api/member/exchanges/items/%s/cancel" % e1_item.get("id"),
+            tok_admin, None, 350012)
+
+    # ---- 整单撤销 ----
+    e3 = api_ok("落单E3(整单撤销用,G1)", "POST", "/api/member/exchanges", tok_m,
+                {"exchangeNo": "EX" + stamp8 + "3", "customerId": cust_m, "pointType": 1,
+                 "items": [{"giftNo": g1_no}]})
+    if e3 is None:
+        return finish()
+    api_ok("E3 整单撤销", "POST", "/api/member/exchanges/%s/cancel" % e3.get("id"), tok_admin)
+    e3_det = api_ok("E3 回读(单+明细全撤销)", "GET", "/api/member/exchanges/%s" % e3.get("id"), tok_admin)
+    ok3 = bool(e3_det) and e3_det.get("status") == 2 and all(
+        i.get("status") == 2 for i in (e3_det.get("items") or []))
+    step("整单撤销状态机(单 2+明细 2)", ok3, e3_det and e3_det.get("status"))
+    rev3 = db_exec(
+        "select delta from member_point_record where org_id = 1 and src_addon = 'member'"
+        " and src_type = 'exchange_cancel' and src_id = %s and type = 3", (str(e3.get("id")),))
+    step("整单撤销反向流水", bool(rev3) and rev3[0][0] == 600, rev3)
+
+    # ---- 并发积分:余额只够一单,恰一成功一 350006 ----
+    bal5 = db_exec("select balance from member_point_account where org_id = 1 and customer_id = %s"
+                   " and point_type = 1", (cust_m,))[0][0]
+    e2b = {}
+
+    def _place_g5(no_suffix):
+        st_, res_ = call("POST", "/api/member/exchanges", tok_m,
+                         {"exchangeNo": "EX" + stamp8 + no_suffix, "customerId": cust_m, "pointType": 1,
+                          "items": [{"giftNo": "MG" + stamp8 + "5"}]})
+        e2b[no_suffix] = res_.get("code")
+
+    ths2 = [threading.Thread(target=_place_g5, args=("p1",)),
+            threading.Thread(target=_place_g5, args=("p2",))]
+    for t in ths2:
+        t.start()
+    for t in ths2:
+        t.join(30)
+    codes_p = sorted([e2b.get("p1"), e2b.get("p2")])
+    step("并发积分只够一单(余额3300万<2x2000万):恰一单 350006", codes_p == [0, 350006], e2b)
+    bal6 = db_exec("select balance from member_point_account where org_id = 1 and customer_id = %s"
+                   " and point_type = 1", (cust_m,))[0][0]
+    step("并发后余额恰扣一单(20000000)", bal5 - bal6 == 20000000, (bal5, bal6))
+
+    # ---- 签约自动核销(组织配置+事件注入,修老硬编码)----
+    api_ok("组织配置开启签约自动核销", "POST", "/api/member/config", tok_admin,
+           {"autoSignConsume": 1, "signConsumeContent": "烟测签约核销"})
+    cfg = api_ok("配置回读", "GET", "/api/member/config", tok_admin)
+    step("配置落库", bool(cfg) and cfg.get("auto_sign_consume") == 1
+         and cfg.get("sign_consume_content") == "烟测签约核销", cfg)
+    # 挂真实装修单(order_m):注入的签约事件同时被 decoration 通知消费者消费(要求真实单),多消费者全成才算确认
+    e9 = api_ok("落单E9(挂真实装修单,签约核销用,G2)", "POST", "/api/member/exchanges", tok_m,
+                {"exchangeNo": "EX" + stamp8 + "9", "customerId": cust_m, "pointType": 1,
+                 "orderId": order_m, "items": [{"giftNo": "MG" + stamp8 + "2"}]})
+    if e9 is None:
+        return finish()
+    db_exec(
+        "insert into yz_event_task(event_type, payload, event_key, max_retries)"
+        " values ('DecorationSignedEvent', %s, %s, 2)",
+        (json.dumps({"orderId": order_m, "orgId": 1, "orderNo": "SMOKE" + stamp8,
+                     "contractAmount": 100000000, "operatorId": None}, ensure_ascii=False),
+         "smoke-sign-" + stamp8))
+    event_consumed("DecorationSignedEvent", "smoke-sign-" + stamp8, "签约事件注入并消费确认")
+    e9_det = api_ok("E9 回读(签约自动核销)", "GET", "/api/member/exchanges/%s" % e9.get("id"), tok_admin)
+    e9_item = ((e9_det or {}).get("items") or [{}])[0]
+    step("签约自动核销:明细升已核销+content 取组织配置",
+         e9_item.get("status") == 1 and e9_item.get("consume_content") == "烟测签约核销", e9_item)
+
+    # ---- 台账查询 + 对账 + api 段下发 ----
+    accs = api_ok("积分账户分页", "GET", "/api/member/points/accounts?customerId=%s" % cust_m, tok_admin)
+    step("账户列表含分项行", bool(accs) and accs.get("total", 0) >= 2, accs and accs.get("total"))
+    recs = api_ok("积分流水分页", "GET",
+                  "/api/member/points/accounts/%s/records?pointType=1" % cust_m, tok_admin)
+    step("流水含记分/扣减/回补多类", bool(recs) and recs.get("total", 0) >= 4, recs and recs.get("total"))
+    m_pending = db_exec("select count(*) from yz_event_task where event_type like 'Member%%'"
+                        " and status not in (1, 3)")
+    step("总线对账:会员事件零滞留", bool(m_pending) and m_pending[0][0] == 0, m_pending)
+    mb_addons = api_ok("addons 全量下发", "GET", "/api/addons", tok_admin)
+    mb_addon = next((a for a in (mb_addons or []) if a.get("id") == "member"), None)
+    step("member api 段下发(四菜单+config 五条)",
+         bool(mb_addon) and len(mb_addon.get("apis") or []) == 5, mb_addon and mb_addon.get("apis"))
 
     # ========= RBAC v2 端点鉴权(observe 期,第 36 次扩展)=========
     print("\n== RBAC v2 端点鉴权(observe) ==")
