@@ -6,8 +6,8 @@
       var coverSupport = 'CSS' in window && typeof CSS.supports === 'function' &&
         (CSS.supports('top: env(a)') || CSS.supports('top: constant(a)'))
       document.write(
-        '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">' +
-        (coverSupport ? ', viewport-fit=cover' : '')
+        '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' +
+        (coverSupport ? ', viewport-fit=cover' : '') + '">'
       )
     </script>
     <title>营造</title>

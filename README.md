@@ -69,6 +69,40 @@
 
 插件之间**禁止互相依赖实现**,只通过 `yingzao-addons-api`(领域事件与共享契约)协作;插件自有表以 `{addonId}_` 前缀隔离,核心表结构永不因插件变更。
 
+## 界面预览
+
+视觉方向:**东方纸墨极简**(纸白暖底 / 墨黑 / 朱印红唯一点缀 / 宋体 display / 方角 / 8px 材分模数),Web 与移动端同源同构。
+
+**Web 管理后台**(Vue3 + Element Plus,插件菜单动态注册)
+
+| | |
+|---|---|
+| ![登录](docs/screenshots/web/01-login.png) | ![装修单](docs/screenshots/web/03-decorations.png) |
+| 登录 · 古籍扉页 | 装修单 · 四线状态机 |
+| ![进线工作台](docs/screenshots/web/07-inbounds.png) | ![获客漏斗](docs/screenshots/web/08-funnels.png) |
+| 营销进线 · 承接结果可见 | 获客漏斗 · 按活动/渠道 |
+| ![销售单](docs/screenshots/web/05-sales.png) | ![结算工作台](docs/screenshots/web/06-settlements.png) |
+| 主材销售 · 四轴状态机 | 结算 · 明细快照/双腿操作 |
+| ![施工管理](docs/screenshots/web/04-constructions.png) | ![案例库](docs/screenshots/web/09-showcase.png) |
+| 施工 · 节点排期/验收 | 官网案例库 · 五件套 |
+
+**移动端**(uni-app 一码三出:小程序 + APP + H5)
+
+| | | |
+|---|---|---|
+| ![登录](docs/screenshots/app/01-login.png) | ![工作台](docs/screenshots/app/02-index.png) | ![审批](docs/screenshots/app/04-approvals.png) |
+| 登录 · 朱印方章 | 工作台 | 我的审批 |
+
+> 更多截图见 [docs/screenshots/](docs/screenshots)(客源/款项/审批中心/机会/请假等)。
+
+## 双端形态(内部员工端 × 外部客户端)
+
+装修行业天然是两个世界:**内部员工**(客源/报价/施工/结算)与**外部客户**(业主看进度/案例/保修/积分)。营造采用**同一后端、双前端应用**的形态:
+
+- **员工端**(本仓库 `app/`,uni-app 一码三出):工作台/客源登记/机会跟进/审批/通知,走账号密码登录 + RBAC 权限;
+- **客户端**(规划中,独立 uni-app 工程 + 官网 Web):案例浏览与报名留资、施工进度/日记/验收对外视图、电子名片、会员积分(随 addon-member),走手机号验证码/微信 openid 登录;
+- 两侧共用同一套 `yingzao-addons-api` 契约与内核设施(通知中心/审批/加密盒),客户端匿名开放端点由 RBAC v2 匿名段统一鉴权——后端无需为"双端"做任何分叉。
+
 ## 业务全景(行业插件套件)
 
 ```text
@@ -181,7 +215,7 @@ java -jar yingzao-app/target/yingzao-app-*.jar
 | Phase 0 | 插件框架 spike + 客源→客户最小链路 + 全端骨架 | ✅ 完成 |
 | Phase 1 | 平台内核正式版:RBAC、事件总线(outbox 三件套)、通知中心、轻量审批流、加密盒、i18n | ✅ 完成 |
 | Phase 2 | 行业插件套件 V1:营销获客/客源/档案/基础数据/报价/装修单/施工/销售/库存/款项/结算(11 个插件端到端冒烟全绿) | ✅ V1 完成 |
-| Phase 2.5 | 插件 V1.x 增强:Excel 导入器、RBAC v2 端点鉴权、移动端样式对齐、供应商/会员营销插件 | 🚧 进行中 |
+| Phase 2.5 | 插件 V1.x 增强:Excel 导入器、RBAC v2 端点鉴权、供应商/会员营销插件、客户端独立工程(C 端:案例/进度/保修/积分) | 🚧 进行中 |
 | Phase 3 | 商业插件与插件市场、托管版 | 规划中 |
 
 ## 文档
