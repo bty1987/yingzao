@@ -17,7 +17,7 @@
 
 **客源 · 报价 · 合同 · 施工 · 材料 · 结算 —— 装修行业全链条,一个系统管完**
 
-[快速开始](#快速开始) · [架构](#架构三层皆插件) · [业务全景](#业务全景行业插件套件) · [路线图](#路线图) · [文档](#文档)
+[快速开始](#快速开始) · [架构](#架构三层皆插件) · [业务全景](#业务全景行业插件套件) · [界面预览](#界面预览) · [双端形态](#双端形态内部员工端--外部客户端) · [路线图](#路线图) · [文档](#文档)
 
 </div>
 
@@ -82,23 +82,30 @@
 
 **Web 管理后台**(Vue3 + Element Plus,插件菜单动态注册)
 
-| | |
-|---|---|
-| ![登录](docs/screenshots/web/01-login.png) | ![装修单](docs/screenshots/web/03-decorations.png) |
-| 登录 · 古籍扉页 | 装修单 · 四线状态机 |
-| ![进线工作台](docs/screenshots/web/07-inbounds.png) | ![获客漏斗](docs/screenshots/web/08-funnels.png) |
-| 营销进线 · 承接结果可见 | 获客漏斗 · 按活动/渠道 |
-| ![销售单](docs/screenshots/web/05-sales.png) | ![结算工作台](docs/screenshots/web/06-settlements.png) |
-| 主材销售 · 四轴状态机 | 结算 · 明细快照/双腿操作 |
-| ![施工管理](docs/screenshots/web/04-constructions.png) | ![案例库](docs/screenshots/web/09-showcase.png) |
-| 施工 · 节点排期/验收 | 官网案例库 · 五件套 |
+<p>
+  <img src="docs/screenshots/web/01-login.png" width="49%" alt="登录 · 古籍扉页" title="登录 · 古籍扉页">
+  <img src="docs/screenshots/web/03-decorations.png" width="49%" alt="装修单 · 四线状态机" title="装修单 · 四线状态机">
+</p>
+<p>
+  <img src="docs/screenshots/web/07-inbounds.png" width="49%" alt="营销进线 · 承接结果可见" title="营销进线 · 承接结果可见">
+  <img src="docs/screenshots/web/08-funnels.png" width="49%" alt="获客漏斗 · 按活动/渠道" title="获客漏斗 · 按活动/渠道">
+</p>
+<p>
+  <img src="docs/screenshots/web/05-sales.png" width="49%" alt="主材销售 · 四轴状态机" title="主材销售 · 四轴状态机">
+  <img src="docs/screenshots/web/06-settlements.png" width="49%" alt="结算 · 明细快照/双腿操作" title="结算 · 明细快照/双腿操作">
+</p>
+<p>
+  <img src="docs/screenshots/web/04-constructions.png" width="49%" alt="施工 · 节点排期/验收" title="施工 · 节点排期/验收">
+  <img src="docs/screenshots/web/09-showcase.png" width="49%" alt="官网案例库 · 五件套" title="官网案例库 · 五件套">
+</p>
 
 **移动端**(uni-app 一码三出:小程序 + APP + H5)
 
-| | | |
-|---|---|---|
-| ![登录](docs/screenshots/app/01-login.png) | ![工作台](docs/screenshots/app/02-index.png) | ![审批](docs/screenshots/app/04-approvals.png) |
-| 登录 · 朱印方章 | 工作台 | 我的审批 |
+<p>
+  <img src="docs/screenshots/app/01-login.png" width="30%" alt="登录 · 朱印方章" title="登录 · 朱印方章">
+  <img src="docs/screenshots/app/02-index.png" width="30%" alt="工作台" title="工作台">
+  <img src="docs/screenshots/app/04-approvals.png" width="30%" alt="我的审批" title="我的审批">
+</p>
 
 > 更多截图见 [docs/screenshots/](docs/screenshots)(客源/款项/审批中心/机会/请假等)。
 
@@ -221,6 +228,20 @@ export YINGZAO_DB_PASSWORD=<password>
 
 java -jar yingzao-app/target/yingzao-app-*.jar
 ```
+
+**第三步:打开界面**
+
+```bash
+# Web 管理后台(dev 模式,/api 代理到 8080)
+cd web && npm install && npm run dev
+# 打开 http://localhost:5173 (初始账号 admin / yingzao123)
+
+# 移动端 H5(uni-app,一码三出中的 H5 端)
+cd app && npm install && npm run dev:h5
+# 打开 http://localhost:5174
+```
+
+> 初始账号仅开发冒烟用;正式使用请在「角色权限」页建立自己的账号体系。
 
 ## 路线图
 

@@ -119,3 +119,11 @@ body {
 .el-card { border-radius: var(--yz-radius); border-color: var(--yz-line); }
 .el-tag { border-radius: var(--yz-radius); }
 .el-input__wrapper { border-radius: var(--yz-radius); }
+
+/* ---- 细节质感:选中文本朱印底 / 细墨滚动条 ---- */
+::selection { background: rgba(176, 58, 46, 0.85); color: #FAF9F5; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(26, 26, 24, 0.25); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(26, 26, 24, 0.4); }
+::-webkit-scrollbar-track { background: transparent; }
