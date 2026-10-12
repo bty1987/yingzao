@@ -57,3 +57,15 @@ addon:
       - { key: '2', label: 已审核 }
       - { key: '3', label: 已确认 }
       - { key: '4', label: 已完结 }
+  api:
+    # 结算驳回端点路径挂 /orders 前缀(历史路径),归销售单菜单;结算工作台角色建议连带授权销售单菜单
+    - prefix: /api/sales/orders
+      require: /sales/orders
+    - prefix: /api/sales/refunds
+      require: /sales/orders
+    - prefix: /api/sales/settlements
+      require: /sales/settlements
+    - prefix: /api/sales/deliveries
+      require: /sales/deliveries
+    - prefix: /api/sales/delivery-items
+      require: /sales/deliveries

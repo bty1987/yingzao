@@ -44,3 +44,6 @@ addon:
       - { key: 'finish', label: 审核完成 }
       - { key: 'setDefault', label: 设为默认 }
       - { key: 'areaSave', label: 明细变更 }
+  api:
+    - prefix: /api/quotation
+      require: /quotation/quotations

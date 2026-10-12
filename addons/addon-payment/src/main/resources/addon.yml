@@ -34,3 +34,10 @@ addon:
       - { key: 'bank', label: 银行转账 }
       - { key: 'scan', label: 扫码 }
       - { key: 'other', label: 其他 }
+  api:
+    - prefix: /api/payment/bills
+      require: /payment/bills
+    - prefix: /api/payment/bill-types
+      require: /payment/bills
+    - prefix: /api/payment/advance
+      require: /payment/advance

@@ -22,7 +22,13 @@ function request(options) {
         }
         const body = res.data
         if (body && typeof body.code === 'number' && body.code !== 0) {
-          return reject(new Error(body.message || ('错误码 ' + body.code)))
+          const err = new Error(body.message || ('错误码 ' + body.code))
+          err.code = body.code
+          // RBAC v2 端点鉴权:122006 统一友好提示(后端 message 带 require 身份,面向用户的措辞在这里收敛)
+          if (body.code === 122006) {
+            err.message = '暂无该功能权限,请联系管理员授权'
+          }
+          return reject(err)
         }
         resolve(body)
       },

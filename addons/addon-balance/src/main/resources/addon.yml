@@ -51,3 +51,12 @@ addon:
       - { key: 'settleEnter', label: 结算入账 }
       - { key: 'payCash', label: 出纳付款 }
       - { key: 'lazySync', label: 归属账户同步 }
+  api:
+    - prefix: /api/balance/settlements
+      require: /balance/settlements
+    - prefix: /api/balance/accounts
+      require: /balance/accounts
+    - prefix: /api/balance/cutpay-pools
+      require: /balance/cutpays
+    - prefix: /api/balance/cutpays
+      require: /balance/cutpays

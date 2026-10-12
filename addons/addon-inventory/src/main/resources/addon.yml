@@ -88,3 +88,15 @@ addon:
     skuAttrType:
       - { key: '0', label: 颜色 }
       - { key: '1', label: 规格 }
+  api:
+    # 最长前缀分发:四子域各归其菜单;兜底条(warehouses/stocks)归库存查询
+    - prefix: /api/inventory/manifests
+      require: /inventory/manifests
+    - prefix: /api/inventory/requisitions
+      require: /inventory/requisitions
+    - prefix: /api/inventory/outsourcings
+      require: /inventory/outsourcings
+    - prefix: /api/inventory/purchases
+      require: /inventory/purchases
+    - prefix: /api/inventory
+      require: /inventory/stocks

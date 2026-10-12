@@ -50,3 +50,16 @@ addon:
     personType:
       - { key: '0', label: 设计师 }
       - { key: '1', label: 监理 }
+  api:
+    - prefix: /api/market/campaigns
+      require: /market/campaigns
+    - prefix: /api/market/channels
+      require: /market/campaigns
+    - prefix: /api/market/sources
+      require: /market/campaigns
+    - prefix: /api/market/inbounds
+      require: /market/inbounds
+    - prefix: /api/market/funnel
+      require: /market/funnels
+    - prefix: /api/market/showcase
+      require: /market/showcase

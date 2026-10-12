@@ -18,7 +18,8 @@ import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * RBAC v2 端点鉴权拦截器(内核平台设施):注册在认证拦截器之后,只拦 /api/**。
- * 流程 = RbacService.match(uri) → 未命中按模式(observe 放行+按 URI 去重审计 / enforce 拒 122006)
+ * 流程 = RbacService.match(uri, method)(pattern 命中但 methods 不兼容的规则跳过继续找,
+ * 全不兼容 = 未声明)→ 未命中按模式(observe 放行+按 URI 去重审计 / enforce 拒 122006)
  * → 命中按 require 归类:authenticated 放行 / 菜单 path 查授权并集 / capability 查功能点并集,
  * 管理员旁路。授权快照走 RoleService 缓存(TTL 60s + 变更主动逐出,无陈旧放行窗口)。
  * 修 v1 缺口「拿到任何合法 token 即可调任意 /api/**」——服务端守卫才是真闸门。
@@ -55,7 +56,7 @@ public class RbacInterceptor implements HandlerInterceptor {
         long orgId = (Long) request.getAttribute("yz.orgId");
         String uri = request.getRequestURI();
 
-        var hit = rbac.match(uri);
+        var hit = rbac.match(uri, request.getMethod());
         if (hit.isEmpty()) {
             // 未命中:内核端点豁免(自带守卫);插件 API 按 mode——observe 放行+审计 / enforce 拒
             if (!rbac.isPluginUri(uri)) {
@@ -75,10 +76,7 @@ public class RbacInterceptor implements HandlerInterceptor {
         }
 
         RbacService.ApiRule rule = hit.get();
-        if (rule.methods() != null && !rule.methods().isEmpty()
-                && !rule.methods().contains(request.getMethod())) {
-            return true;
-        }
+        // method 兼容性已在 match 内判定(pattern 命中但 methods 不兼容的规则已跳过),命中即可归类
         if ("authenticated".equalsIgnoreCase(rule.require())) {
             return true;
         }

@@ -23,6 +23,18 @@
 python docs/scripts/smoke/smoke_all.py
 ```
 
+### RBAC v2 enforce 专项(第 37 次沉淀:smoke_enforce.py)
+
+```bash
+# 1. 停 observe 实例,以 enforce 模式起服务(必须,observe 上语义不同会误报):
+YINGZAO_RBAC_MODE=enforce YINGZAO_DB_URL=... YINGZAO_DB_USER=root YINGZAO_DB_PASSWORD='...'   java -jar yingzao-app/target/yingzao-app-*.jar
+# 2. python docs/scripts/smoke/ensure_users.py(smoke_all 会自动先跑,单独跑 enforce 时手动)
+python docs/scripts/smoke/smoke_enforce.py
+```
+
+覆盖:静态完备性(12 插件 addon.yml api 段 vs 309 端点样例,模拟内核 match 含 method 互补分层,零未声明)+ 动态四组(admin 旁路 13 端点 / 无角色全拒 122006 / 全授权全通 / 部分授权 authenticated 读放开与菜单闸)。改任何插件 api 段或内核 rbac 后必跑。
+```
+
 输出逐步 ✓/✗ 与汇总 `N/N PASS`。任何一步 ✗ 退出码非 0。
 
 ## 覆盖链路(与历史夜跑冒烟同口径)

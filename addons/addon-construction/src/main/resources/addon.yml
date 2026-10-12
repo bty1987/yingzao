@@ -64,3 +64,6 @@ addon:
       - { key: 'scheduleReset', label: 排期重排 }
       - { key: 'accept', label: 验收竣工 }
       - { key: 'acceptRectify', label: 验收整改 }
+  api:
+    - prefix: /api/construction
+      require: /construction/constructions

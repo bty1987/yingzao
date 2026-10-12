@@ -21,7 +21,8 @@ import jakarta.annotation.PostConstruct;
  * require 身份(菜单 path / capability)。声明集中、执行集中——插件 Controller 零改动,
  * 映射表改配置即改闸门(修老 functionright 页面按钮与服务端功能字典两套口径的散装实现)。
  *
- * <p>匹配语义:exact 优先于 prefix;prefix 取最长匹配(声明即文档,命中多条按最长者)。
+ * <p>匹配语义:exact 优先于 prefix;prefix 取最长匹配;pattern 命中但 methods 限定不兼容的规则
+ * 跳过继续找(见 {@link #match})。声明即文档。
  * 启动期校验(require 指向的菜单/功能点在本插件声明中不存在、prefix 互相包含)只告警不阻断,
  * enforce 全开后升启动失败。
  */
@@ -96,16 +97,26 @@ public class RbacService {
                 built.stream().map(ApiRule::addonId).distinct().toList());
     }
 
-    /** 请求 URI → require 身份;未命中返回 empty(按 mode 决定放行或拒)。 */
-    public Optional<ApiRule> match(String uri) {
+    /** 请求 URI+method → require 身份;未命中返回 empty(按 mode 决定放行或拒)。
+     * <p>method 维度:pattern 命中但 {@code methods} 限定不含当前 method 的规则<b>跳过继续找</b>
+     * (methods 缺省 = 全兼容)——支持同前缀「GET 读放开 authenticated / 写收菜单」互补分层声明;
+     * 全部规则都不兼容 = 未声明处理(observe 审计 / enforce 拒),不静默放行(堵 method 绕闸洞)。 */
+    public Optional<ApiRule> match(String uri, String method) {
         for (ApiRule rule : rules) {
+            boolean patternHit;
             if (rule.exact()) {
-                if (rule.pattern().equals(uri)) {
-                    return Optional.of(rule);
-                }
-            } else if (uri.startsWith(rule.pattern())) {
-                return Optional.of(rule);
+                patternHit = rule.pattern().equals(uri);
+            } else {
+                patternHit = uri.startsWith(rule.pattern());
             }
+            if (!patternHit) {
+                continue;
+            }
+            if (rule.methods() != null && !rule.methods().isEmpty()
+                    && (method == null || !rule.methods().contains(method))) {
+                continue;
+            }
+            return Optional.of(rule);
         }
         return Optional.empty();
     }

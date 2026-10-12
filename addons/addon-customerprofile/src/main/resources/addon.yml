@@ -25,3 +25,8 @@ addon:
       require: /customerprofile/customers
     - exact: /api/customerprofile/customers/exist
       require: customerprofile:view
+    # 列表搜索端点(exact 仅放行 /customers 列表)authenticated:装修单登记等跨页客户选择器引用;
+    # 详情子资源(电话/账户/审计)仍归菜单闸
+    - exact: /api/customerprofile/customers
+      require: authenticated
+      methods: [GET]

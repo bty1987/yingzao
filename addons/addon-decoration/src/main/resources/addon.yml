@@ -71,3 +71,11 @@ addon:
       - { key: 'measureFail', label: 量房失败 }
       - { key: 'profileSave', label: 补充信息 }
       - { key: 'belongTransfer', label: 转归属 }
+  api:
+    # 列表搜索端点(exact 仅 /orders 列表)authenticated:quotation/construction/sales/inventory
+    # 挂装修单选择器跨页引用;详情与全部业务操作收装修单菜单
+    - exact: /api/decoration/orders
+      require: authenticated
+      methods: [GET]
+    - prefix: /api/decoration
+      require: /decoration/orders

@@ -26,3 +26,19 @@ addon:
     packageLevel:
       - { key: '0', label: 主数据 }
       - { key: '1', label: 引用 }
+  api:
+    # 档案读开放(authenticated):商品列表/SKU 是销售开单·库存·报价的跨页选择器数据源;
+    # 写操作收两菜单;org 隔离由 L0 硬边界保证。同前缀 methods 互补分层:GET 命中读规则,写命中菜单规则。
+    - prefix: /api/basedata/goods
+      require: authenticated
+      methods: [GET]
+    - prefix: /api/basedata/goods
+      require: /basedata/goods
+    - prefix: /api/basedata/models
+      require: /basedata/goods
+    - prefix: /api/basedata/categories
+      require: /basedata/goods
+    - prefix: /api/basedata/brands
+      require: /basedata/goods
+    - prefix: /api/basedata/packages
+      require: /basedata/packages

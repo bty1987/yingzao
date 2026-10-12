@@ -1,6 +1,6 @@
 # 03 - RBAC v2 设计稿:业务 API 端点级鉴权与数据权限
 
-> 状态:**已实施(2026-10-12 第 36 次运行,§9 清单全项兑现;§8 五项决策按 2026-10-12 拍板推荐口径执行:addon.yml 集中声明 / observe 起步 / method 字段留好默认不用 / L2 等组织架构立项 / 字段级脱敏不做)**。落地偏差:§7.5 跨组织 L0 断言升级为「org1 角色绑 org2 用户拒绝 122005」(updateUsers 组织守卫即 L0 的授权面体现,冒烟 1134/1134);enforce 终态 5/5 实证(admin 旁路/内核豁免/未声明拒/未授权拒/授权后通)。
+> 状态:**已实施(2026-10-12 第 36 次运行,§9 清单全项兑现;§8 五项决策按 2026-10-12 拍板推荐口径执行:addon.yml 集中声明 / observe 起步 / L2 等组织架构立项 / 字段级脱敏不做)**。落地偏差:§7.5 跨组织 L0 断言升级为「org1 角色绑 org2 用户拒绝 122005」(updateUsers 组织守卫即 L0 的授权面体现);enforce 终态 5/5 实证(admin 旁路/内核豁免/未声明拒/未授权拒/授权后通)。**第 37 次运行:§8-3 method 维度实际启用(读放开/写收权分层必需,见 §3),12/12 插件 api 段全齐,enforce 全开前置达成;smoke_enforce.py 专项资产沉淀(静态完备性 309 端点零未声明 + 动态四组 80/80)。**
 > 上游:RFC §6.9(RBAC v1 落地 + 边界声明)、docs/01 §right 域「内核:重设计」
 > v1 已交付(见 RFC §6.9):`yz_role` 四表 + `/api/roles` 七端点 + `GET /api/addons` 按登录人过滤(菜单/功能点**可见性**门控)。
 > 本稿回答 v1 留下的下半场两个问题:**业务 API 的端点级鉴权**怎么声明、怎么拦;**数据权限**切到哪一层。
@@ -48,8 +48,20 @@ addon:
       require: /customer/leads
 ```
 
-- **匹配语义**:exact 优先于 prefix;prefix 取最长匹配;命中多条时 require 取**并集**(任一身份满足即放行);
-- **启动期校验**(`AddonRegistry` 装载时):require 为菜单 path 而本插件 menus 里不存在、require 看起来是 capability 而本插件 mounts 里没有该 capability、prefix 互相包含且 require 矛盾——均启动告警日志(不阻断,V2 期;enforce 全开后升启动失败);
+- **匹配语义**:exact 优先于 prefix;prefix 取最长匹配;**pattern 命中但 `methods` 限定不含当前 method 的规则跳过继续找(methods 缺省 = 全兼容),全部不兼容 = 未声明处理**——第 37 次运行定稿(此前版本"method 不匹配放行"存在 enforce 绕闸洞:只声明 POST 的规则会让 GET 直接过,已修复);命中多条时按最长/声明序取**第一条兼容规则**(非并集);
+- **method 互补分层**(第 37 次引入的声明模式):同一前缀写两条 methods 互补的规则,表达「GET 读放开 / 写收菜单」——跨页面选择器数据源(商品/装修单列表/客户列表)放开给登录用户,写操作仍收菜单闸:
+
+```yaml
+  api:
+    - prefix: /api/basedata/goods
+      require: authenticated
+      methods: [GET]        # 先声明:GET 命中此条(读开放,org 隔离由 L0 硬边界保证)
+    - prefix: /api/basedata/goods
+      require: /basedata/goods   # 后声明:非 GET 落到此条(写收菜单)
+```
+
+  适用面原则(第 37 次口径):**只放开列表/搜索型读端点,且仅限跨页面选择器真实引用的**——basedata 商品(exact 列表+子树 GET)、decoration 装修单列表(exact 仅列表,详情不放)、customerprofile 客户列表(exact 仅列表,电话/账户/审计子资源不放);价格体系等敏感子资源 V1 随前缀放开属已知妥协,细化排 V2;
+- **启动期校验**(`AddonRegistry` 装载时):require 为菜单 path 而本插件 menus 里不存在、require 看起来是 capability 而本插件 mounts 里没有该 capability、prefix 互相包含且 require 矛盾——均启动告警日志(不阻断,V2 期;enforce 全开后升启动失败;**注:最长前缀分发与 methods 互补分层属预期重叠,升失败时校验须豁免这两型**,第 37 次注);
 - **声明即文档**:`/api/addons` 下发时可附带 `api` 段(脱敏到 require 字段),前端与移动端可据此做按钮级显隐(与 mounts.capability 同机制),但**前端显隐不是闸门**。
 
 ### 为什么是 yml 集中声明而不是 Controller 注解
@@ -99,7 +111,7 @@ addon:
 ## 7. 验收标准(实施完成后冒烟必须覆盖)
 
 1. 观察期:未声明 API 放行且留审计日志;已声明 API 未授权用户 122006、授权用户 200;管理员全通;
-2. enforce 期:未声明 API 122006;exact 覆盖 prefix 生效;最长前缀命中;
+2. enforce 期:未声明 API 122006;exact 覆盖 prefix 生效;最长前缀命中;**method 互补分层生效(GET 放开/写收菜单,第 37 次 smoke_enforce.py 验证)**;
 3. capability 型 require:授权功能点后 API 通、回收后 122006;
 4. 缓存一致性:改授权后 ≤ 即时(主动逐出)生效,不出现陈旧放行;
 5. 跨组织:L0 断言——组织 A 登录读不到组织 B 的客源/请假;
@@ -108,6 +120,7 @@ addon:
 
 ## 8. 待用户决策清单(拍板前不实施)
 
+> §8 五项已按 2026-10-12 拍板推荐口径执行;以下保留原决策记录。**§8-3 method 维度已于第 37 次实际启用**(读放开/写收权分层必需):用途限定为「同前缀 GET 放开 authenticated / 写收菜单」互补分层与未来写细分,不做全量 method 级授权矩阵——心智负担控制在本稿 §3 示例模式内。
 1. **声明位置**:addon.yml 集中(本稿推荐)vs Controller 注解,§3 有对照表;
 2. **观察期时长**:建议一个迭代(两周)——期间新插件必须带 api 段合入,存量插件补齐后切 enforce;
 3. **method 维度**:V2 是否引入(本稿建议:字段留好、默认不用——老系统功能点不分 method,心智负担先不加);
@@ -121,3 +134,5 @@ addon:
 3. 配置:`yingzao.rbac.mode`(observe/enforce,application.yml + 环境变量可覆盖);
 4. 冒烟:smoke_all.py 新增 §7 的 1-4、6 段(约 10-12 步);跨组织断言需要 ensure_users 支持双组织;
 5. 文档:RFC §6.10 记录落地结论;本稿状态改「已实施」。
+
+> **实施状态(2026-10-12)**:§9 全项已兑现(第 36 次 1-5;第 37 次补齐全部 12 插件声明与 enforce 专项冒烟资产)。enforce 全开前置达成——切换 = 环境变量 `YINGZAO_RBAC_MODE=enforce` 重启即生效,无代码改动。
