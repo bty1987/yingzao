@@ -40,6 +40,10 @@
   --el-border-color-lighter: rgba(26, 26, 24, 0.10);
   --el-fill-color-light: #F1EFE8;
   --el-fill-color-lighter: #FAF9F5;
+  /* 全局去白:输入框/默认按钮/弹层/抽屉统一纸白暖底(废 #FFFFFF 残留) */
+  --el-fill-color-blank: #FAF9F5;
+  --el-bg-color: #FAF9F5;
+  --el-bg-color-overlay: #FAF9F5;
   --el-text-color-primary: #1A1A18;
   --el-text-color-regular: rgba(26, 26, 24, 0.78);
   --el-text-color-secondary: rgba(26, 26, 24, 0.50);

@@ -1,14 +1,13 @@
 <template>
   <div class="shell">
-    <!-- 倒 L 布局:左侧竖向菜单(按插件分组)+顶栏(页题/通知/用户) -->
+    <!-- 倒 L 布局:左侧竖向菜单(按业务链固定顺序分组)+顶栏(页题/通知/用户) -->
     <aside class="sidebar">
-      <div class="brand" @click="$router.push(menus.length ? menus[0].path : '/approvals')">
+      <div class="brand" @click="$router.push(firstMenuPath)">
         <span class="yz-seal-stamp stamp">法</span>
         <span class="logo yz-display">营造</span>
       </div>
       <nav class="menu">
-        <router-link to="/approvals" class="menu-item" :class="{ active: $route.path === '/approvals' }">审批中心</router-link>
-        <template v-for="group in groupedMenus" :key="group.addon">
+        <template v-for="group in menuGroups" :key="group.key">
           <p class="group-name">{{ group.name }}</p>
           <router-link
             v-for="m in group.items"
@@ -17,10 +16,6 @@
             class="menu-item"
             :class="{ active: $route.path === m.path }"
           >{{ m.title }}</router-link>
-        </template>
-        <template v-if="isAdmin">
-          <p class="group-name">系统管理</p>
-          <router-link to="/roles" class="menu-item" :class="{ active: $route.path === '/roles' }">角色权限</router-link>
         </template>
       </nav>
     </aside>
@@ -53,19 +48,44 @@ const displayName = ref(localStorage.getItem('yz_display_name') || '')
 // 管理类入口可见性(RBAC):以登录回显的角色编码为准,服务端守卫才是真闸门
 const isAdmin = JSON.parse(localStorage.getItem('yz_roles') || '[]').includes('admin')
 
-// 左侧菜单按插件分组(组名 = addon.yml 的插件名),保持后端下发顺序
-const groupedMenus = computed(() =>
-  addons.list
-    .map((a) => ({ addon: a.id, name: a.name, items: a.menus || [] }))
-    .filter((g) => g.items.length > 0)
+// 左侧菜单固定业务链顺序:系统 → 流程 → 数据 → 获客 → 客户 → 订单履约(报价/装修/施工)→
+// 供应销售(销售/库存)→ 资金(款项/结算);未登记插件自动追加尾部(前向兼容)
+const MENU_ORDER = ['roles', 'approvals', 'basedata', 'market', 'customerprofile', 'customer',
+  'quotation', 'decoration', 'construction', 'sales', 'inventory', 'payment', 'balance']
+
+const menuGroups = computed(() => {
+  const byKey = {
+    roles: { key: 'roles', name: '系统管理', items: [{ path: '/roles', title: '角色权限' }] },
+    approvals: { key: 'approvals', name: '流程协作', items: [{ path: '/approvals', title: '审批中心' }] },
+  }
+  for (const a of addons.list) {
+    if (a.menus && a.menus.length > 0) {
+      byKey[a.id] = { key: a.id, name: a.name, items: a.menus }
+    }
+  }
+  const groups = []
+  const used = new Set()
+  for (const key of MENU_ORDER) {
+    if (byKey[key]) {
+      groups.push(byKey[key])
+      used.add(key)
+    }
+  }
+  for (const key of Object.keys(byKey)) {
+    if (!used.has(key)) groups.push(byKey[key])
+  }
+  return isAdmin ? groups : groups.filter((g) => g.key !== 'roles')
+})
+
+const firstMenuPath = computed(() =>
+  (menuGroups.value[0] && menuGroups.value[0].items[0] && menuGroups.value[0].items[0].path) || '/approvals'
 )
 
 onMounted(async () => {
   const list = await loadAddons()
   registerAddonRoutes(list)
   if (router.currentRoute.value.path === '/') {
-    const first = groupedMenus.value[0] && groupedMenus.value[0].items[0]
-    if (first) router.push(first.path)
+    router.push(firstMenuPath.value)
   }
 })
 
@@ -83,11 +103,11 @@ function logout() {
   background: var(--yz-paper);
 }
 
-/* 左侧栏:白纸面+右缘细墨线;brand=朱印方章+宋体 */
+/* 左侧栏:融入纸白暖底(与内容区同底色)+右缘细墨线;brand=朱印方章+宋体 */
 .sidebar {
   width: 220px;
   flex-shrink: 0;
-  background: #FFFFFF;
+  background: var(--yz-paper);
   border-right: 1px solid var(--yz-line);
   display: flex;
   flex-direction: column;

@@ -67,9 +67,9 @@ page {
   text-orientation: upright;
 }
 
-/* 卡片:白纸面+细墨线+方角(材分制:4rpx=2px 微圆角) */
+/* 卡片:纸面+细墨线+方角(与全局纸底同色,靠淡墨线成形;材分制:4rpx=2px 微圆角) */
 .card {
-  background: #FFFFFF;
+  background: var(--yz-paper);
   border: 1rpx solid var(--yz-line);
   border-radius: 4rpx;
   padding: 24rpx;
@@ -120,7 +120,7 @@ page {
   border-radius: 4rpx;
   border: 1rpx solid var(--yz-line);
   color: var(--yz-ink-70);
-  background: #FFFFFF;
+  background: var(--yz-paper);
 }
 
 .btn-mini.success { color: var(--yz-moss); border-color: rgba(90, 114, 71, 0.4); }
