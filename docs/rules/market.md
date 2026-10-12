@@ -26,7 +26,7 @@
 0 pending ──承接成功──▶ 1 success(清errorMsg)
     │─缺承接参数──回退 0+errorMsg(滞留无告警)
     └─业务异常──▶ 2 failed+errorMsg(吞掉不上抛,登记接口永远"成功")
-3 retry(0/2/3 可重试;先置3再重走承接)   4 ignore(无任何写点,死状态)
+3 accepting(承接中,V1 新增中间态供 beginAccept 幂等闸;retry 改为 0/2 态动作不再占状态位)   4 ignore(✅V1 已闭环化:显式端点+操作人+留痕)【✅第35次核对回写:V1 交付口径】
 ```
 
 - **登记链路**:三重校验(campaign/channel/source 存在+同 company+**source 归属与传入一致** 390001/390003/390004)→ phoneHash=MD5(trim(phone)) → idempotentKey(客户端传入优先,缺省 `MD5(company-campaignId-sourceId-phoneHash)`)→ 按 key+company 查重命中**静默幂等返回**(回填 6 字段,不含 items/承接结果)→ 手机 AES 密文落库明文不存 → save+flush 取 miid → saveItems(EAV)→ acceptInbound → 仅 success 落归因;
@@ -50,11 +50,11 @@
 - **实体关系**:`ecity(城市字典:拼音/经纬度)` ←cityId─ `ecase(案例:城市/楼盘/风格/户型/面积/工期/封面)` ──< `epicture(图片:裸long cid 无级联)`;`eperson(人物库:type 0设计师/1监理,拼音检索)` 被 ecase.duid/suid JPA 引用(族内唯一关联);`ecustomer(官网报名线索:姓名/电话/楼盘/面积)`;`eopinions(好评素材:type 0朋友圈/1锦旗/2其他,ecid/esid 悬空列)`;
 - **案例上下架 = 布尔开关非审核流**:status 1 上架/0 下架(与 common.status 反逻辑),单字段翻转,无审批【行业共性:官网内容轻量管理】;
 - **type 语义**:0 效果图/1 施工图;**cycle(施工工期天)仅施工图有,效果图锁 0**;图片画廊后台硬编码只做效果图(type=0),施工图图片无 UI 入口(半成品);
-- **C 端查询形态(行业规则可继承)**:官网按 (cityId, status, type) 三等值 + **硬编码每城市每类型最多露 10 条**;后台筛选白名单=类型/状态/设计师/监理/风格 like/户型 like/面积区间("min-max"字符串)/城市;
+- **C 端查询形态(行业规则可继承)**:官网按 (cityId, status, type) 三等值 + **硬编码每城市每类型最多露 10 条**;后台筛选白名单=类型/状态/设计师/监理/风格 like/户型 like/面积区间;【✅V1 偏差回写:后台不限条数,“露10条”随官网开放端(RBAC v2 后)V2 再议】
 - **报名(ecustomer)**:验证码 AES 解密比对(可选,不传即跳过;条件表达式写错成恒真式)→ 落库(**手机号明文存储+明文进钉钉消息,违加密红线**)→ 推钉钉群(群 key 读配置);
 - **地理定位半残**:queryEcityByXandY ±0.5 度经纬度围栏找城市,查不到**硬编码回退"沈阳"**(【方林嫌疑实锤】),且前端绑定的端点在 Action 无映射(调用即 404);
 - **PK 用错**:eopinions 按 ecid 当主键 update/delete(真 PK 是 eoid)——落空或错删;全族零查重(城市/人员/案例可重名);删案例/名片不级联图片(孤儿文件记录);
-- 拼音字段由 PinYin4Util 落库时自动生成(检索友好,思想保留);图片二进制走 common 上传模块,market 只存 URL。
+- 拼音字段由 PinYin4Util 落库时自动生成(检索友好,思想保留);【✅V1 偏差回写:拼音自动生成已砍(无拼音库依赖),pinyin 作为可编辑字段传入,检索走 name like】图片二进制走 common 上传模块,market 只存 URL。
 
 ## 5. 微信名片族(card/cuser/cardPhoto/cnotice,依赖外部 ISV)
 

@@ -2,7 +2,7 @@
 
 > 提取自老系统 `src/com/fanglin/balance/`(108 文件 / 13 ServiceImpl / ServiceImpl 共 3103 行),三路并行深读(主链+账户扣款 / 销售结算线 / 选材+外销结算线),2026-10-11。
 > 生产只读库复核同日完成(15 表全量体量+逐年分布+状态分布)。file:line 以 `SVC = src/com/fanglin/balance/service/impl` 缩写。
-> **本域是 sales/inventory/material 三域结算端提取后的汇聚点**(sales.md §4 三段式、inventory.md §5.5 采购结算、material.md 材料款/双轨结算的下游)。
+> **本域是 sales 结算明细的汇聚点**(sales.md §4 三段式下游)。【✅第35次核对收窄:inventory 采购结算(purchasebalance)生产 0 行从未投产、material 存量自然完结,均不进新链;实际 V1 仅接入 sales post 事件(第 26 次)】
 
 ## 0. 模块定性
 

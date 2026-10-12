@@ -110,7 +110,7 @@
 - **material.material**:depositPayment/depositStatus/fullPayment/fullStatus/status=8 作废;material.materialrefund(裸 SQL);
 - **sales.oales**:status=4 复核;
 - 装修附属:decorationmidpack/decorationholonomy.materialPaidup(销售比例聚合)、decorationactivityitem(核销 state=10);
-- 通知四路:站内信(监理)/小程序推送(客户)/钉钉群(增减项·预付款·审批)/messagecueuing 事件表(消费端在本仓库之外)。
+- 通知四路:站内信(监理)/小程序推送(客户)/钉钉群(增减项·预付款·审批)/messagequeuing 事件表。【✅第35次核对勘误:原文“messagecueuing 消费端在仓库之外”失实——information.md 考古实证 messagecueuing 32.2 万行零消费假队列,真消费表是 messagequeuing(且 44% 失败无重试);营造侧由内核事件总线 V104 三件套收口】
 
 【营造映射】每族收款/退款/确认发领域事件(PaymentCollectedEvent 等,addons-api 契约),回写归各业务插件自己监听——这是 01 清单"款项是枢纽域"的解耦落法,与通知中心同分层(内核/发布方不认识订阅方)。
 

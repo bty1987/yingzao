@@ -63,6 +63,8 @@ isAffirm 客户确认轴(0→1;affirmSales :740,验证码+手机号三重校验,
 - **自动对账闸**:公司级配置 `SALES_AUTO_BALANCE_INT` 存在即把 status≠0 且未对账的行自动递 balance 域(:644-651)【方林嫌疑:多公司开关】;**厂结"vbalance 未填写"拦截纯前端**(salesBalance.js:136),服务端无 vbalance≠0 闸——API 直调可带 0 过;
 - **创建入口三处**:①收款确认联动(payment 域按款型分发:type=8 不可退定金→advSalesBalance,type=3/5→rev+preSalesBalance,SalesPaymentServiceImpl.java:933-938);②免付款 unpaySales 直接 preSalesBalance;③手工预结批量;审批中前置守卫 240007。
 
+- 【✅V1 交付契约回写(第35次核对)】**营造侧退货结算行生成走事件**:PaymentRefundedEvent(退款通过)→ addon-sales SalesPaymentConsumer 消费,退货单状态回写已退款;结算行(负值行)生成侧=退货结算服务在预结后按品牌生成负值行并经 `SettlementItemReadyEvent` 吸附进 addon-balance(第 24/26 次交付)——老 payment 直写 salesbalance 双路径废除,零跨模块直写。
+
 ## 5. 退货线(salesrefunds)
 
 ```
@@ -161,7 +163,7 @@ isAffirm 客户确认轴(0→1;affirmSales :740,验证码+手机号三重校验,
 | 单号可跳号可撞(公司级日流水+offset) | 【方林嫌疑】改全局唯一流水 |
 | 免付款通道(假收款单) | 【方林嫌疑】线下全款豁免;保留须补幂等+真实凭证标记 |
 | 品牌跳级权限+按配送批次分成克隆结算行 | 【方林嫌疑】厂商对账定制 |
-| 结算三段式(预结→厂结→结算)+vbalance/pbalance 双值人工修正 | 【方林嫌疑】厂结二次确认绑定渠道返点玩法;行业通用=对账单确认一步 |
+| 结算三段式(预结→厂结→结算)+vbalance/pbalance 双值人工修正 | 【方林嫌疑→已裁决保留】厂结二次确认绑定渠道返点玩法;**§12/PRD 已拍板保留三段式**(2026-10-12 交付兑现),本行早期“一步对账”推荐作废【✅第35次核对标注互斥已解】 |
 | 定金即生成厂商应付行+红字反向行(onetype) | 【方林嫌疑】账务 hack,行业多用凭证冲销 |
 | 按品牌一单多结(1:N) | 半共性(按品牌对账是主材共性),分批克隆是方林玩法 |
 | 退货审批驱动+客户微信确认+370033 防重 | 行业共性(移动化确认+幂等) |
@@ -204,5 +206,5 @@ isAffirm 客户确认轴(0→1;affirmSales :740,验证码+手机号三重校验,
 12. **满意度问卷归属**(并入统一 survey 与 customer 满意度两套并存问题);
 13. **maling/venderMaling/coupon 三者的承担方与结算归属**;主单与明细两层 ctype/cvalue 谁是让利准绳;
 14. **type=1 语义**(Java PROFIT vs 字典"补贴")与 status=1 缺号是否有历史存量;
-15. **sales 与 material 两套主材销售并存**的历史分工(material 模块待过堂细化,影响 addon-sales 边界);
+15. 【✅已裁决 2026-10-11 material.md】两套主材销售之谜已闭环:material 系 1.x 代主材子订单(生产新增 2019 骤停),**addon-sales 为唯一口径**,material 不建 addon、存量 43 万单收口 V2 归档(见 rules/material.md §裁决);
 16. **公司级开关**(SALES_AUTO_BALANCE/SALES_MUILT_BALANCE)各公司实际值——决定营造是否必须保留等价开关。

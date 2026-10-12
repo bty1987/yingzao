@@ -64,7 +64,7 @@
 ## 4. 金额与比例口径(红线,老系统多制式并存)
 
 1. **金额 = long 整数存储,主流缩放 1e6(百万分位=1 元)**:couponCut/thingCut 等 DAO 聚合后 ÷1e6(DecorationActivityItemDaoImpl:60,104);中期/满减配比计算 `round(base × rate ÷ 1e6) × 1e6`(DecorationMidpackServiceImpl:134-147,DecorationHolonomyServiceImpl:152-177)。
-2. ⚠️ **÷1000 与 %.3f 同时存在**(服务记录日志"主材配额 %.3f",DecorationMidpackServiceImpl:179)——**同一字段两种缩放并存,必有一处错**,老系统以"显示对不对"为准修补。营造:统一 decimal(12,2) 元存储,插件域内单一口径。【方林嫌疑·待业务确认】
+2. ⚠️ **÷1000 与 %.3f 同时存在**(服务记录日志"主材配额 %.3f",DecorationMidpackServiceImpl:179)——**同一字段两种缩放并存,必有一处错**,老系统以"显示对不对"为准修补。营造已定案:**统一厘(×1000 定点整数)存储**(第 21 次交付兑现),插件域内单一口径。【✅第35次核对回写:原“元 decimal(12,2)”已被全局厘制推翻】【方林嫌疑·待业务确认】
 3. **比例四制式并存**:主材/服务费配比 = ppm(百万分比);折扣 discount = 万分比(10000=不打折);归属 rate = 千分比(1000=独占);payScale/saleScale/操作轨迹 rate = 百分比×100。
 4. **魔法值 1918**:saleScale 默认"1918"=19.18%,半包/包干单直接置 1918(DecorationMidpackServiceImpl:150 等 3 处)——**导致销售收款比例检查(≥99)形同虚设**。营造:比例默认值必须显式配置,禁止魔法数。【方林嫌疑·待业务确认 1918 的业务含义】
 5. 满减折上折算法:基数取整余数不打折 `折后 = round(((总价−余数)×折扣÷10000+余数) ÷1e6)×1e6`(DecorationHolonomyServiceImpl:154-157);管理费可选跟随折扣(manageDiscount=1)。
