@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.dao.DuplicateKeyException;
@@ -13,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.yingzao.addons.api.event.CustomerCreatedEvent;
+import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.security.CryptoBox;
 import com.yingzao.core.web.BizException;
 
@@ -43,14 +43,13 @@ public class CustomerService {
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
     private final CryptoBox crypto;
-    private final ApplicationEventPublisher publisher;
+    private final YzEventBus bus;
 
-    public CustomerService(JdbcTemplate jdbc, MessageSource messages, CryptoBox crypto,
-            ApplicationEventPublisher publisher) {
+    public CustomerService(JdbcTemplate jdbc, MessageSource messages, CryptoBox crypto, YzEventBus bus) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.crypto = crypto;
-        this.publisher = publisher;
+        this.bus = bus;
     }
 
     private String msg(String key) {
@@ -75,7 +74,8 @@ public class CustomerService {
         requireActivePhoneFree(orgId, cmd.phone());
         long id = insertCustomer(orgId, cmd, createdBy);
         insertPhone(orgId, id, cmd.phone(), true);
-        publisher.publishEvent(new CustomerCreatedEvent(id, orgId, cmd.name().trim(), crypto.hmac(cmd.phone())));
+        bus.publish(new CustomerCreatedEvent(id, orgId, cmd.name().trim(), crypto.hmac(cmd.phone())),
+                "customer-created-" + id);
         return id;
     }
 

@@ -33,6 +33,28 @@ def db_conn():
     )
 
 
+def event_consumed(event_type, event_key, name):
+    """第 39 次运行:审批回写链迁总线后的事件出站箱对账——断言某事件已发布且消费确认(status=1)。
+    主链事件走 AFTER_COMMIT 同步投递即时确认;嵌套发布(消费器事务内派生的子事件,如多级审批 L2
+    的 submitted)的同步回调不触发,由调度器(冒烟轮询 2s)兜底投递——统一轮询等待,上限 30s。"""
+    deadline = time.time() + 30
+    row = None
+    while time.time() < deadline:
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("select status, retry_count from yz_event_task "
+                            "where event_type = %s and event_key = %s order by id desc limit 1",
+                            (event_type, event_key))
+                row = cur.fetchone()
+        finally:
+            conn.close()
+        if row is not None and row[0] == 1:
+            break
+        time.sleep(1)
+    step(name, row is not None and row[0] == 1, row)
+
+
 def step(name, ok, detail=""):
     (passed if ok else failed).append(name)
     print("%s %s%s" % ("✓" if ok else "✗", name, ("  | " + str(detail)) if detail and not ok else ""))
@@ -303,6 +325,14 @@ def main():
     step("业务单两级走完回写通过(1)", len(ml_rows3) == 1 and ml_rows3[0].get("status") == 1
          and ml_rows3[0].get("approval_level") == 2, ml_rows3)
 
+    # 第 39 次运行:审批回写链迁总线——L1/L2 办结与 L2 派生提交事件出站箱对账
+    event_consumed("ApprovalFinishedEvent", "approval-finished-" + str(a1),
+                   "L1 办结事件走总线(消费确认)")
+    event_consumed("ApprovalSubmittedEvent", "approval-submitted-" + str(a2),
+                   "插件派生 L2 提交事件走总线(消费确认)")
+    event_consumed("ApprovalFinishedEvent", "approval-finished-" + str(a2),
+                   "L2 办结事件走总线(消费确认)")
+
     print("== 转交 × 多级串联(转交不改状态,派生链与处理人无关)==")
     tf_stamp = time.strftime("%Y%m%d%H%M%S")
     tf_leave = api_ok("转交链登记长请假(L1=c/L2=admin)", "POST", "/api/example/leaves", tok_b,
@@ -354,6 +384,12 @@ def main():
     t_rows2 = [l for l in (leaves_t2 or []) if l.get("id") == tf_leave]
     step("转交链两级走完回写通过(1)", len(t_rows2) == 1 and t_rows2[0].get("status") == 1
          and t_rows2[0].get("approval_level") == 2, t_rows2)
+
+    # 第 39 次运行:转交事件走总线(eventKey 带 toUserId 复合,同一审批转给不同人各自成事件)
+    event_consumed("ApprovalTransferredEvent", "approval-transferred-" + str(ta1) + "-" + str(uid_admin),
+                   "一级转交事件走总线(转给 admin)")
+    event_consumed("ApprovalTransferredEvent", "approval-transferred-" + str(ta2) + "-" + str(uid_c),
+                   "二级转交事件走总线(转给 example_c)")
 
     print("== 客户与楼盘档案(addon-customerprofile V1)==")
     stamp2 = time.strftime("%Y%m%d%H%M%S")
@@ -693,6 +729,9 @@ def main():
     ev_ref = api_ok("退款事件已消费确认", "GET",
                     "/api/events?eventType=PaymentRefundedEvent&status=1&page=1&size=5", tok_admin)
     step("PaymentRefunded 消费行存在", bool(ev_ref) and ev_ref.get("total", 0) >= 1, ev_ref)
+    # 第 39 次运行:退款审批办结事件走总线(通过路径)
+    event_consumed("ApprovalFinishedEvent", "approval-finished-" + str(approval_r1),
+                   "退款审批办结事件走总线(通过路径)")
 
     refund2 = api_ok("合同单发起退款(走驳回路径)", "POST", "/api/payment/bills/%s/refund" % bill_con,
                      tok_admin, {"assigneeId": uid_c, "reason": "冒烟驳回退款"})
@@ -707,6 +746,9 @@ def main():
     rf2 = [r for r in ((con_after or {}).get("refunds") or []) if str(r.get("id")) == str(refund2)]
     step("驳回不改原款项状态(仍2已确认)+退款单作废(4)",
          con_after and con_after.get("status") == 2 and rf2 and rf2[0].get("status") == 4, con_after)
+    # 第 39 次运行:退款审批办结事件走总线(驳回路径同样发事件,原款项零改动由消费器保证)
+    event_consumed("ApprovalFinishedEvent", "approval-finished-" + str(approval_r2),
+                   "退款审批办结事件走总线(驳回路径)")
 
     print("== 预付款科目化台账 ==")
     subjects = api_ok("科目列表(懒预置三科目)", "GET", "/api/payment/advance/subjects", tok_admin)
@@ -1016,6 +1058,9 @@ def main():
         and dep_c2 and dep_c2[0].get("status") == 1 \
         and tmpl_c2 and tmpl_c2[0].get("status") == 4
     step("合同线 3→6 终止+归属全失效+已收定金保留+未收款线作废", ok, (det_c2, bills_c2))
+    # 第 39 次运行:终止审批办结事件走总线(消费器回写合同线+联动作废)
+    event_consumed("ApprovalFinishedEvent", "approval-finished-" + str(term2),
+                   "终止审批办结事件走总线(消费确认)")
 
     # 废单链(单B,同客户同房屋——C 已终止不挡重建)
     order_b = api_ok("登记装修单B(废单链,无定金)", "POST", "/api/decoration/orders", tok_admin,
@@ -1600,6 +1645,9 @@ def main():
     ok_move = sorted([(r.get("warehouse_id"), r.get("num")) for r in inv2_db]) == \
         sorted([(wh_main, 15000), (wh_second, 5000)])
     step("漆 主仓15.000/次仓5.000(双向过账)", ok_move, inv2_db)
+    # 第 39 次运行:调拨审批办结事件走总线(消费器双向过账)
+    event_consumed("ApprovalFinishedEvent", "approval-finished-" + str(db_det.get("approval_id")),
+                   "调拨审批办结事件走总线(消费确认)")
 
     db2 = api_ok("第二笔调拨申请(漆3桶)", "POST", "/api/inventory/manifests/transfers", tok_admin,
                  {"lines": [{"goodsId": goods_inv2, "num": 3000, "warehouseOut": wh_main,
@@ -2020,13 +2068,17 @@ def main():
     api_err("审批中再发起拒绝 300025", "POST", "/api/sales/orders/%s/refunds" % sale1, tok_admin,
             {"type": 2, "items": [{"saleItemId": item1, "num": 500}],
              "assigneeId": uid_admin}, 300025)
-    api_ok("退货审批通过", "POST", "/api/approvals/%s/approve" % r1_det.get("approval_id"),
+    r1_approval = r1_det.get("approval_id")
+    api_ok("退货审批通过", "POST", "/api/approvals/%s/approve" % r1_approval,
            tok_admin, {"comment": "同意退货"})
     time.sleep(1)
     r1_det = api_ok("批准后退货单复查", "GET", "/api/sales/refunds/%s" % refund1, tok_admin)
     step("退货单0初始(生效)", r1_det.get("status") == 0, r1_det)
     sale_det = api_ok("主单轴复查", "GET", "/api/sales/orders/%s" % sale1, tok_admin)
     step("部分退不动主单轴(退光才置2/3,单据仍可完结)", sale_det.get("status") == 0, sale_det)
+    # 第 39 次运行:退货审批办结事件走总线(消费器回写退货单+主单轴)
+    event_consumed("ApprovalFinishedEvent", "approval-finished-" + str(r1_approval),
+                   "退货审批办结事件走总线(消费确认)")
     api_ok("退货发码", "POST", "/api/sales/refunds/%s/verify-code" % refund1, tok_admin,
            {"phone": "13800000000"})
     notif_r = api_ok("通知取退货码", "GET", "/api/notifications?page=1&size=3", tok_admin)

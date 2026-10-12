@@ -3,13 +3,13 @@ package com.yingzao.core.approval;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.web.BizException;
 
 /**
@@ -49,12 +49,12 @@ public class ApprovalService {
 
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
-    private final ApplicationEventPublisher events;
+    private final YzEventBus bus;
 
-    public ApprovalService(JdbcTemplate jdbc, MessageSource messages, ApplicationEventPublisher events) {
+    public ApprovalService(JdbcTemplate jdbc, MessageSource messages, YzEventBus bus) {
         this.jdbc = jdbc;
         this.messages = messages;
-        this.events = events;
+        this.bus = bus;
     }
 
     @Transactional
@@ -71,8 +71,10 @@ public class ApprovalService {
                 cmd.applicantId(), cmd.assigneeId());
         long id = jdbc.queryForObject("select last_insert_id()", Long.class);
         insertRecord(id, ACTION_SUBMIT, cmd.applicantId(), null, null);
-        events.publishEvent(new ApprovalSubmittedEvent(id, cmd.orgId(), cmd.title(),
-                cmd.bizAddon(), cmd.bizType(), cmd.bizId(), cmd.assigneeId()));
+        // 事件走内核事件总线(outbox 与业务同事务,eventKey=业务幂等锚点),提交后立即投递
+        bus.publish(new ApprovalSubmittedEvent(id, cmd.orgId(), cmd.title(),
+                cmd.bizAddon(), cmd.bizType(), cmd.bizId(), cmd.assigneeId()),
+                "approval-submitted-" + id);
         return id;
     }
 
@@ -181,8 +183,10 @@ public class ApprovalService {
                 toUserId, id, userId);
         requireUpdated(updated, id);
         insertRecord(id, ACTION_TRANSFER, userId, toUserId, comment);
-        events.publishEvent(new ApprovalTransferredEvent(id, orgId, row.title(),
-                row.bizAddon(), row.bizType(), row.bizId(), toUserId, userId));
+        // eventKey 带 toUserId:同一审批多次转交各自成事件(重放时新处理人通知由消费器查重去重)
+        bus.publish(new ApprovalTransferredEvent(id, orgId, row.title(),
+                row.bizAddon(), row.bizType(), row.bizId(), toUserId, userId),
+                "approval-transferred-" + id + "-" + toUserId);
     }
 
     @Transactional
@@ -200,9 +204,10 @@ public class ApprovalService {
     }
 
     private void publishFinished(ApprovalRow row, long operatorId, int result) {
-        events.publishEvent(new ApprovalFinishedEvent(row.id(), row.orgId(), row.title(),
+        bus.publish(new ApprovalFinishedEvent(row.id(), row.orgId(), row.title(),
                 row.bizAddon(), row.bizType(), row.bizId(),
-                row.applicantId(), row.assigneeId(), operatorId, result));
+                row.applicantId(), row.assigneeId(), operatorId, result),
+                "approval-finished-" + row.id());
     }
 
     private void insertRecord(long approvalId, int action, long operatorId, Long assigneeId, String comment) {

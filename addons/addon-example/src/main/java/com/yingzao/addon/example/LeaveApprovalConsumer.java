@@ -2,6 +2,7 @@ package com.yingzao.addon.example;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,57 +10,65 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.yingzao.core.approval.ApprovalFinishedEvent;
 import com.yingzao.core.approval.ApprovalService;
+import com.yingzao.core.eventbus.YzEventConsumer;
+import com.yingzao.core.eventbus.YzEventRecord;
 
 /**
- * 审批办结回写:插件监听内核 ApprovalFinishedEvent,按 result 回写业务状态——
+ * 审批办结回写消费器(内核事件总线 SPI):插件消费内核 ApprovalFinishedEvent,按 result 回写业务状态——
  * 这是「业务插件接入轻量审批」的回程车。只处理自己的 biz 三元组,其他插件的审批一律忽略。
- * 多级串联(RFC §6.8 组合方式):L1 审批通过且业务须二级审批时,在同一监听里用内核 submit 派生
+ * 多级串联(RFC §6.8 组合方式):L1 审批通过且业务须二级审批时,在同一消费里用内核 submit 派生
  * L2 审批单并改挂业务单 approval_id——内核审批单零改动,审批深度完全由插件组合。
  * 所有回写都带 approval_id 守卫(只认「当前挂着的那张审批单」的办结事件),陈旧事件天然被拒。
- * 军规 8:AFTER_COMMIT 上的 @Transactional 必须 REQUIRES_NEW(Spring 6.1 硬约束)。
+ * 取代原 LeaveApprovalListener 的 Spring AFTER_COMMIT 监听(第 39 次运行迁总线):
+ * 回写逻辑在本消费器内直接操作 JDBC,故 consume 带 @Transactional(当前无事务上下文,进方法即新建,
+ * 语义等价旧 REQUIRES_NEW)保「派生 L2 + 改挂」原子;失败由总线重试,守卫保证重放安全。
  */
 @Component
-public class LeaveApprovalListener {
+public class LeaveApprovalConsumer implements YzEventConsumer {
 
-    private static final Logger log = LoggerFactory.getLogger(LeaveApprovalListener.class);
+    private static final Logger log = LoggerFactory.getLogger(LeaveApprovalConsumer.class);
 
     private final JdbcTemplate jdbc;
     private final ApprovalService approvals;
     private final MessageSource messages;
 
-    public LeaveApprovalListener(JdbcTemplate jdbc, ApprovalService approvals, MessageSource messages) {
+    public LeaveApprovalConsumer(JdbcTemplate jdbc, @Lazy ApprovalService approvals, MessageSource messages) {
         this.jdbc = jdbc;
         this.approvals = approvals;
         this.messages = messages;
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void onApprovalFinished(ApprovalFinishedEvent event) {
-        if (!LeaveService.BIZ_ADDON.equals(event.bizAddon()) || !LeaveService.BIZ_TYPE.equals(event.bizType())) {
+    @Override
+    public Set<String> eventTypes() {
+        return Set.of("ApprovalFinishedEvent");
+    }
+
+    @Override
+    @Transactional
+    public void consume(YzEventRecord event) {
+        ApprovalFinishedEvent payload = event.payloadAs(ApprovalFinishedEvent.class);
+        if (!LeaveService.BIZ_ADDON.equals(payload.bizAddon()) || !LeaveService.BIZ_TYPE.equals(payload.bizType())) {
             return;
         }
         long leaveId;
         try {
-            leaveId = Long.parseLong(event.bizId());
+            leaveId = Long.parseLong(payload.bizId());
         } catch (NumberFormatException e) {
             log.warn("leave approval finished with unparsable bizId={}, approvalId={}",
-                    event.bizId(), event.approvalId());
+                    payload.bizId(), payload.approvalId());
             return;
         }
-        if (event.result() == ApprovalFinishedEvent.RESULT_APPROVED) {
-            onApproved(event, leaveId);
-        } else if (event.result() == ApprovalFinishedEvent.RESULT_REJECTED) {
-            finish(leaveId, event.approvalId(), LeaveService.STATUS_REJECTED);
-        } else if (event.result() == ApprovalFinishedEvent.RESULT_CANCELED) {
-            finish(leaveId, event.approvalId(), LeaveService.STATUS_CANCELED);
+        if (payload.result() == ApprovalFinishedEvent.RESULT_APPROVED) {
+            onApproved(payload, leaveId);
+        } else if (payload.result() == ApprovalFinishedEvent.RESULT_REJECTED) {
+            finish(leaveId, payload.approvalId(), LeaveService.STATUS_REJECTED);
+        } else if (payload.result() == ApprovalFinishedEvent.RESULT_CANCELED) {
+            finish(leaveId, payload.approvalId(), LeaveService.STATUS_CANCELED);
         }
     }
 
@@ -98,7 +107,7 @@ public class LeaveApprovalListener {
                 secondId, LeaveService.LEVEL_SECOND, leaveId, currentApprovalId);
         if (updated == 0) {
             // 并发窗口:一级通过与业务侧撤回竞争失败,派生出的二级审批单成为悬置单,走内核撤回兜底
-            // (保留流水与事件;其 CANCELED 事件会被下方 approval_id 守卫拒掉,不会误回写业务单)
+            // (保留流水与事件;其 CANCELED 事件会被上方 approval_id 守卫拒掉,不会误回写业务单)
             approvals.cancel(event.orgId(), event.applicantId(), secondId);
             log.warn("leave {} level-up lost the race, spawned second approval {} canceled", leaveId, secondId);
         }

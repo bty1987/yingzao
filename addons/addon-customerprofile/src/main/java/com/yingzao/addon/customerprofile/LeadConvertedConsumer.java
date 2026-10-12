@@ -2,6 +2,7 @@ package com.yingzao.addon.customerprofile;
 
 import java.util.Set;
 
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import com.yingzao.addons.api.event.LeadConvertedEvent;
@@ -21,7 +22,7 @@ public class LeadConvertedConsumer implements YzEventConsumer {
 
     private final CustomerService customers;
 
-    public LeadConvertedConsumer(CustomerService customers) {
+    public LeadConvertedConsumer(@Lazy CustomerService customers) {
         this.customers = customers;
     }
 

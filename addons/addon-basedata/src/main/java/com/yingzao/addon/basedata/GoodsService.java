@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.dao.DuplicateKeyException;
@@ -15,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.yingzao.addons.api.event.GoodsCreatedEvent;
 import com.yingzao.addons.api.event.GoodsPriceChangedEvent;
 import com.yingzao.addons.api.event.GoodsStatusChangedEvent;
+import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.web.BizException;
 
 /**
@@ -48,12 +48,12 @@ public class GoodsService {
 
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
-    private final ApplicationEventPublisher publisher;
+    private final YzEventBus bus;
 
-    public GoodsService(JdbcTemplate jdbc, MessageSource messages, ApplicationEventPublisher publisher) {
+    public GoodsService(JdbcTemplate jdbc, MessageSource messages, YzEventBus bus) {
         this.jdbc = jdbc;
         this.messages = messages;
-        this.publisher = publisher;
+        this.bus = bus;
     }
 
     private String msg(String key) {
@@ -94,8 +94,8 @@ public class GoodsService {
                     cmd.confine(), cmd.unitRate() == null ? 1000 : cmd.unitRate(), createdBy);
             long id = jdbc.queryForObject("select last_insert_id()", Long.class);
             jdbc.update("update basedata_goods set no = concat('G', lpad(id, 8, '0')) where id = ?", id);
-            publisher.publishEvent(new GoodsCreatedEvent(id, orgId, "G" + String.format("%08d", id),
-                    cmd.name().trim(), cmd.categoryId(), cmd.brandId()));
+            bus.publish(new GoodsCreatedEvent(id, orgId, "G" + String.format("%08d", id),
+                    cmd.name().trim(), cmd.categoryId(), cmd.brandId()), "goods-created-" + id);
             return id;
         } catch (DuplicateKeyException e) {
             throw resolveDuplicate(orgId, cmd);
@@ -150,10 +150,10 @@ public class GoodsService {
                     categoryId == null ? 0 : categoryId, brandId, unit, TYPE_GOODS, purchase, selling, confine,
                     unitRate));
         }
-        publisher.publishEvent(new GoodsPriceChangedEvent(id, orgId,
+        bus.publish(new GoodsPriceChangedEvent(id, orgId,
                 selling != null ? selling : asLong(goods.get("selling")),
                 confine != null ? confine : asLong(goods.get("confine")),
-                unitRate != null ? unitRate : asInt(goods.get("unit_rate"))));
+                unitRate != null ? unitRate : asInt(goods.get("unit_rate"))), "goods-price-changed-" + id);
     }
 
     @Transactional
@@ -162,7 +162,7 @@ public class GoodsService {
                 CategoryService.CODE_INVALID_PARAM, "param.invalid");
         load(orgId, id);
         jdbc.update("update basedata_goods set status = ? where id = ? and org_id = ?", status, id, orgId);
-        publisher.publishEvent(new GoodsStatusChangedEvent(id, orgId, status));
+        bus.publish(new GoodsStatusChangedEvent(id, orgId, status), "goods-status-changed-" + id);
     }
 
     public Map<String, Object> page(long orgId, String keyword, Long categoryId, Long brandId,

@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.dao.DuplicateKeyException;
@@ -13,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.yingzao.addons.api.event.HouseCreatedEvent;
+import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.security.CryptoBox;
 import com.yingzao.core.web.BizException;
 
@@ -32,14 +32,13 @@ public class HouseService {
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
     private final CryptoBox crypto;
-    private final ApplicationEventPublisher publisher;
+    private final YzEventBus bus;
 
-    public HouseService(JdbcTemplate jdbc, MessageSource messages, CryptoBox crypto,
-            ApplicationEventPublisher publisher) {
+    public HouseService(JdbcTemplate jdbc, MessageSource messages, CryptoBox crypto, YzEventBus bus) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.crypto = crypto;
-        this.publisher = publisher;
+        this.bus = bus;
     }
 
     private String msg(String key) {
@@ -77,7 +76,7 @@ public class HouseService {
                     f == null ? null : f.innerArea(), f == null ? null : f.totalArea(),
                     f == null ? null : f.houseType(), createdBy);
             long id = jdbc.queryForObject("select last_insert_id()", Long.class);
-            publisher.publishEvent(new HouseCreatedEvent(id, orgId, villageId));
+            bus.publish(new HouseCreatedEvent(id, orgId, villageId), "house-created-" + id);
             return id;
         } catch (DuplicateKeyException e) {
             throw new BizException(CODE_HOUSE_EXISTS, msg("house.exists"));
