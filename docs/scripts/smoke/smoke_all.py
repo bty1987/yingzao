@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 BASE = os.environ.get("YINGZAO_BASE", "http://127.0.0.1:8080").rstrip("/")
@@ -2884,6 +2885,197 @@ def main():
     mi_no = db_exec("select inbound_no from market_inbound where id = %s", (ib_id,))
     step("总线对账:进线事件零滞留", mkt_pending and mkt_pending[0][0] == 0, mkt_pending)
     step("进线单号 MI 流水在册", bool(mi_no) and str(mi_no[0][0]).startswith("MI"), mi_no)
+
+    # ========= 厂商主数据(addon-supplier V1,第 41 次扩展)=========
+    print("\n== 厂商主数据(addon-supplier V1:三路查重+ext_no 幂等 upsert+品牌关联+三层条款) ==")
+    stamp_sp = time.strftime("%H%d%H%M%S") + "sp"
+
+    # 依赖自建:品牌×3 + 品类×1(全部 stamp 唯一,跨轮可重复执行)
+    sp_brand_x = api_ok("建品牌X(直属候选)", "POST", "/api/basedata/brands", tok_admin,
+                        {"name": "SP烟测品牌X" + stamp_sp, "pinyin": "spycppx" + stamp_sp[-6:]})
+    sp_brand_y = api_ok("建品牌Y(直属顶替)", "POST", "/api/basedata/brands", tok_admin,
+                        {"name": "SP烟测品牌Y" + stamp_sp, "pinyin": "spycppy" + stamp_sp[-6:]})
+    sp_brand_z = api_ok("建品牌Z(未关联对照)", "POST", "/api/basedata/brands", tok_admin,
+                        {"name": "SP烟测品牌Z" + stamp_sp, "pinyin": "spycppz" + stamp_sp[-6:]})
+    sp_cat = api_ok("建品类(条款细化)", "POST", "/api/basedata/categories", tok_admin,
+                    {"name": "SP烟测品类" + stamp_sp})
+    if None in (sp_brand_x, sp_brand_y, sp_brand_z, sp_cat):
+        return finish()
+
+    sp_a = api_ok("建厂商A", "POST", "/api/supplier/suppliers", tok_admin,
+                  {"name": "恒泰建材" + stamp_sp})
+    if sp_a is None:
+        return finish()
+    api_err("重名拒绝 340003", "POST", "/api/supplier/suppliers", tok_admin,
+            {"name": "恒泰建材" + stamp_sp}, 340003)
+    sp_credit = "91" + stamp_sp + "1100"
+    sp_ext = "EXT" + stamp_sp
+    sp_b = api_ok("建厂商B(携信用代码+外部编号)", "POST", "/api/supplier/suppliers", tok_admin,
+                  {"name": "金程五金" + stamp_sp, "creditCode": sp_credit, "extNo": sp_ext})
+    if sp_b is None:
+        return finish()
+    api_err("外部编号撞 340004", "POST", "/api/supplier/suppliers", tok_admin,
+            {"name": "另一家" + stamp_sp, "extNo": sp_ext}, 340004)
+    api_err("信用代码撞 340005", "POST", "/api/supplier/suppliers", tok_admin,
+            {"name": "第三家" + stamp_sp, "creditCode": sp_credit}, 340005)
+
+    sp_list = api_ok("厂商列表(检索命中)", "GET",
+                     "/api/supplier/suppliers?keyword=" + urllib.parse.quote("恒泰建材" + stamp_sp),
+                     tok_admin)
+    step("列表按名称检索命中 A", sp_list and sp_list.get("total", 0) >= 1
+         and any(r.get("id") == sp_a for r in sp_list.get("rows") or []), sp_list)
+    sp_detail = api_ok("厂商详情回显", "GET", "/api/supplier/suppliers/%s" % sp_a, tok_admin)
+    step("编号 S+8位 生成(无计数器竞态)", bool(sp_detail)
+         and str(sp_detail.get("no", "")).startswith("S") and len(str(sp_detail.get("no"))) == 9,
+         sp_detail and sp_detail.get("no"))
+
+    api_ok("编辑白名单(联系人/电话)", "PUT", "/api/supplier/suppliers/%s" % sp_a, tok_admin,
+           {"contact": "王经理", "phone": "13900000000"})
+    sp_detail2 = api_ok("编辑后回读", "GET", "/api/supplier/suppliers/%s" % sp_a, tok_admin)
+    step("白名单字段已更新", bool(sp_detail2) and sp_detail2.get("contact") == "王经理"
+         and sp_detail2.get("phone") == "13900000000", sp_detail2)
+    api_err("编辑改名撞重名 340003", "PUT", "/api/supplier/suppliers/%s" % sp_b, tok_admin,
+            {"name": "恒泰建材" + stamp_sp}, 340003)
+
+    # 启停:停用→关联被拒→启用(条件 UPDATE,同态重放幂等不发事件)
+    api_ok("停用厂商A", "POST", "/api/supplier/suppliers/%s/status" % sp_a, tok_admin, {"status": 1})
+    api_err("停用厂商拒绝品牌关联 340006", "POST", "/api/supplier/suppliers/%s/brands" % sp_a,
+            tok_admin, {"brandId": sp_brand_x, "isPrimary": True}, 340006)
+    api_ok("重新启用厂商A", "POST",
+           "/api/supplier/suppliers/%s/status" % sp_a, tok_admin, {"status": 0})
+    api_ok("同态重放(status=0 再发零事件)", "POST",
+           "/api/supplier/suppliers/%s/status" % sp_a, tok_admin, {"status": 0})
+    event_consumed("SupplierStatusChangedEvent", "supplier-status-%s-0" % sp_a, "启停事件出站箱确认(status=0)")
+
+    # ext_no 幂等 upsert(收编 seiya 同步通道思想:命中更新/否则新建)
+    sp_up_hit = api_ok("upsert 命中回显", "POST", "/api/supplier/upsert", tok_admin,
+                       {"extNo": sp_ext, "name": "金程五金改" + stamp_sp})
+    step("upsert 命中 created=false 同 id", bool(sp_up_hit)
+         and sp_up_hit.get("created") is False and sp_up_hit.get("supplierId") == sp_b, sp_up_hit)
+    sp_b2 = api_ok("upsert 后详情(name 已更新)", "GET", "/api/supplier/suppliers/%s" % sp_b, tok_admin)
+    step("upsert 更新落库", bool(sp_b2) and sp_b2.get("name") == "金程五金改" + stamp_sp, sp_b2)
+    event_consumed("SupplierUpdatedEvent", "supplier-updated-%s" % sp_b, "更新事件出站箱确认")
+    sp_up_new = api_ok("upsert 新建", "POST", "/api/supplier/upsert", tok_admin,
+                       {"extNo": "EXT2" + stamp_sp, "name": "外部同步厂" + stamp_sp})
+    step("upsert 新建 created=true", bool(sp_up_new) and sp_up_new.get("created") is True, sp_up_new)
+
+    sp_upsert_results = []
+    def _conc_upsert():
+        st_, res_ = call("POST", "/api/supplier/upsert", tok_admin,
+                         {"extNo": "EXTC" + stamp_sp, "name": "并发同步厂" + stamp_sp})
+        sp_upsert_results.append((st_, res_))
+    threads_sp = [threading.Thread(target=_conc_upsert) for _ in range(2)]
+    for t in threads_sp:
+        t.start()
+    for t in threads_sp:
+        t.join()
+    sp_conc_ids = {str((r or {}).get("supplierId")) for st_, r in sp_upsert_results
+                   if st_ == 200 and r}
+    step("两并发同 ext_no 仅一条落库(同 id 回显)", len(sp_conc_ids) == 1, sp_upsert_results)
+
+    # 品牌关联:绑/重复拒/解绑拒/直属切换(修老 ocuid 双轨:直属=多对多上的位)
+    api_ok("关联品牌X(isPrimary 直属)", "POST", "/api/supplier/suppliers/%s/brands" % sp_b,
+           tok_admin, {"brandId": sp_brand_x, "isPrimary": True})
+    api_err("重复关联拒绝 340007", "POST", "/api/supplier/suppliers/%s/brands" % sp_b,
+            tok_admin, {"brandId": sp_brand_x, "isPrimary": False}, 340007)
+    api_ok("关联品牌Y(非直属)", "POST", "/api/supplier/suppliers/%s/brands" % sp_b,
+           tok_admin, {"brandId": sp_brand_y, "isPrimary": False})
+    api_err("解绑未关联品牌 340008", "POST",
+            "/api/supplier/suppliers/%s/brands/%s/unbind" % (sp_b, sp_brand_z), tok_admin, None, 340008)
+    api_ok("设品牌Y为直属(sp_b)", "POST",
+           "/api/supplier/suppliers/%s/brands/%s/primary" % (sp_b, sp_brand_y), tok_admin)
+    sp_brands_b = api_ok("关联清单回读(sp_b)", "GET", "/api/supplier/suppliers/%s/brands" % sp_b, tok_admin)
+    sp_by_b = next((r for r in (sp_brands_b or []) if r.get("brand_id") == sp_brand_y), None)
+    step("sp_b 品牌Y直属在位", bool(sp_by_b) and sp_by_b.get("is_primary") == 1, sp_brands_b)
+    # 同品牌双厂商直属切换(每品牌至多一个直属,新直属顶旧直属——修老 ocuid 单列双轨)
+    api_ok("厂商A关联品牌Y(非直属)", "POST", "/api/supplier/suppliers/%s/brands" % sp_a,
+           tok_admin, {"brandId": sp_brand_y, "isPrimary": False})
+    api_ok("设厂商A为品牌Y直属(切换顶替sp_b)", "POST",
+           "/api/supplier/suppliers/%s/brands/%s/primary" % (sp_a, sp_brand_y), tok_admin)
+    sp_brands_a = api_ok("关联清单回读(sp_a)", "GET", "/api/supplier/suppliers/%s/brands" % sp_a, tok_admin)
+    sp_brands_b2 = api_ok("关联清单回读(sp_b 复查)", "GET", "/api/supplier/suppliers/%s/brands" % sp_b, tok_admin)
+    sp_ay = next((r for r in (sp_brands_a or []) if r.get("brand_id") == sp_brand_y), None)
+    sp_by_b2 = next((r for r in (sp_brands_b2 or []) if r.get("brand_id") == sp_brand_y), None)
+    step("直属切换实证(同品牌:A=1,B=0)", bool(sp_ay) and bool(sp_by_b2)
+         and sp_ay.get("is_primary") == 1 and sp_by_b2.get("is_primary") == 0,
+         (sp_brands_a, sp_brands_b2))
+    event_consumed("SupplierBrandChangedEvent", "supplier-brand-%s-%s-primary" % (sp_a, sp_brand_y),
+                   "品牌关联事件出站箱确认(primary)")
+
+    # 三层结算条款(品牌 upsert→品类细化→商品价;金额厘,点位=万分比)
+    api_ok("录品牌条款Y(点位250)", "PUT",
+           "/api/supplier/suppliers/%s/terms/brands/%s" % (sp_b, sp_brand_y), tok_admin,
+           {"settleType": 1, "settleValue": 250, "penalty": 5000, "warrantyMonths": 24})
+    api_err("未关联品牌录条款 340008", "PUT",
+            "/api/supplier/suppliers/%s/terms/brands/%s" % (sp_b, sp_brand_z), tok_admin,
+            {"settleType": 0, "settleValue": 100}, 340008)
+    api_ok("品牌条款Y改值(upsert 更新语义 300)", "PUT",
+           "/api/supplier/suppliers/%s/terms/brands/%s" % (sp_b, sp_brand_y), tok_admin,
+           {"settleType": 1, "settleValue": 300})
+    api_ok("录品类细化(底价 880 厘)", "POST",
+           "/api/supplier/suppliers/%s/terms/brands/%s/categories" % (sp_b, sp_brand_y), tok_admin,
+           {"categoryId": sp_cat, "settleType": 0, "settleValue": 88000})
+    api_err("重复品类细化 340013", "POST",
+            "/api/supplier/suppliers/%s/terms/brands/%s/categories" % (sp_b, sp_brand_y), tok_admin,
+            {"categoryId": sp_cat, "settleType": 0, "settleValue": 88000}, 340013)
+
+    sp_goods1 = api_ok("建商品G1(挂品牌Y)", "POST", "/api/basedata/goods", tok_admin,
+                       {"name": "SP烟测商品甲" + stamp_sp, "categoryId": sp_cat, "brandId": sp_brand_y,
+                        "unit": "件", "type": 0, "purchase": 80000, "selling": 100000})
+    sp_goods2 = api_ok("建商品G2(挂品牌X,品牌不符对照)", "POST", "/api/basedata/goods", tok_admin,
+                       {"name": "SP烟测商品乙" + stamp_sp, "categoryId": sp_cat, "brandId": sp_brand_x,
+                        "unit": "件", "type": 0, "purchase": 70000, "selling": 90000})
+    if None in (sp_goods1, sp_goods2):
+        return finish()
+    api_ok("录商品条款(G1 供货价/结算价)", "POST",
+           "/api/supplier/suppliers/%s/terms/brands/%s/goods" % (sp_b, sp_brand_y), tok_admin,
+           {"goodsId": sp_goods1, "price": 80000, "balance": 70000})
+    api_err("重复商品条款 340010", "POST",
+            "/api/supplier/suppliers/%s/terms/brands/%s/goods" % (sp_b, sp_brand_y), tok_admin,
+            {"goodsId": sp_goods1, "price": 80000, "balance": 70000}, 340010)
+    api_err("商品不存在 340012", "POST",
+            "/api/supplier/suppliers/%s/terms/brands/%s/goods" % (sp_b, sp_brand_y), tok_admin,
+            {"goodsId": 999999999, "price": 100, "balance": 90}, 340012)
+    api_err("商品品牌归属不符 340011", "POST",
+            "/api/supplier/suppliers/%s/terms/brands/%s/goods" % (sp_b, sp_brand_y), tok_admin,
+            {"goodsId": sp_goods2, "price": 100, "balance": 90}, 340011)
+
+    sp_terms = api_ok("条款三层回读", "GET", "/api/supplier/suppliers/%s/terms" % sp_b, tok_admin)
+    sp_ty = next((t for t in (sp_terms or []) if t.get("brand_id") == sp_brand_y), None)
+    step("品牌条款 upsert 后 settle_value=300", bool(sp_ty) and sp_ty.get("settle_value") == 300, sp_ty)
+    step("品类细化在册", bool(sp_ty) and any(c.get("category_id") == sp_cat
+         for c in sp_ty.get("categories") or []), sp_ty and sp_ty.get("categories"))
+    step("商品条款在册(G1)", bool(sp_ty) and any(g.get("goods_id") == sp_goods1
+         for g in sp_ty.get("goods") or []), sp_ty and sp_ty.get("goods"))
+
+    api_ok("删除品类细化", "DELETE",
+           "/api/supplier/suppliers/%s/terms/brands/%s/categories/%s" % (sp_b, sp_brand_y, sp_cat),
+           tok_admin)
+    api_ok("删除商品条款", "DELETE",
+           "/api/supplier/suppliers/%s/terms/brands/%s/goods/%s" % (sp_b, sp_brand_y, sp_goods1),
+           tok_admin)
+    sp_terms2 = api_ok("删除后条款回读", "GET", "/api/supplier/suppliers/%s/terms" % sp_b, tok_admin)
+    sp_ty2 = next((t for t in (sp_terms2 or []) if t.get("brand_id") == sp_brand_y), None)
+    step("品类/商品条款已删(品牌条款保留)", bool(sp_ty2)
+         and not (sp_ty2.get("categories") or []) and not (sp_ty2.get("goods") or []),
+         sp_ty2)
+
+    # 事件对账:Supplier 族事件出站箱零滞留
+    sp_pending = db_exec("""
+        select count(*) from yz_event_task
+        where event_type like 'Supplier%%' and status not in (1, 3)
+    """)
+    step("总线对账:厂商事件零滞留", sp_pending and sp_pending[0][0] == 0, sp_pending)
+
+    # api 段下发(声明即文档)
+    sp_addons = api_ok("插件清单复查(supplier)", "GET", "/api/addons", tok_admin)
+    sp_addon = next((a for a in (sp_addons or []) if a.get("id") == "supplier"), None)
+    step("supplier 菜单下发", bool(sp_addon)
+         and any(m.get("path") == "/supplier/suppliers" for m in sp_addon.get("menus") or []), sp_addon)
+    step("supplier api 段下发(菜单型 require)", bool(sp_addon) and any(
+        a.get("prefix") == "/api/supplier" and a.get("require") == "/supplier/suppliers"
+        for a in sp_addon.get("apis") or []), sp_addon and sp_addon.get("apis"))
+
 
     # ========= RBAC v2 端点鉴权(observe 期,第 36 次扩展)=========
     print("\n== RBAC v2 端点鉴权(observe) ==")

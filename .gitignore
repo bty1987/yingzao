@@ -50,3 +50,7 @@ desktop.ini
 *.key
 .env
 .env.*
+
+# ---- Python 冒烟 ----
+__pycache__/
+*.pyc

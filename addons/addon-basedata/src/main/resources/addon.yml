@@ -38,7 +38,17 @@ addon:
       require: /basedata/goods
     - prefix: /api/basedata/categories
       require: /basedata/goods
+    # 品牌字典 GET 读放开(厂商管理页品牌关联下拉的跨页数据源,第 41 次随 addon-supplier 补)
+    - exact: /api/basedata/brands
+      require: authenticated
+      methods: [GET]
     - prefix: /api/basedata/brands
+      require: /basedata/goods
+    # 品类树 GET 读放开(厂商页品类细化下拉的跨页数据源)
+    - exact: /api/basedata/categories
+      require: authenticated
+      methods: [GET]
+    - prefix: /api/basedata/categories
       require: /basedata/goods
     - prefix: /api/basedata/packages
       require: /basedata/packages

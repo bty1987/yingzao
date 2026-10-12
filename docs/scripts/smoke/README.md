@@ -32,7 +32,7 @@ YINGZAO_RBAC_MODE=enforce YINGZAO_DB_URL=... YINGZAO_DB_USER=root YINGZAO_DB_PAS
 python docs/scripts/smoke/smoke_enforce.py
 ```
 
-覆盖:静态完备性(12 插件 addon.yml api 段 vs 309 端点样例,模拟内核 match 含 method 互补分层,零未声明)+ 动态四组(admin 旁路 13 端点 / 无角色全拒 122006 / 全授权全通 / 部分授权 authenticated 读放开与菜单闸)。改任何插件 api 段或内核 rbac 后必跑。
+覆盖:静态完备性(13 插件 addon.yml api 段 vs 325 端点样例,模拟内核 match 含 method 互补分层,零未声明)+ 动态四组(admin 旁路 14 端点 / 无角色全拒 122006 / 全授权全通 / 部分授权 authenticated 读放开与菜单闸)。改任何插件 api 段或内核 rbac 后必跑。
 ```
 
 输出逐步 ✓/✗ 与汇总 `N/N PASS`。任何一步 ✗ 退出码非 0。
@@ -72,5 +72,6 @@ YINGZAO_EVENTS_BACKOFFSECONDS=1 YINGZAO_EVENTS_BACKOFFCAPSECONDS=5 YINGZAO_EVENT
 ```
 
 🔴 冒烟请求含中文必须走 python urllib(UTF-8),Git Bash 的 curl 发中文 = GBK 炸 JSON。
+- 厂商主数据(第 41 次扩展):三路查重(重名 340003/外部编号 340004/信用代码 340005)→ 编号 S+8位(按 id 生成)→ 编辑白名单 → 停用拒关联 340006+同态重放零事件 → ext_no 幂等 upsert(命中回显 created=false/新建 true/两并发同 ext_no 仅一条落库)→ 品牌关联(重复 340007/解绑未关联 340008/is_primary 切换语义 X→Y)→ 三层条款(品牌 upsert 改值/未关联拒 340008/品类细化重复 340013/商品条款重复 340010/商品不存在 340012/品牌归属不符 340011/删除后品牌条款保留)→ Supplier 族事件出站箱零滞留 + api 段下发断言;
 - RBAC v2 端点鉴权(第 36 次扩展,observe 期):api 段下发(菜单型/capability 型)→ admin 旁路 → 无角色 122006(122006 带 require 提示)→ 建角色授权后通(缓存逐出即时)→ 回收后拒 → observe 未声明放行 → 跨组织(org2 无授权拒/org1 角色绑 org2 用户 122005);测试账号:example_d=org1 永不授权(纯 v1 断言),example_o=org2(跨组织),example_b/c=emp_all 全业务员工角色(RBAC v2 后业务流不受阻断);
 - 库存域(第 23 次扩展):仓库查重/停用闸 → 进货守卫族(空明细 310030/负数 310031/停用仓 310010)→ 建单即过账 → 出货原子扣减 → 两并发超扣只成功一次(310022)→ 出返/进退 surplus 原子守卫(310033)→ 调拨审批线(审批期不占库存/通过过账/驳回置3)→ 盘盈亏事件闭环 → 领料额度双闸契约(240020/240021/售后跳过/撤销回退/退回回冲)→ 外辅全状态机(验收锁定 310051/送货到货校验/超阶收费公式/反结算/完成5态/作废闸)→ 采购分批入库自动判定/取消删项释放事件 → 全域事件零滞留+额度流水+计数器对账;

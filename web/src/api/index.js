@@ -405,6 +405,31 @@ export const deleteEcasePicture = (pid) => http.delete(`/api/market/showcase/pic
 export const leadForEcase = (id, data) => http.post(`/api/market/showcase/cases/${id}/lead`, data)
 export const listEcaseLeads = (params) => http.get('/api/market/showcase/leads', { params })
 
+// 厂商管理(addon-supplier):厂商台账/ext_no 幂等 upsert/品牌关联/三层结算条款
+export const pageSuppliers = (params) => http.get('/api/supplier/suppliers', { params })
+export const fetchSupplier = (id) => http.get(`/api/supplier/suppliers/${id}`)
+export const createSupplier = (data) => http.post('/api/supplier/suppliers', data)
+export const updateSupplier = (id, data) => http.put(`/api/supplier/suppliers/${id}`, data)
+export const changeSupplierStatus = (id, data) => http.post(`/api/supplier/suppliers/${id}/status`, data)
+export const upsertSupplier = (data) => http.post('/api/supplier/upsert', data)
+export const listSupplierBrands = (id) => http.get(`/api/supplier/suppliers/${id}/brands`)
+export const bindSupplierBrand = (id, data) => http.post(`/api/supplier/suppliers/${id}/brands`, data)
+export const unbindSupplierBrand = (id, brandId) =>
+  http.post(`/api/supplier/suppliers/${id}/brands/${brandId}/unbind`)
+export const setSupplierPrimary = (id, brandId) =>
+  http.post(`/api/supplier/suppliers/${id}/brands/${brandId}/primary`)
+export const listSupplierTerms = (id) => http.get(`/api/supplier/suppliers/${id}/terms`)
+export const saveBrandTerm = (id, brandId, data) =>
+  http.put(`/api/supplier/suppliers/${id}/terms/brands/${brandId}`, data)
+export const addCategoryTerm = (id, brandId, data) =>
+  http.post(`/api/supplier/suppliers/${id}/terms/brands/${brandId}/categories`, data)
+export const removeCategoryTerm = (id, brandId, categoryId) =>
+  http.delete(`/api/supplier/suppliers/${id}/terms/brands/${brandId}/categories/${categoryId}`)
+export const addGoodsTerm = (id, brandId, data) =>
+  http.post(`/api/supplier/suppliers/${id}/terms/brands/${brandId}/goods`, data)
+export const removeGoodsTerm = (id, brandId, goodsId) =>
+  http.delete(`/api/supplier/suppliers/${id}/terms/brands/${brandId}/goods/${goodsId}`)
+
 // 事件总线管理(内核,仅管理员):出站箱分页/统计/死信 requeue
 export const pageEvents = (params) => http.get('/api/events', { params })
 export const eventStats = () => http.get('/api/events/stats')

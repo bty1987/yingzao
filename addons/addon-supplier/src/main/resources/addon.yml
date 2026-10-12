@@ -1,0 +1,20 @@
+addon:
+  id: supplier
+  name: 厂商管理
+  version: 0.1.0
+  error-code-segment: 340000
+  menus:
+    - path: /supplier/suppliers
+      title: 厂商管理
+      icon: office-building
+  dicts:
+    supplierStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
+    settleType:
+      - { key: '0', label: 底价 }
+      - { key: '1', label: 点位 }
+  api:
+    # 厂商域全部数据源归「厂商管理」菜单;外部同步通道(upsert)同闸,服务账号经角色授权接入
+    - prefix: /api/supplier
+      require: /supplier/suppliers

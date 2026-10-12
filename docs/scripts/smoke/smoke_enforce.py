@@ -297,6 +297,19 @@ ENDPOINTS = [
     ("market", "GET", "/api/market/showcase/cases/1"), ("market", "PUT", "/api/market/showcase/cases/1"),
     ("market", "POST", "/api/market/showcase/cases/1/status"), ("market", "DELETE", "/api/market/showcase/cases/1"),
     ("market", "POST", "/api/market/showcase/cases/1/pictures"), ("market", "DELETE", "/api/market/showcase/pictures/1"),
+    # supplier(第 41 次)
+    ("supplier", "POST", "/api/supplier/suppliers"), ("supplier", "GET", "/api/supplier/suppliers"),
+    ("supplier", "GET", "/api/supplier/suppliers/1"), ("supplier", "PUT", "/api/supplier/suppliers/1"),
+    ("supplier", "POST", "/api/supplier/suppliers/1/status"), ("supplier", "POST", "/api/supplier/upsert"),
+    ("supplier", "GET", "/api/supplier/suppliers/1/brands"), ("supplier", "POST", "/api/supplier/suppliers/1/brands"),
+    ("supplier", "POST", "/api/supplier/suppliers/1/brands/1/unbind"),
+    ("supplier", "POST", "/api/supplier/suppliers/1/brands/1/primary"),
+    ("supplier", "GET", "/api/supplier/suppliers/1/terms"),
+    ("supplier", "PUT", "/api/supplier/suppliers/1/terms/brands/1"),
+    ("supplier", "POST", "/api/supplier/suppliers/1/terms/brands/1/categories"),
+    ("supplier", "DELETE", "/api/supplier/suppliers/1/terms/brands/1/categories/1"),
+    ("supplier", "POST", "/api/supplier/suppliers/1/terms/brands/1/goods"),
+    ("supplier", "DELETE", "/api/supplier/suppliers/1/terms/brands/1/goods/1"),
 ]
 
 # 12 插件代表 GET 端点(admin/全授权组用;三条读放开端点返回 200 属预期)
@@ -308,23 +321,25 @@ REP_GETS = [
     ("/api/construction/orders", "施工"), ("/api/inventory/manifests", "库存"),
     ("/api/sales/orders", "销售"), ("/api/balance/settlements", "结算"),
     ("/api/market/inbounds", "进线"),
+    ("/api/supplier/suppliers", "厂商"),
 ]
 
 # 无角色拒绝面:详情/子资源/未放开列表(读放开的三条列表端点不含在内,放开行为在第 4 组断言)
 REP_DENIES = [
     ("/api/customer/leads", "客源"), ("/api/customer/chances", "机会"),
     ("/api/customerprofile/customers/1", "客户档案详情"), ("/api/example/leaves", "请假"),
-    ("/api/basedata/brands", "品牌字典"), ("/api/payment/bills", "款项"),
+    ("/api/basedata/packages", "套餐档案"), ("/api/payment/bills", "款项"),
     ("/api/decoration/orders/1", "装修单详情"), ("/api/quotation/quotations", "报价"),
     ("/api/construction/orders", "施工"), ("/api/inventory/manifests", "库存"),
     ("/api/sales/orders", "销售"), ("/api/balance/settlements", "结算"),
     ("/api/market/inbounds", "进线"),
+    ("/api/supplier/suppliers/1", "厂商详情"),
 ]
 
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(12 插件 39 条)", len({r["addon"] for r in rules}) == 12 and len(rules) == 39,
+    step("载入 api 规则(13 插件 43 条)", len({r["addon"] for r in rules}) == 13 and len(rules) == 43,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====
@@ -340,6 +355,10 @@ def main():
     r = mock_match(rules, "/api/basedata/goods/1/prices", "GET")
     step("basedata GET 价格子资源 → authenticated(前缀读放开覆盖子树,V1 接受档案读开放)",
          r and r["require"] == "authenticated", r)
+    r = mock_match(rules, "/api/basedata/brands", "GET")
+    step("basedata GET 品牌字典 → authenticated(exact 读放开,第 41 次)", r and r["require"] == "authenticated", r)
+    r = mock_match(rules, "/api/basedata/brands", "POST")
+    step("basedata POST 品牌 → 商品菜单(写收权)", r and r["require"] == "/basedata/goods", r)
     r = mock_match(rules, "/api/decoration/orders", "GET")
     step("decoration GET 列表 → authenticated(exact)", r and r["require"] == "authenticated", r)
     r = mock_match(rules, "/api/decoration/orders", "POST")
