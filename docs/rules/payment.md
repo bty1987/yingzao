@@ -97,7 +97,7 @@
 | 外销款 | 0→1→2 三态简明;一单仅一笔(150029);收款后 oales→复核 4 | 随外销业务 V3 |
 | 款项合同 | 电子签双厂商(法大大/e签宝)按 company×场景路由;状态 0→1 已签→3 归档/2 无效;公司盖章不改状态 | 随电子签插件 |
 | 钱包族 | 钱包/绑卡/流水/附件四表;**绑卡状态机断裂(有效态不可达,解绑死路)、银行卡号/CVV 明文入库、三个空桩接口、加款无上限**;转账倒是用了原子 SQL(全模块唯一) | 🔴 不迁移(半成品),需求出现时按"账户中心"重做 |
-| 积分台账 | paymentActivity:realMoney×multiple÷1e6;与 salesactivityitem 兑换积分对冲;换绑活动的额度校验是 TODO | 随会员/积分插件 |
+| 积分台账 | paymentActivity:realMoney×multiple÷1e6;与 salesactivityitem 兑换积分对冲;换绑活动的额度校验是 TODO | 随会员/积分插件【✅已裁决 2026-10-13 member.md】paymentactivity **残缺不迁**(唯一写点=服务款,check* 全死,String.valueOf(null) 缺陷);营造积分记账改**事件驱动**(消费收款确认事件→addon-member 分项账户),对冲台账由 member 兑换单分摊映射承担,见 docs/prd/addon-member.md;activitypayment 死代码(生产 0 行)随 V 系不迁 |
 | 对账 statement | 渠道对账单纯只读展示,写入方在 ERP 之外 | 归报表/对账插件,V3 |
 
 ## 8. 跨模块写表面(款项域 = 全库枢纽,营造必须切事件)

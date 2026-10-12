@@ -176,7 +176,7 @@
 7. **归属千分比**是否保留"按单分佣比例"模型,还是简化为一单一归属?(§7)
 8. **里程碑数值表**(0-4/节点+2/115/116)迁移为配置,还是前端自算?(§12)
 9. **电子签**:V1 是否需要合同域?若需要,厂商路由收敛为单 provider 还是策略插件?(§9)
-10. **活动/券核销**域是否划入 decoration 还是独立营销 addon?(§11)
+10. **活动/券核销**域是否划入 decoration 还是独立营销 addon?(§11)【✅已裁决 2026-10-13 member.md】**线下券/物品(atttype=0)留 addon-decoration**——它是装修单价格模型组成部分(couponCut/thingCut/factPrice 联动重算),剥离将切断 factPrice 闭环;**积分商城线上兑换(atttype=1)归 addon-member**(兑换单替代"外部商城同步落 item"旧通道);核销交互走事件(签约自动核销=member 监听装修签约事件,配置化 content,修老硬编码字面量),见 docs/prd/addon-member.md;
 
 ## 17. 营造 addon-decoration 落地映射(草案,详见 docs/prd/addon-decoration.md)
 

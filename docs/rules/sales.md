@@ -203,7 +203,7 @@ isAffirm 客户确认轴(0→1;affirmSales :740,验证码+手机号三重校验,
 8. **退定金两路径**(审批 type18 生成反向结算行 vs 款项路径不生成)哪个是现状主流;
 9. **rejectSalesBalance 多品牌残留**(行残留主单已回 0)是特性还是 bug;
 10. **外销线 V2 精简版立项确认**(含 oalesitem 断链是否修、退货负数约定、atttype 二元法去留);
-11. **活动积分族剥离会员营销插件**确认(销售域仅留绑定列);store 已判删除但 salesactivityitem+awardstock 链路是活代码,积分插件 V1 是否保留库存联动;
+11. **活动积分族剥离会员营销插件**确认(销售域仅留绑定列);store 已判删除但 salesactivityitem+awardstock 链路是活代码,积分插件 V1 是否保留库存联动;【✅已考证+PRD 2026-10-13 member.md】剥离定案:addon-member V1 含礼品库存(条件 UPDATE 原子扣,修老 9 处竞态),兑换单以商城单号幂等 upsert;销售域仅留 activityId+amount 绑定列,记分改消费收款确认事件(废除实时 SQL 聚合);**销售域积分 ÷1e6 与装修域 ÷1000 的 1000 倍量纲差实锤**(MemberDaoImpl vs SalesActivityDaoImpl 双口径),营造统一一套倍数不保留域间差(rules/member.md §13-2 待业务确认);
 12. **满意度问卷归属**(并入统一 survey 与 customer 满意度两套并存问题);
 13. **maling/venderMaling/coupon 三者的承担方与结算归属**;主单与明细两层 ctype/cvalue 谁是让利准绳;
 14. **type=1 语义**(Java PROFIT vs 字典"补贴")与 status=1 缺号是否有历史存量;
