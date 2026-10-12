@@ -3,13 +3,15 @@ import Login from '../views/Login.vue'
 import Layout from '../views/Layout.vue'
 import ApprovalCenter from '../views/ApprovalCenter.vue'
 import Roles from '../views/Roles.vue'
+import Events from '../views/Events.vue'
 
-// 静态路由:登录 + 主布局 + 内核平台页(审批中心/角色权限)。业务路由由插件菜单动态注册(见 registerAddonRoutes)。
+// 静态路由:登录 + 主布局 + 内核平台页(审批中心/角色权限/事件总线)。业务路由由插件菜单动态注册(见 registerAddonRoutes)。
 const routes = [
   { path: '/login', component: Login },
   { path: '/', name: 'layout', component: Layout, children: [] },
   { path: '/approvals', component: Layout, children: [{ path: '', component: ApprovalCenter, meta: { title: '审批中心' } }] },
   { path: '/roles', component: Layout, children: [{ path: '', component: Roles, meta: { title: '角色权限' } }] },
+  { path: '/events', component: Layout, children: [{ path: '', component: Events, meta: { title: '事件总线' } }] },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

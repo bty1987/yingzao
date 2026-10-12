@@ -404,3 +404,8 @@ export const addEcasePicture = (id, data) => http.post(`/api/market/showcase/cas
 export const deleteEcasePicture = (pid) => http.delete(`/api/market/showcase/pictures/${pid}`)
 export const leadForEcase = (id, data) => http.post(`/api/market/showcase/cases/${id}/lead`, data)
 export const listEcaseLeads = (params) => http.get('/api/market/showcase/leads', { params })
+
+// 事件总线管理(内核,仅管理员):出站箱分页/统计/死信 requeue
+export const pageEvents = (params) => http.get('/api/events', { params })
+export const eventStats = () => http.get('/api/events/stats')
+export const requeueEvent = (id) => http.post(`/api/events/${id}/requeue`)

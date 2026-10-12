@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -12,11 +11,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.yingzao.addons.api.event.LeadAssignedEvent;
+import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.web.BizException;
 
 /**
  * 客源机会服务(V2):分配 / 列表 / 确认 / 完成。
- * 分配 = lead 前置校验 + 唯一机会约束 + 策略解析责任人,单事务内发布 LeadAssignedEvent;
+ * 分配 = lead 前置校验 + 唯一机会约束 + 策略解析责任人,单事务内经内核事件总线发布
+ * LeadAssignedEvent(outbox 落库与业务同事务,提交后立即投递,失败可重试直至死信可见);
  * 状态机 0 已分配 → 3 已确认 → 4 已完成(确认不可跳步);每客源生命周期内唯一机会。
  */
 @Service
@@ -32,14 +33,14 @@ public class ChanceService {
     public static final int STATUS_COMPLETED = 4;
 
     private final JdbcTemplate jdbc;
-    private final ApplicationEventPublisher publisher;
+    private final YzEventBus bus;
     private final MessageSource messages;
     private final Map<String, LeadAssignStrategy> strategies;
 
-    public ChanceService(JdbcTemplate jdbc, ApplicationEventPublisher publisher, MessageSource messages,
+    public ChanceService(JdbcTemplate jdbc, YzEventBus bus, MessageSource messages,
             List<LeadAssignStrategy> strategyList) {
         this.jdbc = jdbc;
-        this.publisher = publisher;
+        this.bus = bus;
         this.messages = messages;
         this.strategies = strategyList.stream()
                 .collect(Collectors.toUnmodifiableMap(LeadAssignStrategy::mode, s -> s));
@@ -72,7 +73,9 @@ public class ChanceService {
         jdbc.update("insert into customer_chance(org_id, lead_id, assignee_id, status) values (?,?,?,?)",
                 orgId, leadId, resolvedAssignee, STATUS_ASSIGNED);
         long chanceId = jdbc.queryForObject("select last_insert_id()", Long.class);
-        publisher.publishEvent(new LeadAssignedEvent(chanceId, leadId, orgId, resolvedAssignee, mode));
+        // eventKey 以 chanceId 为幂等锚点:每客源唯一机会(上方 count 守卫保证),重放安全
+        bus.publish(new LeadAssignedEvent(chanceId, leadId, orgId, resolvedAssignee, mode),
+                "lead-assigned-" + chanceId);
         return chanceId;
     }
 

@@ -220,6 +220,18 @@ def main():
     count2 = api_ok("已读后再查未读数", "GET", "/api/notifications/unread-count", tok_c)
     step("未读数已回落", count2 == count - 1, (count, count2))
 
+    # 第 38 次运行:分配事件改走内核事件总线,出站箱消费确认对账
+    conn_la = db_conn()
+    try:
+        with conn_la.cursor() as cur:
+            cur.execute("select status from yz_event_task where event_type = 'LeadAssignedEvent' "
+                        "and event_key = %s order by id desc limit 1",
+                        ("lead-assigned-" + str(chance_id),))
+            la_row = cur.fetchone()
+    finally:
+        conn_la.close()
+    step("分配事件走总线(LeadAssignedEvent 消费确认)", la_row is not None and la_row[0] == 1, la_row)
+
     print("== 轻量审批闭环(leave 示范)==")
     leave_id = api_ok("example_b 提请假条(返回业务单id)", "POST", "/api/example/leaves", tok_b,
                       {"reason": "冒烟请假" + stamp, "days": 1, "assigneeId": uid_c})
@@ -443,6 +455,18 @@ def main():
     linked = api_ok("转化联动主档(get-or-create 事件链)", "GET",
                     "/api/customerprofile/customers?keyword=%s&page=1&size=10" % lead_phone, tok_admin)
     step("转化客源自动落主档", bool(linked) and linked.get("total", 0) >= 1, linked)
+
+    # 第 38 次运行:转化事件改走内核事件总线(SPI 消费器建档),出站箱消费确认对账
+    conn_lc = db_conn()
+    try:
+        with conn_lc.cursor() as cur:
+            cur.execute("select status from yz_event_task where event_type = 'LeadConvertedEvent' "
+                        "and event_key = %s order by id desc limit 1",
+                        ("lead-converted-" + str(lead2),))
+            lc_row = cur.fetchone()
+    finally:
+        conn_lc.close()
+    step("转化事件走总线(LeadConvertedEvent 消费确认)", lc_row is not None and lc_row[0] == 1, lc_row)
 
     print("== 基础数据(addon-basedata V1 商品档案)==")
     stamp3 = time.strftime("%Y%m%d%H%M%S")

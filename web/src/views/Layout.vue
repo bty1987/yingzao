@@ -55,7 +55,10 @@ const MENU_ORDER = ['roles', 'approvals', 'basedata', 'market', 'customerprofile
 
 const menuGroups = computed(() => {
   const byKey = {
-    roles: { key: 'roles', name: '系统管理', items: [{ path: '/roles', title: '角色权限' }] },
+    roles: { key: 'roles', name: '系统管理', items: [
+      { path: '/roles', title: '角色权限' },
+      { path: '/events', title: '事件总线' },
+    ] },
     approvals: { key: 'approvals', name: '流程协作', items: [{ path: '/approvals', title: '审批中心' }] },
   }
   for (const a of addons.list) {

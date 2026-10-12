@@ -10,13 +10,9 @@ import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.yingzao.addons.api.event.CustomerCreatedEvent;
-import com.yingzao.addons.api.event.LeadConvertedEvent;
 import com.yingzao.core.security.CryptoBox;
 import com.yingzao.core.web.BizException;
 
@@ -346,17 +342,5 @@ public class CustomerService {
             throw new BizException(CODE_PHONE_NOT_FOUND, msg("phone.notfound"));
         }
         return rows.get(0);
-    }
-
-    // ---- 领域事件 ----
-
-    /**
-     * 客源转化 → get-or-create 客户主档(事务提交后执行,REQUIRES_NEW;幂等,重放安全)。
-     * 取代 spike 期 lead 级镜像表:主档锚点是手机号,不是客源 id。
-     */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void onLeadConverted(LeadConvertedEvent event) {
-        exist(event.orgId(), event.phone(), event.name(), null);
     }
 }

@@ -3,18 +3,19 @@ package com.yingzao.addon.customer;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.web.BizException;
 
 /**
  * 客源服务:登记 / 列表 / 转化。
- * 转化在事务内更新状态并发布 LeadConvertedEvent,客户档案 addon 于事务提交后建档。
+ * 转化在事务内更新状态并经内核事件总线发布 LeadConvertedEvent(outbox 落库与业务同事务,
+ * 提交后立即投递;失败可重试直至死信可见),客户档案 addon 以总线 SPI 消费器建档。
  */
 @Service
 public class LeadService {
@@ -26,12 +27,12 @@ public class LeadService {
     public static final int STATUS_CONVERTED = 1;
 
     private final JdbcTemplate jdbc;
-    private final ApplicationEventPublisher publisher;
+    private final YzEventBus bus;
     private final MessageSource messages;
 
-    public LeadService(JdbcTemplate jdbc, ApplicationEventPublisher publisher, MessageSource messages) {
+    public LeadService(JdbcTemplate jdbc, YzEventBus bus, MessageSource messages) {
         this.jdbc = jdbc;
-        this.publisher = publisher;
+        this.bus = bus;
         this.messages = messages;
     }
 
@@ -61,7 +62,8 @@ public class LeadService {
                     messages.getMessage("lead.alreadyConverted", null, LocaleContextHolder.getLocale()));
         }
         jdbc.update("update customer_lead set status = 1 where id = ?", leadId);
-        publisher.publishEvent(new com.yingzao.addons.api.event.LeadConvertedEvent(leadId, orgId,
-                (String) lead.get("name"), (String) lead.get("phone")));
+        // eventKey 以 leadId 为幂等锚点:一单只转化一次(上方状态守卫保证),重试/requeue 重放安全
+        bus.publish(new com.yingzao.addons.api.event.LeadConvertedEvent(leadId, orgId,
+                (String) lead.get("name"), (String) lead.get("phone")), "lead-converted-" + leadId);
     }
 }
