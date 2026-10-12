@@ -1,7 +1,7 @@
 <template>
   <view>
     <view class="card hello">
-      <text class="cell-title">你好,{{ displayName }}</text>
+      <text class="cell-title yz-display" style="font-size: 34rpx">你好,{{ displayName }}</text>
       <text class="cell-sub">今天也要把家交好</text>
     </view>
 
@@ -75,17 +75,17 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 28rpx 0;
-  border-bottom: 1rpx solid #f0f2f5;
+  border-bottom: 1rpx solid var(--yz-line);
 }
 .cell:last-child { border-bottom: none; }
 .cell-main { display: flex; flex-direction: column; flex: 1; }
 .cell-side { display: flex; align-items: center; }
-.arrow { color: #c2c9d4; font-size: 36rpx; margin-left: 16rpx; }
+.arrow { color: var(--yz-ink-35); font-size: 36rpx; margin-left: 16rpx; }
 .badge {
-  background: #d84a45;
-  color: #ffffff;
+  background: var(--yz-seal);
+  color: var(--yz-paper);
   font-size: 22rpx;
-  border-radius: 999rpx;
+  border-radius: 4rpx;
   padding: 2rpx 14rpx;
 }
 </style>

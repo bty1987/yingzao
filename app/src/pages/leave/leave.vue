@@ -86,8 +86,8 @@ export default {
 .actions { margin-top: 16rpx; }
 .level-badge {
   margin-left: 8rpx;
-  background: #fff7e6;
-  color: #d48806;
+  background: rgba(166, 134, 75, 0.14);
+  color: var(--yz-ochre);
 }
 .fab {
   position: fixed;
@@ -95,13 +95,13 @@ export default {
   bottom: 80rpx;
   width: 96rpx;
   height: 96rpx;
-  border-radius: 50%;
-  background: #2f6fed;
-  color: #ffffff;
+  border-radius: 4rpx;
+  background: var(--yz-ink);
+  color: var(--yz-paper);
   font-size: 48rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8rpx 24rpx rgba(47, 111, 237, 0.35);
+  box-shadow: 0 8rpx 24rpx rgba(26, 26, 24, 0.25);
 }
 </style>

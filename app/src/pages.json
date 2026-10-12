@@ -42,15 +42,15 @@
     }
   ],
   "globalStyle": {
-    "navigationBarTextStyle": "white",
+    "navigationBarTextStyle": "black",
     "navigationBarTitleText": "营造",
-    "navigationBarBackgroundColor": "#2f3a4a",
-    "backgroundColor": "#f5f6f8"
+    "navigationBarBackgroundColor": "#FAF9F5",
+    "backgroundColor": "#FAF9F5"
   },
   "tabBar": {
-    "color": "#8a94a6",
-    "selectedColor": "#2f6fed",
-    "backgroundColor": "#ffffff",
+    "color": "rgba(26,26,24,0.5)",
+    "selectedColor": "#1A1A18",
+    "backgroundColor": "#FAF9F5",
     "borderStyle": "black",
     "list": [
       { "pagePath": "pages/index/index", "text": "工作台" },

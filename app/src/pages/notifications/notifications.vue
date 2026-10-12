@@ -84,7 +84,7 @@ export default {
   padding: 20rpx 20rpx 0;
 }
 
-.toolbar .disabled { color: #c2c9d4; }
+.toolbar .disabled { color: var(--yz-ink-35); }
 
 .head {
   display: flex;
@@ -97,7 +97,7 @@ export default {
   width: 14rpx;
   height: 14rpx;
   border-radius: 50%;
-  background: #d84a45;
+  background: var(--yz-seal);
 }
 
 .content { margin-bottom: 8rpx; }

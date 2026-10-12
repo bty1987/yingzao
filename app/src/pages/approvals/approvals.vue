@@ -80,22 +80,22 @@ export default {
   display: flex;
   background: #ffffff;
   padding: 0 20rpx;
-  border-bottom: 1rpx solid #f0f2f5;
+  border-bottom: 1rpx solid var(--yz-line);
 }
 
 .tab {
   flex: 1;
   text-align: center;
   padding: 24rpx 0;
-  color: #5a6474;
+  color: var(--yz-ink-70);
   font-size: 28rpx;
   border-bottom: 4rpx solid transparent;
 }
 
 .tab.active {
-  color: #2f6fed;
+  color: var(--yz-seal);
   font-weight: 600;
-  border-bottom-color: #2f6fed;
+  border-bottom-color: var(--yz-seal);
 }
 
 .head {

@@ -126,11 +126,11 @@ export default {
   display: flex;
   flex-direction: column;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid #f0f2f5;
+  border-bottom: 1rpx solid var(--yz-line);
 }
 
 .label {
-  color: #5a6474;
+  color: var(--yz-ink-70);
   font-size: 26rpx;
   margin-bottom: 12rpx;
 }
@@ -145,14 +145,14 @@ export default {
   padding: 8rpx 0;
 }
 
-.placeholder { color: #b8c0cc; }
+.placeholder { color: var(--yz-ink-35); }
 
-.arrow { color: #c2c9d4; font-size: 36rpx; }
+.arrow { color: var(--yz-ink-35); font-size: 36rpx; }
 
 .note {
   min-height: 140rpx;
   font-size: 30rpx;
 }
 
-.ph { color: #b8c0cc; }
+.ph { color: var(--yz-ink-35); }
 </style>

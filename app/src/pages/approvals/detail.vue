@@ -164,7 +164,7 @@ export default {
 
 .record {
   padding: 20rpx 0;
-  border-bottom: 1rpx solid #f0f2f5;
+  border-bottom: 1rpx solid var(--yz-line);
 }
 
 .record:last-child { border-bottom: none; }
@@ -179,21 +179,21 @@ export default {
 
 .record-comment {
   margin: 8rpx 0;
-  color: #5a6474;
+  color: var(--yz-ink-70);
   font-size: 26rpx;
 }
 
 .comment {
   width: auto;
   min-height: 120rpx;
-  background: #f5f6f8;
-  border-radius: 12rpx;
+  background: var(--yz-paper-deep);
+  border-radius: 4rpx;
   padding: 16rpx;
   margin-top: 16rpx;
   font-size: 28rpx;
 }
 
-.ph { color: #b8c0cc; }
+.ph { color: var(--yz-ink-35); }
 
 .btn-row {
   display: flex;
@@ -203,15 +203,15 @@ export default {
 
 .btn-half {
   flex: 1;
-  border-radius: 12rpx;
+  border-radius: 4rpx;
   font-size: 30rpx;
-  color: #ffffff;
+  color: var(--yz-paper);
 }
 
-.btn-half.success { background: #1f9d61; }
-.btn-half.danger { background: #d84a45; }
+.btn-half.success { background: var(--yz-moss); }
+.btn-half.danger { background: var(--yz-seal); }
 
 .transfer-line { margin-top: 24rpx; }
 
-.btn-primary.warn { background: #c47b1d; }
+.btn-primary.warn { background: var(--yz-ochre); }
 </style>

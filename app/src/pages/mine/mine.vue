@@ -84,9 +84,9 @@ export default {
 .avatar {
   width: 96rpx;
   height: 96rpx;
-  border-radius: 50%;
-  background: #2f6fed;
-  color: #ffffff;
+  border-radius: 4rpx;
+  background: var(--yz-ink);
+  color: var(--yz-paper);
   font-size: 40rpx;
   display: flex;
   align-items: center;
@@ -100,7 +100,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 28rpx 0;
-  border-bottom: 1rpx solid #f0f2f5;
+  border-bottom: 1rpx solid var(--yz-line);
 }
 
 .cell:last-child { border-bottom: none; }
@@ -109,15 +109,15 @@ export default {
 
 .cell-side { display: flex; align-items: center; }
 
-.arrow { color: #c2c9d4; font-size: 36rpx; margin-left: 16rpx; }
+.arrow { color: var(--yz-ink-35); font-size: 36rpx; margin-left: 16rpx; }
 
 .badge {
-  background: #d84a45;
-  color: #ffffff;
+  background: var(--yz-seal);
+  color: var(--yz-paper);
   font-size: 22rpx;
-  border-radius: 999rpx;
+  border-radius: 4rpx;
   padding: 2rpx 14rpx;
 }
 
-.logout { color: #d84a45; }
+.logout { color: var(--yz-seal); }
 </style>
