@@ -112,6 +112,7 @@ isAffirm 客户确认轴(0→1;affirmSales :740,验证码+手机号三重校验,
 | 活动倍数 multiple | **百万分比(1e6=1 倍)** | ActivityPO.java:69+DAO SQL |
 | 积分 integral/expendPrice | ×1000,乘积 ÷1e6 抵消 | SalesActivityDaoImpl.java:58,68 |
 | maling/venderMaling/coupon | int 存毫 | 溢出隐患(≈214 万元上限) |
+| 结算聚合除数(对账/修数用) | balance 域吸附本域 salesbalance 行与选材项时除数=**10^6**(数量×单价双千倍),**非**口头流传的 DIV 1000——修数迁移须按列实际量纲重推 | 勘误详见 balance.md(B 类联动#5 传播);BalanceSelectionDaoImpl.java:87-93 |
 | 注释漂移 | OalesItemPO 自称"分"实为厘;ds/sales.json 的 balanceStatus 少两态 | 双字典源三处并存(constant 表/ds JSON/constants.json 快照) |
 | 缩放缺口 | addOales 的 award/profit 不在 tranargs→**元当厘入库缩小 1000 倍**(api/sales.js:287-293) | 隐式 tranargs 机制的典型事故 |
 

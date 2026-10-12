@@ -28,6 +28,7 @@
 
 - 状态 0预结算→1厂商结算→2完结(`MaterialBalancePO.java:48-52`;`MaterialBalanceServiceImpl.java:113,133,172`);vbalance(厂结值)/post(结算值)/difference 与 sales 的 pbalance/vbalance 同族。
 - **双轨旁路**:`postBalanceMaterial`(`MaterialServiceImpl.java:481`)不经 balance 行直接把主单置 5/2,该单 balance 行**永久停留 0**——两条结算轨道并存,对账必裂。
+- **量纲注记(1e6 勘误传播,B 类联动#5)**:materialbalance/materialpayment 是 material 库内**自闭合**结算线,不经 balance 域选材聚合(其聚合除数 10^6 的勘误见 balance.md——"DIV 1000"口头先例系按彼时列量纲);存量 43 万单修数迁移时按各列实际量纲逐列重推,勿套用任何统一除数。
 - 利润公式:预结算=套餐 total×prePoint / BASE(price-底价)×num / POINT(price-salePrice×(1000-point))×num,再减 maling(`MaterialServiceImpl.java:437-458`);结算差额 post-pre(`:512-529`,注释写"×0.5"代码没有);退款利润镜像(`ApprovalMaterialRefundServiceImpl.java:297-331`)。**difference 双语义**:预结算行=总价-利润(`:471`)、退款行=利润本身(`ApprovalMaterialRefundServiceImpl.java:344`)。
 
 ## 4. materialactivityitem 活动赠品(生产 0 行,整链零落地)

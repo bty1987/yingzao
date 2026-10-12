@@ -40,6 +40,7 @@
 
 - **MarketCustomerBridge(76 行)= 获客链唯一出口**:优先级协议——VO 内嵌 `customerChance != null` → 走机会(深层转化);否则 `customerSource != null` → 仅建客源;都无 → accepted=false 回 pending,消息"入站记录缺少Customer承接参数"(**硬编码中文当协议**);
 - **跨模块写法 = REQUIRES_NEW 直调 customer Service 接口**(非 DAO 直写):addCustomerChance 级联建 客户→房产→客源→派发(按 CustomerDeptRule/CUSTOMER_ISSUE_RULE_INT 决定 auto/manual);addCustomerSource 仅客源+记录;
+- **承接是否级联建客户主档/房产(营造口径显式化,B 类联动#2)**:老桥 chance 路径级联建 客户→房产→客源;**营造 V1 = 承接只建客源 lead+派发机会 chance,不级联建客户主档与房产**——主档(客户)在客源**转化**时经 `LeadConvertedEvent` 由 addon-customerprofile get-or-create 建档(见 customerprofile.md),房产维持登记页显式录入;承接/转化两级分离,使无效进线不污染主数据(营销域与档案域的写边界);
 - **🔴 事务边界孤儿**:Bridge 独立事务先提交,外层进线事务若在归因/回写阶段失败 → **客源已建、进线消失**——营造必须显式设计(承接幂等+补偿或两阶段确认);
 - **归因 = insert-only 事件流水**(marketattribution,无更新无删除):eventType 0 submit/1 customer_source/2 customer_chance/3 order,按 ccid>0→2、csid>0→1、否则 0 推导;**3 order 无写点(成交归因是规划未实现)**——四级漏斗模型行业共性,保留;
 - **撞单查重在 customer 侧且是"同录单人"维度**:同 uid+phone 静默返回已有 csid(330103 被注释)、同 uid+楼盘+楼号静默返回(330102 被注释)——**同一手机号换录单人即再建一条客源**,撞单靠事后审批;三个"已存在"异常(390007/330103/330102)全部注释化,从报错退化为静默合并且不可配置【方林嫌疑,与客源域 rules §待确认联动】;
