@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.yingzao.addons.api.SupplierApi;
 import com.yingzao.addons.api.event.StockPurchaseChangedEvent;
 import com.yingzao.core.eventbus.YzEventBus;
 import com.yingzao.core.web.BizException;
@@ -31,6 +32,9 @@ public class PurchaseService {
     public static final int CODE_ALL_INBOUND = 310062;
     public static final int CODE_CANCELLED = 310063;
     public static final int CODE_EDIT_FROZEN = 310064;
+    /** 厂商引用化(V1203,外辅 310058/310059 同构两态):缺失与停用是不同运营动作。 */
+    public static final int CODE_SUPPLIER_NOT_FOUND = 310065;
+    public static final int CODE_SUPPLIER_DISABLED = 310066;
     public static final int CODE_BAD_STATE = 310002;
     public static final int CODE_PARAM = 310003;
 
@@ -51,26 +55,36 @@ public class PurchaseService {
     private final StockService stocks;
     private final ManifestService manifests;
     private final YzEventBus eventBus;
+    private final SupplierApi suppliers;
 
     public PurchaseService(JdbcTemplate jdbc, MessageSource messages, StockService stocks,
-            ManifestService manifests, YzEventBus eventBus) {
+            ManifestService manifests, YzEventBus eventBus, SupplierApi suppliers) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.stocks = stocks;
         this.manifests = manifests;
         this.eventBus = eventBus;
+        this.suppliers = suppliers;
     }
 
     @Transactional
-    public long create(long orgId, Long salesId, String supplierName, List<ItemCmd> items,
+    public long create(long orgId, Long salesId, Long supplierId, List<ItemCmd> items,
             String remark, long operatorId) {
         require(items != null && !items.isEmpty(), ManifestService.CODE_EMPTY_ITEMS,
                 "inventory.items.empty");
+        // V1203 厂商引用化(外辅 V1202 同款):必传 supplierId,存在且启用才可挂单,
+        // supplier_name 收窄为官方名称快照(禁前端传名);存量自由登记行 NULL 只读保留。
+        require(supplierId != null && supplierId > 0, CODE_PARAM, "inventory.param.invalid");
+        SupplierApi.SupplierSummary supplier = suppliers.querySupplier(orgId, supplierId)
+                .orElseThrow(() -> new BizException(CODE_SUPPLIER_NOT_FOUND,
+                        msg("inventory.purchase.supplierNotFound")));
+        require(supplier.status() == 0, CODE_SUPPLIER_DISABLED,
+                "inventory.purchase.supplierDisabled");
         jdbc.update("""
-                insert into inventory_purchase(org_id, code, sales_id, status, supplier_name, remark,
-                    created_by, created_by_name)
-                values (?,?,?,?,?,?,?,?)
-                """, orgId, nextCode(orgId), salesId, ST_INIT, blankToNull(supplierName),
+                insert into inventory_purchase(org_id, code, sales_id, status, supplier_id,
+                    supplier_name, remark, created_by, created_by_name)
+                values (?,?,?,?,?,?,?,?,?)
+                """, orgId, nextCode(orgId), salesId, ST_INIT, supplierId, supplier.name(),
                 blankToNull(remark), operatorId, displayName(operatorId));
         long purchaseId = jdbc.queryForObject("select last_insert_id()", Long.class);
         int sort = 0;
@@ -203,7 +217,7 @@ public class PurchaseService {
         allArgs.add(safeSize);
         allArgs.add((Math.max(pageNo, 1) - 1) * safeSize);
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select id, code, sales_id, status, supplier_name, remark, created_by_name,
+                select id, code, sales_id, status, supplier_id, supplier_name, remark, created_by_name,
                        inbound_at, cancelled_at, created_at
                 from inventory_purchase""" + where + " order by id desc limit ? offset ?",
                 allArgs.toArray());
@@ -287,7 +301,7 @@ public class PurchaseService {
 
     private Map<String, Object> loadDetail(long orgId, long purchaseId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select id, code, sales_id, status, supplier_name, remark, created_by_name,
+                select id, code, sales_id, status, supplier_id, supplier_name, remark, created_by_name,
                        inbound_at, cancelled_at, created_at
                 from inventory_purchase where id = ? and org_id = ?
                 """, purchaseId, orgId);

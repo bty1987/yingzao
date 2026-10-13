@@ -24,7 +24,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/inventory/purchases")
 public class PurchaseController {
 
-    public record CreateRequest(Long salesId, String supplierName,
+    public record CreateRequest(Long salesId, Long supplierId,
             List<PurchaseService.ItemCmd> items, String remark) {
     }
 
@@ -51,7 +51,7 @@ public class PurchaseController {
         long orgId = (Long) request.getAttribute("yz.orgId");
         Long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(purchases.create(orgId, body == null ? null : body.salesId(),
-                body == null ? null : body.supplierName(), body == null ? null : body.items(),
+                body == null ? null : body.supplierId(), body == null ? null : body.items(),
                 body == null ? null : body.remark(), userId));
     }
 

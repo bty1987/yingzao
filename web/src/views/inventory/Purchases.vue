@@ -41,8 +41,12 @@
         <el-form-item label="销售单锚点">
           <el-input v-model="createForm.salesId" placeholder="销售单id(可空)" style="width: 220px" />
         </el-form-item>
-        <el-form-item label="厂商">
-          <el-input v-model="createForm.supplierName" style="width: 220px" />
+        <el-form-item label="厂商" required>
+          <el-select v-model="createForm.supplierId" filterable remote :remote-method="searchSuppliers"
+            :loading="supplierLoading" placeholder="搜索厂商(须已在厂商管理建档并启用)" style="width: 260px">
+            <el-option v-for="c in supplierOptions" :key="c.id" :label="c.name + '(' + (c.no || '') + ')'"
+              :value="c.id" />
+          </el-select>
         </el-form-item>
       </el-form>
       <el-table :data="createForm.items" border size="small">
@@ -150,7 +154,7 @@ import { onMounted, reactive, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   pagePurchases, fetchPurchase, createPurchase, inboundPurchase, removePurchaseItem,
-  cancelPurchase, listWarehouses, pageGoods, listGoodsSkuAttrs
+  cancelPurchase, listWarehouses, pageGoods, listGoodsSkuAttrs, pageSuppliers
 } from '../../api'
 import { addons } from '../../store/addons'
 
@@ -169,7 +173,9 @@ const goodsOptions = ref([])
 const goodsLoading = ref(false)
 
 const createDialog = ref(false)
-const createForm = reactive({ salesId: '', supplierName: '', items: [], remark: '' })
+const createForm = reactive({ salesId: '', supplierId: null, items: [], remark: '' })
+const supplierOptions = ref([])
+const supplierLoading = ref(false)
 const detailDrawer = ref(false)
 const detail = ref(null)
 const inboundDialog = ref(false)
@@ -217,10 +223,21 @@ async function onGoodsPick(row) {
 
 function openCreate() {
   createForm.salesId = ''
-  createForm.supplierName = ''
+  createForm.supplierId = null
   createForm.remark = ''
   createForm.items = [newRow()]
+  supplierOptions.value = []
   createDialog.value = true
+}
+
+async function searchSuppliers(q) {
+  supplierLoading.value = true
+  try {
+    const res = await pageSuppliers({ keyword: q || '', page: 1, size: 20 })
+    supplierOptions.value = (res.data && res.data.rows) || []
+  } finally {
+    supplierLoading.value = false
+  }
 }
 
 async function onCreate() {
@@ -230,8 +247,9 @@ async function onCreate() {
   if (items.some((i) => !i.goodsId)) return ElMessage.warning('请补全商品')
   saving.value = true
   try {
+    if (!createForm.supplierId) return ElMessage.warning('请选择厂商')
     await createPurchase({ salesId: createForm.salesId || null,
-      supplierName: createForm.supplierName || null, items, remark: createForm.remark || null })
+      supplierId: createForm.supplierId, items, remark: createForm.remark || null })
     ElMessage.success('已建单')
     createDialog.value = false
     load()

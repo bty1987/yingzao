@@ -1917,13 +1917,23 @@ def main():
     api_err("已作废不可操作 310055", "POST", "/api/inventory/outsourcings/%s/assign" % os2, tok_admin,
             {"supplierId": sup_os1}, 310055)
 
-    # 采购(分批入库+取消释放事件化)
-    po1 = api_ok("采购建单(水泥10包x45元)", "POST", "/api/inventory/purchases", tok_admin,
-                 {"supplierName": "水泥直供" + stamp_inv,
+    # 采购(分批入库+取消释放事件化;V1203 厂商引用化,外辅 V1202 同款两态)
+    api_err("采购建单缺厂商拒绝 310003", "POST", "/api/inventory/purchases", tok_admin,
+            {"items": [{"goodsId": goods_inv1, "num": 1000}]}, 310003)
+    api_err("采购厂商不存在拒绝 310065", "POST", "/api/inventory/purchases", tok_admin,
+            {"supplierId": 99999999,
+             "items": [{"goodsId": goods_inv1, "num": 1000}]}, 310065)
+    api_err("采购厂商已停用拒绝 310066", "POST", "/api/inventory/purchases", tok_admin,
+            {"supplierId": sup_os2,
+             "items": [{"goodsId": goods_inv1, "num": 1000}]}, 310066)
+    po1 = api_ok("采购建单(水泥10包x45元,supplierId 引用)", "POST", "/api/inventory/purchases", tok_admin,
+                 {"supplierId": sup_os1,
                   "items": [{"goodsId": goods_inv1, "num": 10000, "inprice": 45000}]})
     if po1 is None:
         return finish()
     po_det = api_ok("采购单详情取明细", "GET", "/api/inventory/purchases/%s" % po1, tok_admin)
+    step("厂商引用落单:supplier_id+官方名快照(禁前端传名)", (po_det or {}).get("supplier_id") == sup_os1
+         and (po_det or {}).get("supplier_name") == "鑫旺定制" + stamp_inv, po_det)
     po_item = ((po_det.get("items") or [{}])[0]).get("id")
     api_err("入库超余量拒绝 310061", "POST", "/api/inventory/purchases/%s/inbound" % po1,
             tok_admin, {"warehouseId": wh_main, "lines": [{"itemId": po_item, "num": 11000}]}, 310061)
@@ -1945,14 +1955,14 @@ def main():
     step("水泥库存 24.000(14+10采购入库)", inv1_po and inv1_po[0].get("num") == 24000, inv1_po)
 
     po2 = api_ok("第二张采购单(漆3桶)", "POST", "/api/inventory/purchases", tok_admin,
-                 {"items": [{"goodsId": goods_inv2, "num": 3000}]})
+                 {"supplierId": sup_os1, "items": [{"goodsId": goods_inv2, "num": 3000}]})
     api_ok("取消采购(余量释放走事件)", "POST", "/api/inventory/purchases/%s/cancel" % po2, tok_admin)
     po2_det = api_ok("取消单复查", "GET", "/api/inventory/purchases/%s" % po2, tok_admin)
     po2_item = ((po2_det.get("items") or [{}])[0]).get("id")
     api_err("已取消不可操作 310063", "POST", "/api/inventory/purchases/%s/inbound" % po2, tok_admin,
             {"warehouseId": wh_main, "lines": [{"itemId": po2_item, "num": 1000}]}, 310063)
     po3 = api_ok("第三张采购单(删项链)", "POST", "/api/inventory/purchases", tok_admin,
-                 {"items": [{"goodsId": goods_inv2, "num": 2000}]})
+                 {"supplierId": sup_os1, "items": [{"goodsId": goods_inv2, "num": 2000}]})
     po3_det = api_ok("第三张详情", "GET", "/api/inventory/purchases/%s" % po3, tok_admin)
     api_ok("初始态删项(释放余量)", "DELETE", "/api/inventory/purchases/%s/items/%s" % (
         po3, ((po3_det.get("items") or [{}])[0]).get("id")), tok_admin)
