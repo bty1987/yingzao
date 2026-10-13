@@ -838,6 +838,11 @@ def main():
 
     print("== 装修单(addon-decoration V1:四线状态机+签约拆分+事件回程车)==")
     stamp5 = time.strftime("%Y%m%d%H%M%S")
+    # 决算检查配置跨轮复位(组织级持久状态,上轮异常退出会泄漏;第 36 次 rbac_smoke_* 清理同款纪律)
+    api_ok("决算检查配置跨轮复位", "PUT", "/api/decoration/config", tok_admin,
+           {"checkEnable": False, "signEnable": False, "salesEnable": False, "constructionEnable": False,
+            "selectionEnable": False, "decoPaymentEnable": False, "salePaymentEnable": False,
+            "decoPaymentTarget": 990, "salePaymentTarget": 990})
     # 款项类型前置:协议键 deposit(幂等确保存在)+ 本次签约模板类型(600‰);历史模板类型停用归拢
     all_types = api_ok("类型字典全量(含停用)", "GET", "/api/payment/bill-types?includeDisabled=true", tok_admin)
     dep_codes = [t.get("code") for t in (all_types or [])]
@@ -1083,6 +1088,84 @@ def main():
     sales_active = [b for b in (det_b or {}).get("belongs", []) if b.get("line") == 1 and b.get("status") == 1]
     ok = det_b and det_b.get("status") == 5 and det_b.get("salesman_id") == uid_b and len(sales_active) == 1
     step("销售线归属已转移(新行有效+主单同步)", ok, det_b)
+
+    # ========= 决算六项检查(B 类#6 回补,第 47 次;单H 专测,不动单A既有断言)=========
+    # 此时在途单=0(A 完工/C 终止/B 废单),单H 用同户不撞在途查重;终态留在 3(无害)。
+    order_h = api_ok("登记装修单H(决算检查链,定金1万)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_id, "houseId": house_id, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c, "depositAmount": 10000000})
+    if order_h is None:
+        return finish()
+    bills_h0 = api_ok("单H款项反查(定金线)", "GET",
+                      "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_h, tok_admin)
+    dep_h = [b for b in (bills_h0 or {}).get("rows", []) if b.get("type_code") == "deposit"]
+    api_ok("单H定金收款(签约门槛前置)", "POST", "/api/payment/bills/%s/collect" % dep_h[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 10000000}]})
+    goods_h = api_ok("建决算检查专用商品(启用态)", "POST", "/api/basedata/goods", tok_admin,
+                     {"name": "烟测决算商品" + stamp3, "categoryId": cat_child,
+                      "brandId": brand_id, "unit": "片", "selling": 90000})
+    if goods_h is None:
+        return finish()
+    cfg0 = api_ok("决算配置读(懒初始化)", "GET", "/api/decoration/config", tok_admin)
+    step("配置默认全关+target 990(‰)", (cfg0 or {}).get("check_enable") == 0
+         and (cfg0 or {}).get("deco_payment_target") == 990
+         and (cfg0 or {}).get("sale_payment_target") == 990, cfg0)
+    quota_h = api_ok("单H建报价", "POST", "/api/quotation/quotations", tok_admin,
+                     {"orderId": order_h, "name": "决算检查方案", "versionId": q_ver})
+    if quota_h is None:
+        return finish()
+    api_ok("单H报价锁定", "POST", "/api/quotation/quotations/%s/lock" % quota_h, tok_admin)
+    api_ok("单H预签", "POST", "/api/decoration/orders/%s/presign" % order_h, tok_admin)
+    api_ok("单H签约(拆款线)", "POST", "/api/decoration/orders/%s/sign" % order_h, tok_admin,
+           {"contractAmount": 60000000})
+    api_ok("开总闸全子项(target 0 比例闸放行)", "PUT", "/api/decoration/config", tok_admin,
+           {"checkEnable": True, "signEnable": True, "salesEnable": True, "constructionEnable": True,
+            "selectionEnable": True, "decoPaymentEnable": True, "salePaymentEnable": True,
+            "decoPaymentTarget": 0, "salePaymentTarget": 0})
+    pre1 = api_ok("决算预检(总闸开)", "GET", "/api/decoration/orders/%s/account-check" % order_h, tok_admin)
+    it1 = (pre1 or {}).get("items") or {}
+    step("预检:无施工单FAIL(total=0)+选材恒UNCHECK+签约PASS+sales初始PASS",
+         (pre1 or {}).get("checkEnable") is True and (pre1 or {}).get("overall") == 2
+         and (it1.get("construction") or {}).get("status") == 2
+         and ((it1.get("construction") or {}).get("detail") or {}).get("total") == 0
+         and (it1.get("selection") or {}).get("status") == 0
+         and (it1.get("sign") or {}).get("status") == 1
+         and (it1.get("sales") or {}).get("status") == 1, pre1)
+    api_err("决算检查不满足拒绝 250023", "POST", "/api/decoration/orders/%s/account" % order_h,
+            tok_admin, None, 250023)
+    sale_h = api_ok("开销售单挂单H(sales 子项FAIL源)", "POST", "/api/sales/orders", tok_admin,
+                    {"orderId": order_h, "items": [{"goodsId": goods_h, "num": 1000}]})
+    if sale_h is None:
+        return finish()
+    pre2 = api_ok("预检复查(销售未完结)", "GET", "/api/decoration/orders/%s/account-check" % order_h, tok_admin)
+    it2 = (pre2 or {}).get("items") or {}
+    step("预检:sales FAIL(unfinish=1)+明细计数",
+         (it2.get("sales") or {}).get("status") == 2
+         and ((it2.get("sales") or {}).get("detail") or {}).get("unfinish") == 1, pre2)
+    api_err("多子项FAIL仍拒 250023", "POST", "/api/decoration/orders/%s/account" % order_h,
+            tok_admin, None, 250023)
+    api_ok("销售单废单(sales 子项复位)", "POST", "/api/sales/orders/%s/terminate" % sale_h, tok_admin)
+    pre3 = api_ok("预检复查(废单后)", "GET", "/api/decoration/orders/%s/account-check" % order_h, tok_admin)
+    it3 = (pre3 or {}).get("items") or {}
+    step("预检:sales 复位 PASS(status=4 废单不入未完结)", (it3.get("sales") or {}).get("status") == 1, pre3)
+    api_ok("装修收款target上调990(比例闸FAIL源)", "PUT", "/api/decoration/config", tok_admin,
+           {"decoPaymentTarget": 990})
+    pre4 = api_ok("预检复查(target 990)", "GET", "/api/decoration/orders/%s/account-check" % order_h, tok_admin)
+    it4 = (pre4 or {}).get("items") or {}
+    step("预检:decoPayment FAIL(0<990)+target回显", (it4.get("decoPayment") or {}).get("status") == 2
+         and (pre4 or {}).get("decoPaymentTarget") == 990, pre4)
+    api_err("比例闸FAIL拒绝 250023", "POST", "/api/decoration/orders/%s/account" % order_h,
+            tok_admin, None, 250023)
+    api_ok("target复位0+总闸关(回归V1硬闸)", "PUT", "/api/decoration/config", tok_admin,
+           {"checkEnable": False, "decoPaymentTarget": 0})
+    cfg1 = api_ok("配置复位复查", "GET", "/api/decoration/config", tok_admin)
+    step("配置复位:总闸关+其余开关保留(幂等白名单)", (cfg1 or {}).get("check_enable") == 0
+         and (cfg1 or {}).get("check_construction_enable") == 1, cfg1)
+    api_err("总闸关:款项未收齐拒绝 250016(V1硬闸回归)", "POST",
+            "/api/decoration/orders/%s/account" % order_h, tok_admin, None, 250016)
+    api_ok("配置全复位(六开关全关)", "PUT", "/api/decoration/config", tok_admin,
+           {"signEnable": False, "salesEnable": False, "constructionEnable": False,
+            "selectionEnable": False, "decoPaymentEnable": False, "salePaymentEnable": False})
 
     # 通知回程车(设计师收建单通知)+ 事件总线消费确认
     notifs_b = api_ok("设计师通知列表", "GET", "/api/notifications?page=1&size=50", tok_b)
@@ -2217,9 +2300,14 @@ def main():
     step("payment 退款审批单在待办", bool(refund_appr), todo_r)
     api_ok("退款审批通过", "POST", "/api/approvals/%s/approve" % refund_appr["id"], tok_admin,
            {"comment": "同意退款"})
-    time.sleep(3)
-    rf5_det = api_ok("退款回写复查", "GET", "/api/sales/refunds/%s" % rf5, tok_admin)
-    step("退货单1已退款(PaymentRefundedEvent 回写)", rf5_det.get("status") == 1, rf5_det)
+    # 回写走总线消费,固定 sleep 会扫中空窗(第 45 次实锤)——轮询等 status==1 至多 60s
+    rf5_det = None
+    for _ in range(30):
+        time.sleep(2)
+        rf5_det = api_ok("退款回写复查", "GET", "/api/sales/refunds/%s" % rf5, tok_admin)
+        if rf5_det and rf5_det.get("status") == 1:
+            break
+    step("退货单1已退款(PaymentRefundedEvent 回写)", bool(rf5_det) and rf5_det.get("status") == 1, rf5_det)
     b5b = api_ok("原款项复查", "GET",
                  "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale5, tok_admin)
     step("原款项已退款(status=3)", any(b.get("id") == bill5["id"] and b.get("status") == 3
@@ -2324,7 +2412,7 @@ def main():
         db_exec("insert into yz_event_task(event_type, payload, event_key, max_retries) values (%s,%s,%s,2)",
                 ("SettlementItemWithdrawnEvent", payload, "smoke-bal:wd:" + item_id + key_suffix))
 
-    def wait_dead(event_key, timeout=40):
+    def wait_dead(event_key, timeout=200):
         deadline = time.time() + timeout
         while time.time() < deadline:
             rows = db_exec("select status from yz_event_task where event_key = %s order by id desc limit 1",
@@ -2370,27 +2458,42 @@ def main():
                   1000000, 200000, 800000)
     publish_ready("bsel3" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
                   300000, 50000, 250000)
-    time.sleep(3)
-    b_b = api_ok("聚桶复查(重放幂等)", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
-    step("重放不重复落行+同键吸附同行数3", b_b.get("item_count") == 3
+    # 直插事件走调度器,固定 sleep 会扫中空窗(第 45 次实锤)——轮询等 item_count==3
+    b_b = None
+    for _ in range(12):
+        time.sleep(2)
+        b_b = api_ok("聚桶复查(重放幂等)", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+        if b_b and b_b.get("item_count") == 3:
+            break
+    step("重放不重复落行+同键吸附同行数3", bool(b_b) and b_b.get("item_count") == 3
          and b_b.get("payment") == 1550000, b_b)
 
     # 异键(归属人不同)新桶
     publish_ready("bsel4" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_c, "厂商丙",
                   400000, 100000, 320000)
-    time.sleep(3)
-    blist = api_ok("列表复查(异键)", "GET",
-                   "/api/balance/settlements?settlementType=quotation%3Aselection", tok_admin)
-    bucket_c = next((s for s in (blist or {}).get("rows", []) if s.get("supplier") == sup_c), None)
+    bucket_c = None
+    for _ in range(12):
+        time.sleep(2)
+        blist = api_ok("列表复查(异键)", "GET",
+                       "/api/balance/settlements?settlementType=quotation%3Aselection", tok_admin)
+        bucket_c = next((s for s in (blist or {}).get("rows", []) if s.get("supplier") == sup_c), None)
+        if bucket_c:
+            break
     step("异归属人独立建桶", bool(bucket_c) and bucket_c.get("item_count") == 1
          and bucket_c.get("payment") == 320000, bucket_c)
+    if not bucket_c:
+        return finish()
 
     # 上游修正(同键异金额=更新快照并重算)
     publish_ready("bsel1" + stamp_bal, brand2, "烟测品牌B" + stamp_sale, sup_b, "厂商乙",
                   1000000, 200000, 850000)
-    time.sleep(3)
-    b_b = api_ok("上游修正复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
-    step("修正快照+金额重算(应付160万)", b_b.get("payment") == 1600000
+    b_b = None
+    for _ in range(12):
+        time.sleep(2)
+        b_b = api_ok("上游修正复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+        if b_b and b_b.get("payment") == 1600000:
+            break
+    step("修正快照+金额重算(应付160万)", bool(b_b) and b_b.get("payment") == 1600000
          and b_b.get("profit") == 300000, b_b)
 
     # 让减守卫(仅初始态;0<=x<=payment)
@@ -2405,9 +2508,13 @@ def main():
 
     # 明细退结算:未锁定桶摘行重算
     publish_withdrawn("bsel3" + stamp_bal, "上游作废")
-    time.sleep(3)
-    b_b = api_ok("退回后复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
-    step("退回摘行+重算(应付回落130万)", b_b.get("item_count") == 2
+    b_b = None
+    for _ in range(12):
+        time.sleep(2)
+        b_b = api_ok("退回后复查", "GET", "/api/balance/settlements/%s" % bucket_b["id"], tok_admin)
+        if b_b and b_b.get("item_count") == 2:
+            break
+    step("退回摘行+重算(应付回落130万)", bool(b_b) and b_b.get("item_count") == 2
          and b_b.get("payment") == 1350000 and b_b.get("amount") == 1300000, b_b)
 
     # 未锁定结算拒绝
@@ -2627,8 +2734,8 @@ def main():
            tok_admin, {"value": 95000})
     api_ok("sale7结算(post)", "POST", "/api/sales/settlements/%s/post" % st7["id"], tok_admin)
     time.sleep(3)
-    slist = api_ok("结算列表(sales 来源)", "GET",
-                   "/api/balance/settlements?settlementType=sales%3Asettlement", tok_admin)
+    slist = api_ok("结算列表(sales 来源,brandId 过滤防历史桶挤页)", "GET",
+                   "/api/balance/settlements?settlementType=sales%3Asettlement&brandId=" + str(brand3), tok_admin)
     sbucket = next((s for s in (slist or {}).get("rows", []) if s.get("brand_id") == brand3), None)
     ok = bool(sbucket) and sbucket.get("status") == 0 and sbucket.get("item_count") == 1 \
         and sbucket.get("payment") == 95000 and str(sbucket.get("no", "")).startswith("JS")
@@ -2656,21 +2763,31 @@ def main():
          and "pay" in b_actions and "payMark" in b_actions and "finish" in b_actions, b_actions)
 
     # 对账:全域事件零滞留 + 额度流水 + 单号计数器
+    inv_undelivered = None
+    for _ in range(48):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    select count(*) from yz_event_task
+                    where (event_type like concat('Stock', '%%')
+                           or event_type like concat('Construction', '%%')
+                           or event_type like concat('Decoration', '%%')
+                           or event_type like concat('Payment', '%%')
+                           or event_type like concat('Sales', '%%')
+                           or event_type like concat('Settlement', '%%'))
+                      and status not in (1, 3)
+                      and payload not like %s
+                """, ("%" + str(item2) + "%",))
+                inv_undelivered = cur.fetchone()[0]
+        finally:
+            conn.close()
+        if inv_undelivered == 0:
+            break
+        time.sleep(5)
     conn = db_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("""
-                select count(*) from yz_event_task
-                where (event_type like concat('Stock', '%%')
-                       or event_type like concat('Construction', '%%')
-                       or event_type like concat('Decoration', '%%')
-                       or event_type like concat('Payment', '%%')
-                       or event_type like concat('Sales', '%%')
-                       or event_type like concat('Settlement', '%%'))
-                  and status not in (1, 3)
-                  and payload not like %s
-            """, ("%" + str(item2) + "%",))
-            inv_undelivered = cur.fetchone()[0]
             cur.execute("select count(*) from construction_accessory_ledger where order_id = %s",
                         (order_g,))
             ledger_rows = cur.fetchone()[0]

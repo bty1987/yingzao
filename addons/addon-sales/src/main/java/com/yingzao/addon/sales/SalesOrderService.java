@@ -68,6 +68,7 @@ public class SalesOrderService {
     public static final String BIZ_ADDON = "sales";
     public static final String BIZ_TYPE_ORDER = "order";
     /** 全款款项类型协议键(组织款项类型字典须预置启用行)。 */
+    /** 全款线协议键(协议键登记见 docs/rules/payment.md §15;材料款唯一口径,material.md §13-3 定案)。 */
     public static final String TYPE_CODE_FULL = "sales_full";
 
     private static final String PREFIX_XS = "XS";

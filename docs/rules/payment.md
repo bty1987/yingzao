@@ -10,7 +10,7 @@
 | 族 | 表 | 定位 |
 |---|---|---|
 | 装修款 | payment.decorationpayment + decorationreceipt | 装修合同款收/退/确认(定金→分期→尾款),枢纽中的枢纽 |
-| 主材款 | payment.materialpayment + materialreceipt | 挂主材子单(material.mid),定金/补款二段式+退款族 |
+| 主材款 | payment.materialpayment + materialreceipt | 挂主材子单(material.mid),定金/补款二段式+退款族；**营造定案(material.md §13-3,B 类#3 收尾):不独立成线——主材销售款经 `sales_full` 协议键挂 sales 单 biz 三元组（addon-sales 唯一口径,material 主链不迁）,类型行名组织自建（展示名建议「材料款」）** |
 | 销售款 | payment.salespayment + salesreceipt | 挂销售单(sales.sid)冗余 orderId,同构主材线+微信客户确认+批量收款 |
 | 预付款 | payment.advancepayment + payment.payment + advancereceipt | 装修单维度**四科目余额台账**(合同/工程/主材/正林)+ 收付流水;积分域跨库直读 balance |
 | 支付转换 | payment.paytran | **第三方渠道(POS/微信/支付宝)→各业务款的中间凭据**(不是内部转账),回调后按 type 分发落账 |
@@ -178,3 +178,17 @@
 8. 批量收款 N:1 收据挂接模型保留确认(收据=财务凭证主档);
 9. 钱包族不迁移、代付款/活动款/外销款/对账 V3 的优先级确认;
 10. 渠道插件化(微信/支付宝/POS)的 V2 优先级与首批渠道清单(依赖企业凭证,已在全局待决策清单)。
+
+## 15. 款项类型协议键登记(B 类#3 定案,2026-10-13)
+
+`payment_bill_type.code` 是**跨插件协议键**(createBill 硬依赖组织内启用类型行,270004;类型行组织自建、协议键全局约定)。
+协议键清单(新增契约在此登记,禁止另起同义键):
+
+| 协议键 | 归属插件 | 语义 | 落点 |
+|---|---|---|---|
+| `deposit` | addon-decoration | 装修定金(首收升定金线) | DecorationService.TYPE_CODE_DEPOSIT |
+| `sales_full` | addon-sales | 主材销售全款线=**材料款唯一口径**(material.md §13-3 定案,materialpayment 不迁) | SalesOrderService.TYPE_CODE_FULL |
+| (签约拆分组) | 组织自建 | 签约款线按比例模板(scale_template JSON ‰)拆分的类型组,code 不进协议、name 组织自定义 | addon-decoration sign() |
+
+约定:协议键只增不改;类型行由组织在「款项类型」页自建(冒烟/部署清单含 deposit/sales_full 两条);
+展示名是组织数据,**材料款建议展示名直接用「材料款」**(消费方对账按 code 不按 name)。

@@ -48,6 +48,15 @@ public class SalesApiImpl implements SalesApi {
     }
 
     @Override
+    public int countUnfinishedOrders(long orgId, long orderId) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from sales_order
+                where org_id = ? and order_id = ? and status not in (2, 4, 5)
+                """, Integer.class, orgId, orderId);
+        return count == null ? 0 : count;
+    }
+
+    @Override
     public Optional<DecorationApi.CustomerRef> queryOrderCustomer(long orgId, long salesOrderId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "select order_id from sales_order where id = ? and org_id = ?", salesOrderId, orgId);

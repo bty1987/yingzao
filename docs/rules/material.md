@@ -149,7 +149,7 @@
 
 1. **addon-material 改判不建**(docs/01 过堂表 material 行建议改为"拆分归并:见 docs/rules/material.md §13")——主链不迁、收款线归 addon-payment、档案归 basedata,确认后回写过堂表;
 2. material 存量 43 万单(31 万预结算在途,结算长尾 2026 仍在走)的收口策略:保持老系统跑到自然完结(建议)vs 一次性数据迁移进新系统;
-3. payment.MaterialPayment 并入 addon-payment 的形态:款项单加"材料款"类型值(建议)vs 独立子域;
+3. 【已定案 2026-10-13,B 类#3 收尾】payment.MaterialPayment 并入 addon-payment 的形态:**款项单加"材料款"类型值(建议口径照准)**——落地=`sales_full` 协议键挂 sales 单 biz 三元组(主链不迁以 sales 为唯一口径),类型协议键登记见 payment.md §15;
 4. aoods 辅材档案归属:addon-basedata(与 goods 对称,建议)vs addon-inventory(贴消费方);AoodsCost(辅材-施工成本限值,后端零消费者)是否随施工成本域重做;
 5. materialmodel 型号库与 goods 的关系:合并为同一商品域(建议,补外键)vs 保留独立"型号价目"模型(点位计算口径在用);
 6. soods 选材写侧归 addon-quotation、读侧(选材单)归 addon-sales 的两侧拆分确认;soods.type=2"辅材型选材"语义是否保留;

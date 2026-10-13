@@ -11,6 +11,7 @@
       </el-select>
       <el-button type="primary" @click="load">查询</el-button>
       <el-button @click="openCreate">登记装修单</el-button>
+      <el-button v-if="isAdmin" @click="openAccConfig">决算检查配置</el-button>
     </div>
 
     <el-table :data="rows" border stripe v-loading="loading" @row-click="openDetail">
@@ -43,13 +44,65 @@
           <el-button v-if="row.status === 3" type="warning" link @click.stop="onResign(row)">重签</el-button>
           <el-button v-if="[0, 1, 2].includes(row.status)" type="danger" link @click.stop="onObsolete(row)">废单</el-button>
           <el-button v-if="row.status === 3" type="danger" link @click.stop="openTerminate(row)">终止</el-button>
-          <el-button v-if="row.status === 3" type="primary" link @click.stop="onAccount(row)">决算</el-button>
+          <el-button v-if="row.status === 3" type="primary" link @click.stop="openAccount(row)">决算</el-button>
           <el-button v-if="row.status === 7" type="success" link @click.stop="onFinish(row)">完工</el-button>
         </template>
       </el-table-column>
     </el-table>
     <el-pagination layout="prev, pager, next, total" :total="total" :page-size="filters.size"
       :current-page="filters.page" @current-change="(p) => { filters.page = p; load() }" style="margin-top: 12px" />
+
+    <!-- 决算前置检查 -->
+    <el-dialog v-model="accountDialog" title="决算前置检查" width="620px">
+      <el-alert v-if="accountCheck && !accountCheck.checkEnable" type="info" :closable="false"
+        title="决算检查未启用:门槛为该单款项全部收齐;组织可在「决算检查配置」开启六项检查" style="margin-bottom: 10px" />
+      <el-table :data="accountItems" size="small" border>
+        <el-table-column prop="label" label="检查项" width="180" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="!row.enabled" type="info" effect="plain" size="small">未启用</el-tag>
+            <el-tag v-else-if="row.status === 1" type="success" effect="plain" size="small">通过</el-tag>
+            <el-tag v-else type="danger" effect="plain" size="small">未通过</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="detailText" label="明细" min-width="220" />
+      </el-table>
+      <template #footer>
+        <el-button @click="accountDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="accountBlocked" :loading="saving" @click="onDoAccount">确认决算</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 决算检查配置(组织级) -->
+    <el-dialog v-model="configDialog" title="决算检查配置(组织级)" width="560px">
+      <el-form label-width="150px">
+        <el-form-item label="检查总闸">
+          <el-switch v-model="accConfig.checkEnable" />
+          <span class="tip">关闭 = 决算门槛为款项全部收齐;开启 = 六项检查合成</span>
+        </el-form-item>
+        <el-form-item label="已签约"><el-switch v-model="accConfig.signEnable" /></el-form-item>
+        <el-form-item label="主材销售完结"><el-switch v-model="accConfig.salesEnable" /></el-form-item>
+        <el-form-item label="决算节点完工"><el-switch v-model="accConfig.constructionEnable" /></el-form-item>
+        <el-form-item label="选材完成(预留)"><el-switch v-model="accConfig.selectionEnable" disabled />
+          <span class="tip">选材域插件未接入,恒不拦</span></el-form-item>
+        <el-form-item label="装修收款比例闸">
+          <el-switch v-model="accConfig.decoPaymentEnable" />
+          <el-input-number v-model="accConfig.decoPaymentTarget" :min="0" :max="1000" size="small"
+            style="margin-left: 8px; width: 110px" />
+          <span class="tip">千分比;开启后替代「款项全收齐」硬闸</span>
+        </el-form-item>
+        <el-form-item label="销售收款比例闸">
+          <el-switch v-model="accConfig.salePaymentEnable" />
+          <el-input-number v-model="accConfig.salePaymentTarget" :min="0" :max="1000" size="small"
+            style="margin-left: 8px; width: 110px" />
+          <span class="tip">千分比,经销售款收款比例</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="configDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="onSaveAccConfig">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 登记装修单 -->
     <el-dialog v-model="createDialog" title="登记装修单" width="640px">
@@ -273,6 +326,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   pageDecorations, fetchDecoration, createDecoration, presignDecoration, signDecoration,
   resignDecoration, obsoleteDecoration, terminateDecoration, accountDecoration, finishDecoration,
+  accountCheckDecoration, fetchDecorationConfig, updateDecorationConfig,
   designConfirmDecoration, drawlineConfirmDecoration, applyDecorationMeasure,
   successDecorationMeasure, failDecorationMeasure, transferDecorationBelong,
   pageCustomers, pageVillages, pageHouses, listOrgUsers
@@ -294,6 +348,11 @@ const houses = ref([])
 const createDialog = ref(false)
 const signDialog = ref(false)
 const terminateDialog = ref(false)
+const accountDialog = ref(false)
+const accountCheck = ref(null)
+const accountRow = ref(null)
+const configDialog = ref(false)
+const accConfig = ref({})
 const measureDialog = ref(false)
 const transferDialog = ref(false)
 const detailDrawer = ref(false)
@@ -426,7 +485,88 @@ async function act(promise, done) {
 const onPresign = (row) => act(presignDecoration(row.id), '已预签')
 const onResign = (row) => act(resignDecoration(row.id), '已重签')
 const onObsolete = (row) => act(obsoleteDecoration(row.id), '已废单')
-const onAccount = (row) => act(accountDecoration(row.id), '已决算')
+const isAdmin = JSON.parse(localStorage.getItem('yz_roles') || '[]').includes('admin')
+
+const ITEM_LABELS = {
+  sign: '已签约', sales: '主材销售全部完结', construction: '决算节点全部完工',
+  selection: '选材全部完成(预留)', decoPayment: '装修收款达标', salePayment: '销售收款达标'
+}
+const accountItems = computed(() => {
+  const ck = accountCheck.value
+  if (!ck || !ck.items) return []
+  return Object.keys(ck.items).map((key) => {
+    const it = ck.items[key]
+    const d = it.detail || {}
+    let text = ''
+    if (key === 'sales') text = d.unfinish + ' 件未完结'
+    else if (key === 'construction') text = d.total === 0
+      ? '无施工单或无决算节点' : d.finished + '/' + d.total + ' 完工' + (d.firstPendingName ? '(未完:' + d.firstPendingName + ')' : '')
+    else if (key === 'decoPayment' || key === 'salePayment') text = '收款 ' + d.ratio + '千分比 / 目标 ' + d.target + '千分比'
+    else if (key === 'selection') text = '选材域插件未接入,恒不拦'
+    return { key, label: ITEM_LABELS[key], enabled: it.enabled, status: it.status, detailText: text }
+  })
+})
+const accountBlocked = computed(() =>
+  accountCheck.value && accountCheck.value.checkEnable && accountCheck.value.overall === 2)
+
+async function openAccount(row) {
+  accountRow.value = row
+  try {
+    const res = await accountCheckDecoration(row.id)
+    accountCheck.value = res.data
+    accountDialog.value = true
+  } catch (e) {
+    ElMessage.error(e.message || '预检失败')
+  }
+}
+async function onDoAccount() {
+  saving.value = true
+  try {
+    await accountDecoration(accountRow.value.id)
+    ElMessage.success('已决算')
+    accountDialog.value = false
+    load()
+  } catch (e) {
+    ElMessage.error(e.message || '决算失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function openAccConfig() {
+  try {
+    const res = await fetchDecorationConfig()
+    const c = res.data || {}
+    accConfig.value = {
+      checkEnable: c.check_enable === 1, signEnable: c.check_sign_enable === 1,
+      salesEnable: c.check_sales_enable === 1, constructionEnable: c.check_construction_enable === 1,
+      selectionEnable: c.check_selection_enable === 1, decoPaymentEnable: c.check_deco_payment_enable === 1,
+      salePaymentEnable: c.check_sale_payment_enable === 1,
+      decoPaymentTarget: c.deco_payment_target, salePaymentTarget: c.sale_payment_target
+    }
+    configDialog.value = true
+  } catch (e) {
+    ElMessage.error(e.message || '配置加载失败')
+  }
+}
+async function onSaveAccConfig() {
+  saving.value = true
+  try {
+    await updateDecorationConfig({
+      checkEnable: accConfig.value.checkEnable, signEnable: accConfig.value.signEnable,
+      salesEnable: accConfig.value.salesEnable, constructionEnable: accConfig.value.constructionEnable,
+      selectionEnable: accConfig.value.selectionEnable, decoPaymentEnable: accConfig.value.decoPaymentEnable,
+      salePaymentEnable: accConfig.value.salePaymentEnable,
+      decoPaymentTarget: accConfig.value.decoPaymentTarget, salePaymentTarget: accConfig.value.salePaymentTarget
+    })
+    ElMessage.success('决算检查配置已保存')
+    configDialog.value = false
+  } catch (e) {
+    ElMessage.error(e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
 const onFinish = (row) => act(finishDecoration(row.id), '已完工')
 const onDrawlineConfirm = () => act(drawlineConfirmDecoration(detail.value.id), '放线已确认')
 

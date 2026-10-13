@@ -28,4 +28,10 @@ public interface SalesApi {
 
     /** 销售单摘要查询(不存在或不属本组织返回 empty)。 */
     Optional<SalesOrderRef> querySalesOrder(long orgId, long salesOrderId);
+
+    /**
+     * 装修单名下未完结销售单数(老 countSalesForUnfinishByOrderId 口径:
+     * 主单轴 status not in {2 全退, 4 废单, 5 完结})。消费方:装修决算六项检查「主材销售」子项。
+     */
+    int countUnfinishedOrders(long orgId, long orderId);
 }

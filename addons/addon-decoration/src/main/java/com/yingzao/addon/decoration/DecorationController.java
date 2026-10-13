@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yingzao.core.web.ApiResponse;
@@ -48,10 +49,18 @@ public class DecorationController {
     public record ProfileRequest(Long innerArea, String houseType, String style, String note) {
     }
 
-    private final DecorationService orders;
+    /** 决算六项检查组织配置(九列白名单,null=保留现值)。 */
+    public record AccountConfigRequest(Boolean checkEnable, Boolean signEnable, Boolean salesEnable,
+            Boolean constructionEnable, Boolean selectionEnable, Boolean decoPaymentEnable,
+            Boolean salePaymentEnable, Integer decoPaymentTarget, Integer salePaymentTarget) {
+    }
 
-    public DecorationController(DecorationService orders) {
+    private final DecorationService orders;
+    private final DecorationAccountCheckService accountChecks;
+
+    public DecorationController(DecorationService orders, DecorationAccountCheckService accountChecks) {
         this.orders = orders;
+        this.accountChecks = accountChecks;
     }
 
     @GetMapping("/orders")
@@ -131,6 +140,30 @@ public class DecorationController {
         Long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(orders.submitTermination(orgId, id,
                 body == null ? null : body.assigneeId(), body == null ? null : body.reason(), userId));
+    }
+
+    /** 决算预检(只读):六子项状态/明细/target,前端决算确认弹窗数据源。 */
+    @GetMapping("/orders/{id}/account-check")
+    public ApiResponse<Map<String, Object>> accountCheck(@PathVariable long id, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(accountChecks.preview(orgId, id));
+    }
+
+    // ---- 组织配置(决算六项检查) ----
+
+    @GetMapping("/config")
+    public ApiResponse<Map<String, Object>> getConfig(HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(accountChecks.getConfig(orgId));
+    }
+
+    @PutMapping("/config")
+    public ApiResponse<Void> updateConfig(@RequestBody AccountConfigRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        accountChecks.updateConfig(orgId, body.checkEnable(), body.signEnable(), body.salesEnable(),
+                body.constructionEnable(), body.selectionEnable(), body.decoPaymentEnable(),
+                body.salePaymentEnable(), body.decoPaymentTarget(), body.salePaymentTarget());
+        return ApiResponse.ok();
     }
 
     @PostMapping("/orders/{id}/account")

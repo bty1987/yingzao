@@ -137,10 +137,12 @@ public class DecorationService {
     private final CustomerProfileApi profiles;
     private final QuotationApi quotations;
     private final ApprovalService approvals;
+    private final DecorationAccountCheckService accountChecks;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DecorationService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
-            PaymentApi payments, CustomerProfileApi profiles, QuotationApi quotations, ApprovalService approvals) {
+            PaymentApi payments, CustomerProfileApi profiles, QuotationApi quotations, ApprovalService approvals,
+            DecorationAccountCheckService accountChecks) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.eventBus = eventBus;
@@ -148,6 +150,7 @@ public class DecorationService {
         this.profiles = profiles;
         this.quotations = quotations;
         this.approvals = approvals;
+        this.accountChecks = accountChecks;
     }
 
     // ---- 登记(七联动:主单+补充信息+归属两条+服务团队+轨迹+定金款线+事件) ----
@@ -361,18 +364,24 @@ public class DecorationService {
         return approvalId;
     }
 
-    /** 决算:仅 3 → 7。门槛 V1 = 该单款项全部收齐(未作废款线 status∈{1,2});
-     *  主材销售/施工/选材子项域未就绪按 UNCHECK 不拦(老 AccountStatus UNCHECK 语义),组织级开关配置 V2。 */
+    /** 决算:仅 3 → 7。门槛两态(组织级配置,DecorationAccountCheckService,B 类#6 六项检查回补):
+     *  总闸关(V1 行为保持)= 该单款项全部收齐(未作废款线 status∈{1,2});
+     *  总闸开 = 六项检查合成(任一 FAIL 拒 250023),款项全收齐硬闸由「装修收款比例」子项接管
+     *  (老 payScale target 口径,target 可配,尾款决算后收的行业惯例由此可配)。 */
     @Transactional
     public void account(long orgId, long orderId, long operatorId) {
         OrderRow order = load(orgId, orderId);
         requireTransition(order.status(), STATUS_ACCOUNT);
-        List<PaymentApi.BillSummary> bills = payments.listBills(orgId, BIZ_ADDON, BIZ_TYPE, String.valueOf(orderId));
-        boolean allCollected = bills.stream()
-                .filter(b -> b.direction() == 0 && b.status() != 4)
-                .allMatch(b -> b.status() == 1 || b.status() == 2);
-        if (!allCollected) {
-            throw new BizException(CODE_ACCOUNT_NOT_COLLECTED, msg("decoration.order.account.notCollected"));
+        if (accountChecks.enabled(orgId)) {
+            accountChecks.check(orgId, orderId);
+        } else {
+            List<PaymentApi.BillSummary> bills = payments.listBills(orgId, BIZ_ADDON, BIZ_TYPE, String.valueOf(orderId));
+            boolean allCollected = bills.stream()
+                    .filter(b -> b.direction() == 0 && b.status() != 4)
+                    .allMatch(b -> b.status() == 1 || b.status() == 2);
+            if (!allCollected) {
+                throw new BizException(CODE_ACCOUNT_NOT_COLLECTED, msg("decoration.order.account.notCollected"));
+            }
         }
         int updated = jdbc.update(
                 "update decoration_order set status = ?, account_time = now() where id = ? and status = ?",

@@ -29,7 +29,7 @@ public class ConstructionController {
 
     public record NodeRequest(String name, Integer sort, String process, Integer precheck, Integer postcheck,
             Integer stacheck, Integer fincheck, Integer timeLimit, Long salaryLimit, Long accessoryLimit,
-            String startTalk, String endTalk) {
+            String startTalk, String endTalk, Integer account) {
     }
 
     public record ConfigRequest(Integer acceptanceFloor) {
@@ -428,7 +428,7 @@ public class ConstructionController {
         }
         return new ConstructionService.NodeCmd(body.name(), body.sort(), body.process(), body.precheck(),
                 body.postcheck(), body.stacheck(), body.fincheck(), body.timeLimit(), body.salaryLimit(),
-                body.accessoryLimit(), body.startTalk(), body.endTalk());
+                body.accessoryLimit(), body.startTalk(), body.endTalk(), body.account());
     }
 
     private void require(boolean cond) {

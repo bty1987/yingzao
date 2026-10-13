@@ -177,6 +177,8 @@ ENDPOINTS = [
     ("decoration", "POST", "/api/decoration/orders/1/finish"), ("decoration", "POST", "/api/decoration/orders/1/design-confirm"),
     ("decoration", "POST", "/api/decoration/orders/1/drawline-confirm"), ("decoration", "POST", "/api/decoration/orders/1/measures"),
     ("decoration", "POST", "/api/decoration/orders/1/belong/transfer"),
+    ("decoration", "GET", "/api/decoration/orders/1/account-check"), ("decoration", "GET", "/api/decoration/config"),
+    ("decoration", "PUT", "/api/decoration/config"),
     ("decoration", "POST", "/api/decoration/measures/1/success"), ("decoration", "POST", "/api/decoration/measures/1/fail"),
     # quotation
     ("quotation", "GET", "/api/quotation/versions"), ("quotation", "POST", "/api/quotation/versions"),

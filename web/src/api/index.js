@@ -144,6 +144,9 @@ export const resignDecoration = (id) => http.post(`/api/decoration/orders/${id}/
 export const obsoleteDecoration = (id) => http.post(`/api/decoration/orders/${id}/obsolete`)
 export const terminateDecoration = (id, data) => http.post(`/api/decoration/orders/${id}/terminate`, data)
 export const accountDecoration = (id) => http.post(`/api/decoration/orders/${id}/account`)
+export const accountCheckDecoration = (id) => http.get(`/api/decoration/orders/${id}/account-check`)
+export const fetchDecorationConfig = () => http.get('/api/decoration/config')
+export const updateDecorationConfig = (data) => http.put('/api/decoration/config', data)
 export const finishDecoration = (id) => http.post(`/api/decoration/orders/${id}/finish`)
 export const designConfirmDecoration = (id, data) =>
   http.post(`/api/decoration/orders/${id}/design-confirm`, data)

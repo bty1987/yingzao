@@ -229,6 +229,12 @@
         <el-table-column label="辅料限额" width="100" align="right">
           <template #default="{ row }">¥{{ yuan(row.accessory_limit) }}</template>
         </el-table-column>
+        <el-table-column label="决算" width="70">
+          <template #default="{ row }">
+            <el-tag :type="row.account === 1 ? 'danger' : 'info'" size="small" effect="plain">
+              {{ row.account === 1 ? '参与' : '不参与' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small" effect="plain">
@@ -274,6 +280,10 @@
         </el-form-item>
         <el-form-item label="完工话术">
           <el-input v-model="nodeForm.endTalk" />
+        </el-form-item>
+        <el-form-item label="参与决算">
+          <el-switch v-model="nodeForm.accountBool" />
+          <span class="tip">参与决算的节点全部完工才允许装修单决算</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1050,10 +1060,11 @@ function openNodeForm(row) {
     id: row.id, name: row.name, sort: row.sort, precheck: row.precheck, postcheck: row.postcheck,
     timeLimit: row.time_limit, salaryLimitYuan: Number(row.salary_limit || 0) / 1000,
     accessoryLimitYuan: Number(row.accessory_limit || 0) / 1000,
-    startTalk: row.start_talk || '', endTalk: row.end_talk || ''
+    startTalk: row.start_talk || '', endTalk: row.end_talk || '',
+    accountBool: row.account === 1
   } : {
     id: null, name: '', sort: nodes.value.length + 1, precheck: 0, postcheck: 0, timeLimit: 0,
-    salaryLimitYuan: 999999, accessoryLimitYuan: 999999, startTalk: '', endTalk: ''
+    salaryLimitYuan: 999999, accessoryLimitYuan: 999999, startTalk: '', endTalk: '', accountBool: false
   }
   nodeFormDialog.value = true
 }
@@ -1065,7 +1076,7 @@ async function onSaveNode() {
     name: f.name, sort: f.sort, process: 'main', precheck: f.precheck, postcheck: f.postcheck,
     stacheck: 0, fincheck: 0, timeLimit: f.timeLimit,
     salaryLimit: Math.round(f.salaryLimitYuan * 1000), accessoryLimit: Math.round(f.accessoryLimitYuan * 1000),
-    startTalk: f.startTalk || null, endTalk: f.endTalk || null
+    startTalk: f.startTalk || null, endTalk: f.endTalk || null, account: f.accountBool ? 1 : 0
   }
   saving.value = true
   try {

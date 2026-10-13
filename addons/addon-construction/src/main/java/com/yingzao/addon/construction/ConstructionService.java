@@ -156,14 +156,14 @@ public class ConstructionService {
 
     public record NodeCmd(String name, Integer sort, String process, Integer precheck, Integer postcheck,
             Integer stacheck, Integer fincheck, Integer timeLimit, Long salaryLimit, Long accessoryLimit,
-            String startTalk, String endTalk) {
+            String startTalk, String endTalk, Integer account) {
     }
 
     public List<Map<String, Object>> listNodes(long orgId, boolean includeDisabled) {
         String filter = includeDisabled ? "and status in (0, 1)" : "and status = 1";
         return jdbc.queryForList("""
                 select id, name, sort, process, precheck, postcheck, stacheck, fincheck,
-                       time_limit, salary_limit, accessory_limit, start_talk, end_talk, status
+                       time_limit, salary_limit, accessory_limit, start_talk, end_talk, account, status
                 from construction_node where org_id = ? %s order by sort
                 """.formatted(filter), orgId);
     }
@@ -176,11 +176,11 @@ public class ConstructionService {
         requireNodeUnique(orgId, norm.name(), norm.sort(), null);
         jdbc.update("""
                 insert into construction_node(org_id, name, sort, process, precheck, postcheck, stacheck,
-                    fincheck, time_limit, salary_limit, accessory_limit, start_talk, end_talk, status, created_by)
-                values (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
+                    fincheck, time_limit, salary_limit, accessory_limit, start_talk, end_talk, account, status, created_by)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
                 """, orgId, norm.name(), norm.sort(), norm.process(), norm.precheck(), norm.postcheck(),
                 norm.stacheck(), norm.fincheck(), norm.timeLimit(), norm.salaryLimit(),
-                norm.accessoryLimit(), norm.startTalk(), norm.endTalk(), operatorId);
+                norm.accessoryLimit(), norm.startTalk(), norm.endTalk(), norm.account(), operatorId);
         return jdbc.queryForObject("""
                 select id from construction_node where org_id = ? and name = ?
                 """, Long.class, orgId, norm.name());
@@ -196,11 +196,11 @@ public class ConstructionService {
         jdbc.update("""
                 update construction_node set name = ?, sort = ?, process = ?, precheck = ?, postcheck = ?,
                     stacheck = ?, fincheck = ?, time_limit = ?, salary_limit = ?, accessory_limit = ?,
-                    start_talk = ?, end_talk = ?
+                    start_talk = ?, end_talk = ?, account = ?
                 where id = ? and org_id = ?
                 """, norm.name(), norm.sort(), norm.process(), norm.precheck(), norm.postcheck(),
                 norm.stacheck(), norm.fincheck(), norm.timeLimit(), norm.salaryLimit(),
-                norm.accessoryLimit(), norm.startTalk(), norm.endTalk(), nodeId, orgId);
+                norm.accessoryLimit(), norm.startTalk(), norm.endTalk(), norm.account(), nodeId, orgId);
     }
 
     /** 缺省归一:比例/工期空 = 0(不设闸),限额空 = 哨兵(无上限),工序组空 = main。 */
@@ -214,7 +214,8 @@ public class ConstructionService {
                 cmd.timeLimit() == null ? 0 : cmd.timeLimit(),
                 cmd.salaryLimit() == null ? LIMIT_SENTINEL : cmd.salaryLimit(),
                 cmd.accessoryLimit() == null ? LIMIT_SENTINEL : cmd.accessoryLimit(),
-                blankToNull(cmd.startTalk()), blankToNull(cmd.endTalk()));
+                blankToNull(cmd.startTalk()), blankToNull(cmd.endTalk()),
+                cmd.account() == null ? 0 : cmd.account());
     }
 
     @Transactional
@@ -363,7 +364,8 @@ public class ConstructionService {
                     ((Number) node.get("precheck")).intValue(), ((Number) node.get("postcheck")).intValue(),
                     ((Number) node.get("stacheck")).intValue(), ((Number) node.get("fincheck")).intValue(),
                     timeLimit, ((Number) node.get("salary_limit")).longValue(),
-                    ((Number) node.get("accessory_limit")).longValue(), planStart, cursor });
+                    ((Number) node.get("accessory_limit")).longValue(),
+                    ((Number) node.get("account")).intValue(), planStart, cursor });
             totalLimit += timeLimit;
         }
         jdbc.update("""
@@ -375,8 +377,8 @@ public class ConstructionService {
         jdbc.batchUpdate("""
                 insert into construction_schedule(org_id, order_id, node_id, node_name, sort, process,
                     precheck, postcheck, stacheck, fincheck, time_limit, salary_limit, accessory_limit,
-                    plan_start, plan_end)
-                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    account, plan_start, plan_end)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, planRows);
         track(orgId, orderId, retroactive ? "retroactive" : "ignite", retroactive ? remark : null, operatorId);
         eventBus.publish(new ConstructionStartedEvent(constructionId(orgId, orderId), orgId, orderId, operatorId),
