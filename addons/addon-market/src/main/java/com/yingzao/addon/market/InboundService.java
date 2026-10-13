@@ -411,15 +411,30 @@ public class InboundService implements MarketApi {
                 inboundId, action, reason, operatorId);
     }
 
-    /** MI+yyMMdd+4 位流水:计数器 last_insert_id 原子自增(修老 "MI"+UUID 无流水语义)。 */
+    /** MI+yyMMdd+4 位流水:计数器 last_insert_id 原子自增(修老 "MI"+UUID 无流水语义)。
+     * 🔴 首插分支显式 last_insert_id(1)——若写死 1,LAST_INSERT_ID() 返回连接上一次自增
+     * 主键 id(market_counter.id 自增),当天首单号错位为该 id,seq 正常爬升到该值即撞
+     * uk_market_inbound_no 裸炸 110000(第 45 次同日多轮冒烟实锤;decoration nextOrderNo
+     * 为同构正确范式)。存量错位号占用区间由 exists 检查跳过(decoration 同构),
+     * 计数器原子自增保证并发不取同号,查后插竞态仅剩理论窗口。 */
     private String nextInboundNo(long orgId) {
         String ymd = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
-        jdbc.update("""
-                insert into market_counter(org_id, prefix, ymd, seq) values (?, 'MI', ?, 1)
-                on duplicate key update seq = last_insert_id(seq + 1)
-                """, orgId, ymd);
-        long seq = jdbc.queryForObject("select last_insert_id()", Long.class);
-        return "MI" + ymd + String.format("%04d", (int) seq);
+        for (int attempt = 0; attempt < 3; attempt++) {
+            jdbc.update("""
+                    insert into market_counter(org_id, prefix, ymd, seq) values (?, 'MI', ?, last_insert_id(1))
+                    on duplicate key update seq = last_insert_id(seq + 1)
+                    """, orgId, ymd);
+            long seq = jdbc.queryForObject("select last_insert_id()", Long.class);
+            String inboundNo = "MI" + ymd + String.format("%04d", (int) seq);
+            Integer exists = jdbc.queryForObject(
+                    "select count(*) from market_inbound where org_id = ? and inbound_no = ?",
+                    Integer.class, orgId, inboundNo);
+            if (exists == null || exists == 0) {
+                return inboundNo;
+            }
+            // 存量错位号占用(bug 遗留区间):计数器继续自增跳过
+        }
+        throw new IllegalStateException("market inbound no counter exhausted after skip");
     }
 
     private Map<Long, Map<String, Object>> groupCount(String sql, Object... args) {
