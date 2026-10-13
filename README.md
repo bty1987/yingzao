@@ -125,10 +125,10 @@
 <summary>文字版业务全景(无图环境 / 可搜索)</summary>
 
 ```text
-获客链:  渠道/进线/归因(addon-market) ─→ 线索/跟进(addon-customer) ─→ 转化建档(addon-customerprofile)
+获客链:  渠道/进线/归因(addon-market) ─→ 线索/跟进(addon-customer) ─→ 转化建档(addon-customerprofile) ─→ 会员复购(addon-member)
 交付链:  报价定额(addon-quotation) ─→ 装修合同(addon-decoration) ─→ 施工节点/排期/验收(addon-construction)
 供应链:  商品/材料档案(addon-basedata) ─→ 主材销售(addon-sales) ─→ 库存/材料(addon-inventory / addon-material)
-资金链:  款项/收款(addon-payment) ─→ 结算(addon-balance) ─→ 供应链协同(addon-supplier)
+资金链:  款项/收款(addon-payment) ─→ 结算(addon-balance) ─→ 厂商协同(addon-supplier)
 ```
 
 </details>
@@ -140,15 +140,15 @@
 | `addon-customerprofile` | 客户档案:城市/楼盘/房屋、客户主档(手机加密+读取留痕)、收款账户 | ✅ V1 已落地 |
 | `addon-basedata` | 基础数据:品类/品牌/商品/SKU/价格体系/套餐/型号/定材包 | ✅ V1 已落地 |
 | `addon-quotation` | 报价:版本费率、功能区分组明细、服务端金额聚合、锁定/审核双线 | ✅ V1 已落地 |
-| `addon-decoration` | 装修单:登记七联动、四线状态机、签约拆款、量房/确认/终止审批 | ✅ V1 已落地 |
+| `addon-decoration` | 装修单:登记七联动、四线状态机、签约拆款、量房/确认/终止审批、决算六项前置检查(组织级可配) | ✅ V1 已落地 |
 | `addon-construction` | 施工:放线点火、节点排期、比例闸、团队留痕、验收竣工 | ✅ V1 已落地 |
 | `addon-basedata` 套餐展开 / `addon-material` | 定材包成员展开、材料域(拆分归并裁决见 rules) | 🚧 V2 规划 |
 | `addon-sales` | 主材销售:四轴状态机、服务端算价、配送四级、结算三段式、退货审批链 | ✅ V1 已落地 |
 | `addon-inventory` | 库存:单据即库存、12 类货单、领料额度双闸、外辅采购全状态机 | ✅ V1 已落地 |
 | `addon-balance` | 结算:结算汇聚(事件快照吸附)、账户双腿、扣款池、完结唯一定义 | ✅ V1 已落地 |
 | `addon-payment` | 款项:款项单、统一收据双人留痕、预付款科目台账、退款走审批 | ✅ V1 已落地 |
-| `addon-supplier` | 供应链协同(厂商协同) | 🚧 规划中 |
-| `addon-member` | 会员营销(积分商城,自 sales/information 拆分归并) | 🚧 规划中 |
+| `addon-supplier` | 厂商协同:厂商主数据(查重下沉 DB)、品牌关联、三层结算条款、ext_no 幂等同步 | ✅ V1 已落地 |
+| `addon-member` | 会员营销:活动/礼品库存/积分账户(事件驱动记账)/兑换单、签约自动核销 | ✅ V1 已落地 |
 
 > 完整的模块判定过程(老系统 41 模块逐一过堂)见 [docs/01-剔除保留清单.md](docs/01-剔除保留清单.md);各插件的实现口径(状态机/金额/字典)见 [docs/rules/](docs/rules),业务闭环见 [docs/prd/](docs/prd)。
 
@@ -156,7 +156,7 @@
 
 - **插件化架构(自研)**——编译期装配的插件框架:`addon.yml` 清单、扩展点钩子、领域事件、前端槽位注册表、数据扩展约定。公司差异零侵入核心;
 - **事件总线(outbox 三件套)**——同事务落箱、失败指数退避重试、死信可见可重放;跨插件协作 = 领域事件 + addons-api 契约(如营销进线→客源承接→回写),无跨域 JOIN、无跨模块表直写;
-- **行业全链条**——获客 → 建档 → 报价 → 合同 → 施工 → 材料 → 结算,一条价值链贯通,十个业务插件 V1 已落地并端到端冒烟;
+- **行业全链条**——获客 → 建档 → 报价 → 合同 → 施工 → 材料 → 结算,一条价值链贯通,十二个业务插件 V1 已落地并端到端冒烟;
 - **一码多端**——Web 管理后台(Vue3 + Element Plus)+ uni-app(微信小程序 + APP)+ 企微/钉钉免登 H5,一套账号体系收口;前端按 `GET /api/addons` 下发的插件清单动态注册路由/菜单/槽位,插件页面即插即显;
 - **干净的数据模型**——无历史包袱:业务状态机显式化(迁移表白名单)、金额统一最小单位(厘)、查重下沉 DB 唯一约束、PII 字段加密(AES-256-GCM)+ 读取留痕、错误码按插件分段、i18n 中英双语从第一行代码开始;
 - **可审计的演进**——Flyway 全程管理 schema(内核与各插件独立版本分段),文档金字塔(需求规格书 / RFC / PRD / 规则清单)先于代码。
@@ -250,7 +250,7 @@ cd app && npm install && npm run dev:h5
 | Phase 0 | 插件框架 spike + 客源→客户最小链路 + 全端骨架 | ✅ 完成 |
 | Phase 1 | 平台内核正式版:RBAC、事件总线(outbox 三件套)、通知中心、轻量审批流、加密盒、i18n | ✅ 完成 |
 | Phase 2 | 行业插件套件 V1:营销获客/客源/档案/基础数据/报价/装修单/施工/销售/库存/款项/结算(11 个插件端到端冒烟全绿) | ✅ V1 完成 |
-| Phase 2.5 | 插件 V1.x 增强:Excel 导入器、RBAC v2 端点鉴权、供应商/会员营销插件、客户端独立工程(C 端:案例/进度/保修/积分) | 🚧 进行中 |
+| Phase 2.5 | 插件 V1.x 增强:RBAC v2 端点鉴权、供应商/会员营销插件、插件能力增强(决算六项检查等)——均已落地;余 Excel 导入器、客户端独立工程(C 端:案例/进度/保修/积分) | 🚧 进行中 |
 | Phase 3 | 商业插件与插件市场、托管版 | 规划中 |
 
 ## 文档
