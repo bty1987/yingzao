@@ -149,6 +149,7 @@
 | `addon-payment` | 款项:款项单、统一收据双人留痕、预付款科目台账、退款走审批 | ✅ V1 已落地 |
 | `addon-supplier` | 厂商协同:厂商主数据(查重下沉 DB)、品牌关联、三层结算条款、ext_no 幂等同步 | ✅ V1 已落地 |
 | `addon-member` | 会员营销:活动/礼品库存/积分账户(事件驱动记账)/兑换单、签约自动核销 | ✅ V1 已落地 |
+| `addon-portal` | C 端门户:手机验证码登录、案例库匿名浏览、施工进度脱敏视图、会员积分查询 | ✅ V1 已落地 |
 
 > 完整的模块判定过程(老系统 41 模块逐一过堂)见 [docs/01-剔除保留清单.md](docs/01-剔除保留清单.md);各插件的实现口径(状态机/金额/字典)见 [docs/rules/](docs/rules),业务闭环见 [docs/prd/](docs/prd)。
 
@@ -236,9 +237,13 @@ java -jar yingzao-app/target/yingzao-app-*.jar
 cd web && npm install && npm run dev
 # 打开 http://localhost:5173 (初始账号 admin / yingzao123)
 
-# 移动端 H5(uni-app,一码三出中的 H5 端)
+# 移动端 H5 — 员工端(uni-app)
 cd app && npm install && npm run dev:h5
 # 打开 http://localhost:5174
+
+# 客户端门户 H5(案例/施工进度/会员积分;手机验证码登录)
+cd web-mp && npm install && npm run dev:h5
+# 打开 http://localhost:5175
 ```
 
 > 初始账号仅开发冒烟用;正式使用请在「角色权限」页建立自己的账号体系。

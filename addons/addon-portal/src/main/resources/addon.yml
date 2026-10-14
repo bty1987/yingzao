@@ -17,6 +17,9 @@ addon:
     - exact: /api/c/progress
       methods: [GET]
       require: c-customer
+    - exact: /api/c/orders
+      methods: [GET]
+      require: c-customer
     - exact: /api/c/points
       methods: [GET]
       require: c-customer

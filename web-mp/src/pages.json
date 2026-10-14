@@ -1,0 +1,28 @@
+{
+  "pages": [
+    { "path": "pages/cases/index", "style": { "navigationBarTitleText": "营造·家" } },
+    { "path": "pages/progress/index", "style": { "navigationBarTitleText": "我的装修", "enablePullDownRefresh": true } },
+    { "path": "pages/progress/detail", "style": { "navigationBarTitleText": "施工进度" } },
+    { "path": "pages/points/index", "style": { "navigationBarTitleText": "我的积分", "enablePullDownRefresh": true } },
+    { "path": "pages/mine/index", "style": { "navigationBarTitleText": "我的" } },
+    { "path": "pages/login/index", "style": { "navigationBarTitleText": "登录" } }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "营造·家",
+    "navigationBarBackgroundColor": "#FAF9F5",
+    "backgroundColor": "#FAF9F5"
+  },
+  "tabBar": {
+    "color": "rgba(26,26,24,0.5)",
+    "selectedColor": "#B03A2E",
+    "backgroundColor": "#FAF9F5",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/cases/index", "text": "案例" },
+      { "pagePath": "pages/progress/index", "text": "装修" },
+      { "pagePath": "pages/points/index", "text": "积分" },
+      { "pagePath": "pages/mine/index", "text": "我的" }
+    ]
+  }
+}

@@ -60,6 +60,13 @@ public class PortalController {
         return ApiResponse.ok(portal.progress(orgId, customerId, orderId));
     }
 
+    @GetMapping("/orders")
+    public ApiResponse<Map<String, Object>> myOrders(HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        long customerId = (Long) request.getAttribute("yz.customerId");
+        return ApiResponse.ok(portal.myOrders(orgId, customerId));
+    }
+
     @GetMapping("/points")
     public ApiResponse<Object> points(HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");

@@ -3763,6 +3763,10 @@ def main():
     pts = api_ok("C端本人积分查询(c-customer 通)", "GET", "/api/c/points", c_token)
     step("积分视图结构(items/records)", isinstance((pts or {}).get("items"), list)
          and isinstance((pts or {}).get("records"), list), pts)
+    # 我的装修单列表(C 端客户无单 → 空结构;归属=令牌 customerId 天然隔离)
+    myords = api_ok("C端我的装修单列表(c-customer 通)", "GET", "/api/c/orders", c_token)
+    step("装修单列表结构(rows)", isinstance((myords or {}).get("rows"), list), myords)
+
     # 员工令牌调 C 端点 → RBAC 拒(非 c-customer 主体)
     api_err("员工令牌调C端点拒绝 122006", "GET", "/api/c/points", tok_admin, None, 122006)
     # C 端令牌调员工端点 → RBAC 拒(越权面收口)

@@ -179,6 +179,7 @@ ENDPOINTS = [
     ("decoration", "POST", "/api/decoration/orders/1/belong/transfer"),
     ("portal", "POST", "/api/c/auth/code"), ("portal", "POST", "/api/c/auth/login"),
     ("portal", "GET", "/api/c/cases"), ("portal", "GET", "/api/c/progress"), ("portal", "GET", "/api/c/points"),
+    ("portal", "GET", "/api/c/orders"),
     ("decoration", "GET", "/api/decoration/orders/1/account-check"), ("decoration", "GET", "/api/decoration/config"),
     ("decoration", "PUT", "/api/decoration/config"),
     ("decoration", "POST", "/api/decoration/measures/1/success"), ("decoration", "POST", "/api/decoration/measures/1/fail"),
@@ -361,7 +362,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(15 插件 54 条)", len({r["addon"] for r in rules}) == 15 and len(rules) == 54,
+    step("载入 api 规则(15 插件 55 条)", len({r["addon"] for r in rules}) == 15 and len(rules) == 55,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

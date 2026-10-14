@@ -31,4 +31,14 @@ public interface DecorationApi {
     /** 装修单归属客户引用(只读)。 */
     record CustomerRef(long customerId, String customerName) {
     }
+
+    /**
+     * 客户名下装修单列表(只读;C 端「我的装修单」入口数据源,归属=主单 customer_id)。
+     * 废单(5)不返回;按登记倒序。
+     */
+    java.util.List<OrderBrief> listByCustomer(long orgId, long customerId);
+
+    /** 客户视角装修单摘要(只读投影;零金额零人员)。 */
+    record OrderBrief(long orderId, String orderNo, String houseLabel, int status, int projectStatus) {
+    }
 }

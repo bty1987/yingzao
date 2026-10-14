@@ -2,6 +2,7 @@ package com.yingzao.addon.portal;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,6 +144,23 @@ public class PortalService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("orderId", orderId);
         out.put("nodes", constructions.progress(orgId, orderId));
+        return out;
+    }
+
+    /** 我的装修单列表(登录;经 DecorationApi 契约,废单不返回)。 */
+    public Map<String, Object> myOrders(long orgId, long customerId) {
+        List<Object> rows = new ArrayList<>(decorations.listByCustomer(orgId, customerId).stream()
+                .map(b -> {
+                    Map<String, Object> m = new LinkedHashMap<String, Object>();
+                    m.put("orderId", b.orderId());
+                    m.put("orderNo", b.orderNo());
+                    m.put("houseLabel", b.houseLabel());
+                    m.put("status", b.status());
+                    m.put("projectStatus", b.projectStatus());
+                    return m;
+                }).toList());
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("rows", rows);
         return out;
     }
 

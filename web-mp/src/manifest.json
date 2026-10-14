@@ -1,0 +1,18 @@
+{
+  "name": "营造·家",
+  "appid": "",
+  "description": "营造 C 端门户(客户小程序/H5:案例/施工进度/会员积分)",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "vueVersion": "3",
+  "locale": "zh-Hans",
+  "h5": {
+    "title": "营造·家",
+    "router": { "mode": "hash" }
+  },
+  "mp-weixin": {
+    "appid": "",
+    "setting": { "urlCheck": false },
+    "usingComponents": true
+  }
+}

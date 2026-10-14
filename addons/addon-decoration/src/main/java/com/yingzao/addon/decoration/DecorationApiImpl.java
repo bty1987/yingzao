@@ -41,6 +41,21 @@ public class DecorationApiImpl implements DecorationApi {
                 ((Number) row.get("salesman_id")).longValue()));
     }
 
+    /** C 端「我的装修单」(只读;废单 5 不返回,登记倒序)。 */
+    @Override
+    public java.util.List<OrderBrief> listByCustomer(long orgId, long customerId) {
+        return jdbc.queryForList("""
+                select id, order_no, house_label, status, project_status
+                from decoration_order where org_id = ? and customer_id = ? and status != 5
+                order by id desc
+                """, orgId, customerId).stream()
+                .map(r -> new OrderBrief(((Number) r.get("id")).longValue(),
+                        (String) r.get("order_no"), (String) r.get("house_label"),
+                        ((Number) r.get("status")).intValue(),
+                        ((Number) r.get("project_status")).intValue()))
+                .toList();
+    }
+
     @Override
     public Optional<CustomerRef> queryOrderCustomer(long orgId, long orderId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
