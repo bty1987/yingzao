@@ -45,10 +45,12 @@ addon:
       - { key: '3', label: 撤销回补 }
       - { key: '4', label: 退款冲减 }
       - { key: '5', label: 运营调整 }
+      - { key: '6', label: 过期清算 }
     exchangeStatus:
       - { key: '0', label: 已受理 }
       - { key: '1', label: 已核销 }
       - { key: '2', label: 已撤销 }
+      - { key: '3', label: 已发货 }
     exchangeItemStatus:
       - { key: '0', label: 受理 }
       - { key: '1', label: 已核销 }

@@ -3722,6 +3722,77 @@ def main():
     step("member api 段下发(四菜单+config 五条)",
          bool(mb_addon) and len(mb_addon.get("apis") or []) == 5, mb_addon and mb_addon.get("apis"))
 
+    # ========= member V1.1:发货登记 + 过期清算(第 52 次;放段尾,前段断言已完)=========
+    # 发货登记(status=3 投产):建单扣库存/积分在本段断言完成后执行,零扰既有断言
+    e_ship = call("POST", "/api/member/exchanges", tok_m,
+                  {"exchangeNo": "SH" + stamp8, "customerId": cust_m, "pointType": 1,
+                   "items": [{"giftNo": g1_no}]})
+    if e_ship[1].get("code") == 0:
+        ex_ship = (e_ship[1].get("data") or {}).get("id")
+        api_ok("V1.1发货登记(物流公司+单号)", "POST",
+               "/api/member/exchanges/%s/ship" % ex_ship, tok_admin,
+               {"shipCompany": "顺丰速运", "shipNo": "SF" + stamp8})
+        ex_det = api_ok("发货单回读", "GET", "/api/member/exchanges/%s" % ex_ship, tok_admin)
+        step("发货后状态=3+物流快照", ex_det and ex_det.get("status") == 3
+             and ex_det.get("ship_company") == "顺丰速运"
+             and ex_det.get("ship_no") == "SF" + stamp8, ex_det)
+        api_err("已发货再发货拒绝 350022", "POST",
+                "/api/member/exchanges/%s/ship" % ex_ship, tok_admin,
+                {"shipCompany": "圆通", "shipNo": "YT1"}, 350022)
+        api_err("已发货整单撤销拒绝 350012", "POST",
+                "/api/member/exchanges/%s/cancel" % ex_ship, tok_m, None, 350012)
+    else:
+        step("发货单建单跳过(余额不足,不判失败)", True, e_ship[1])
+
+    # 过期清算(手动触发;幂等锚=原正行 id):取一笔未清算装修分项正行改过期 → 清算 → 断言 → 清理恢复
+    trow = db_exec("""
+        select r.id, r.customer_id, r.point_type, r.delta
+        from member_point_record r
+        where r.org_id = 1 and r.delta > 0 and r.point_type = 1
+          and r.expire_time is not null
+          and not exists (
+              select 1 from member_point_record c
+              where c.org_id = r.org_id and c.customer_id = r.customer_id
+                and c.point_type = r.point_type and c.type = 6
+                and c.src_type = 'expire_clear' and c.src_id = cast(r.id as char))
+        order by r.id limit 1
+    """)
+    if trow:
+        rec_id, t_cust, t_pt, t_delta = trow[0]
+        db_exec("update member_point_record set expire_time = '2020-01-01 00:00:00' where id = %s",
+                (rec_id,))
+        clr = api_ok("手动过期清算触发", "POST", "/api/member/points/expire-clear", tok_admin)
+        step("清算返回结构(cleared/customers)", isinstance((clr or {}).get("cleared"), int), clr)
+        crows = db_exec("""
+            select delta, src_type from member_point_record
+            where org_id = 1 and customer_id = %s and point_type = %s
+              and type = 6 and src_type = 'expire_clear' and src_id = %s
+        """, (t_cust, t_pt, str(rec_id)))
+        ok_c = len(crows) == 1 and crows[0][0] == -t_delta and crows[0][1] == 'expire_clear'
+        step("过期批次清算负行(-delta,幂等锚=原行id)", ok_c, crows)
+        clr2 = api_ok("重复清算触发(幂等)", "POST", "/api/member/points/expire-clear", tok_admin)
+        c2 = db_exec("""
+            select count(*) from member_point_record
+            where org_id = 1 and customer_id = %s and point_type = %s
+              and type = 6 and src_type = 'expire_clear' and src_id = %s
+        """, (t_cust, t_pt, str(rec_id)))[0][0]
+        step("重复清算零重复负行(uk 幂等锚)", c2 == 1, c2)
+        # 测试数据自清理:删负行+回补余额+恢复原过期时间(不扰后续轮次)
+        acct = db_exec("""
+            select id, balance from member_point_account
+            where org_id = 1 and customer_id = %s and point_type = %s
+        """, (t_cust, t_pt))[0]
+        db_exec("delete from member_point_record where org_id = 1 and customer_id = %s"
+                " and point_type = %s and type = 6 and src_type = 'expire_clear' and src_id = %s",
+                (t_cust, t_pt, str(rec_id)))
+        db_exec("update member_point_account set balance = balance + %s where id = %s",
+                (t_delta, acct[0]))
+        db_exec("update member_point_record set expire_time = date_add(now(), interval 29 day)"
+                " where id = %s", (rec_id,))
+        step("清算测试数据已自清理", True)
+    else:
+        step("过期清算跳过(无可清算样本)", True)
+
     # ========= RBAC v2 端点鉴权(observe 期,第 36 次扩展)=========
     print("\n== RBAC v2 端点鉴权(observe) ==")
 

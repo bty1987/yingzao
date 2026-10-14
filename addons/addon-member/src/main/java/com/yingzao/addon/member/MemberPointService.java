@@ -4,9 +4,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +55,8 @@ public class MemberPointService {
     public static final int REC_REVOKE = 3;
     public static final int REC_REFUND = 4;
     public static final int REC_ADJUST = 5;
+    /** 过期清算负行(V1.1):src_type=expire_clear,src_id=被清算正行 id(uk 幂等锚)。 */
+    public static final int REC_EXPIRE_CLEAR = 6;
 
     public static final int TYPE_DECORATION = 1;
     public static final int TYPE_MATERIAL = 2;
@@ -212,6 +216,72 @@ public class MemberPointService {
                 values (?,?,?,?,?,?,?,?)
                 """, orgId, customerId, pointType, REC_ADJUST, delta, balanceAfter, reason.trim(), operatorId);
         return jdbc.queryForObject("select last_insert_id()", Long.class);
+    }
+
+    // ---- 过期清算(V1.1 钩子) ----
+
+    /**
+     * 过期清算:对已过期正向批次逐行生成清算负行(REC_EXPIRE_CLEAR,src_type=expire_clear,
+     * src_id=原正行 id 作 uk 幂等锚,重放撞唯一键跳过),使 balance 向 available 收敛。
+     * 负行永不过期(expire_time NULL),清算后批次余额归零但流水全程可溯。
+     * 返回 {customers, cleared}:本次触达客户数与清算行数(重放幂等:已清算行计 0)。
+     */
+    @Transactional
+    public Map<String, Object> expireClear(long orgId) {
+        List<Map<String, Object>> expired = jdbc.queryForList("""
+                select r.id, r.customer_id, r.point_type, r.delta
+                from member_point_record r
+                where r.org_id = ? and r.delta > 0
+                  and r.expire_time is not null and r.expire_time <= now()
+                  and not exists (
+                      select 1 from member_point_record c
+                      where c.org_id = r.org_id and c.customer_id = r.customer_id
+                        and c.point_type = r.point_type and c.type = ?
+                        and c.src_type = 'expire_clear' and c.src_id = cast(r.id as char))
+                order by r.customer_id, r.point_type, r.id
+                """, orgId, REC_EXPIRE_CLEAR);
+        int cleared = 0;
+        Set<Long> customers = new HashSet<>();
+        for (Map<String, Object> row : expired) {
+            long recId = ((Number) row.get("id")).longValue();
+            long customerId = ((Number) row.get("customer_id")).longValue();
+            int pointType = ((Number) row.get("point_type")).intValue();
+            long delta = ((Number) row.get("delta")).longValue();
+            long accountId = accountOf(orgId, customerId, customerNameOf(orgId, customerId), pointType);
+            int deducted = jdbc.update(
+                    "update member_point_account set balance = balance - ? where id = ? and balance >= ?",
+                    delta, accountId, delta);
+            if (deducted == 0) {
+                // 账面余额已不足以覆盖该过期批次(此前已被兑换消耗)——清算跳过,不产生负行
+                continue;
+            }
+            try {
+                jdbc.update("""
+                        insert into member_point_record
+                            (org_id, customer_id, point_type, type, delta, balance_after,
+                             src_addon, src_type, src_id)
+                        values (?,?,?,?,?,?,?,?,?)
+                        """, orgId, customerId, pointType, REC_EXPIRE_CLEAR, -delta,
+                        currentBalance(accountId), "member", "expire_clear", String.valueOf(recId));
+                cleared += 1;
+                customers.add(customerId);
+            } catch (DuplicateKeyException e) {
+                // 重放:该批次已清算过(uk 幂等锚命中)——回滚本行扣减不一致风险由事务整体保证
+                throw e;
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("cleared", cleared);
+        out.put("customers", customers.size());
+        out.put("candidates", expired.size());
+        return out;
+    }
+
+    private String customerNameOf(long orgId, long customerId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select name from customerprofile_customer where id = ? and org_id = ?",
+                customerId, orgId);
+        return rows.isEmpty() ? "客户" + customerId : (String) rows.get(0).get("name");
     }
 
     // ---- 可用额度(兑换/核销闸) ----

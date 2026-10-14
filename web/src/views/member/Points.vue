@@ -6,6 +6,7 @@
         <el-button @click="load(1)">查询</el-button>
         <div class="spacer" />
         <el-button type="primary" @click="openAdjust()">运营积分调整</el-button>
+        <el-button type="warning" @click="onExpireClear">过期清算</el-button>
       </div>
       <el-table :data="rows" border stripe>
         <el-table-column prop="id" label="#" width="64" />
@@ -76,7 +77,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { fetchAddons } from '../../api'
 import {
   pageMemberPointAccounts, listMemberPointRecords, adjustMemberPoint,
@@ -108,6 +109,22 @@ async function load(p) {
   rows.value = res.data.rows || []
   total.value = res.data.total || 0
   page.value = target
+}
+
+async function onExpireClear() {
+  try {
+    await ElMessageBox.confirm(
+      '将对本组织全部已过期积分批次生成清算负行(余额向可用收敛,流水可溯)。确认执行?', '过期清算',
+      { type: 'warning' })
+  } catch { return }
+  try {
+    const res = await expireClearPoints()
+    const d = res.data || {}
+    ElMessage.success('清算完成:' + (d.cleared || 0) + ' 行 / ' + (d.customers || 0) + ' 客户')
+    load()
+  } catch (e) {
+    ElMessage.error(e.message || '清算失败')
+  }
 }
 
 function openAdjust() {

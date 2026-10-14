@@ -24,6 +24,7 @@
             <el-tag v-if="row.status === 0" size="small">已受理</el-tag>
             <el-tag v-else-if="row.status === 1" type="success" size="small">已核销</el-tag>
             <el-tag v-else-if="row.status === 2" type="info" size="small">已撤销</el-tag>
+            <el-tag v-else-if="row.status === 3" type="warning" size="small">已发货</el-tag>
             <el-tag v-else size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
@@ -32,6 +33,8 @@
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
             <el-button v-if="row.status === 0" link type="danger" @click="onCancel(row)">撤销</el-button>
+            <el-button v-if="row.status === 0 || row.status === 1" link type="primary"
+              @click="onShip(row)">发货</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -70,6 +73,21 @@
       </template>
     </el-drawer>
   </div>
+  <!-- 发货登记 -->
+  <el-dialog v-model="shipVisible" title="发货登记" width="440px">
+    <el-form label-width="90px">
+      <el-form-item label="物流公司" required>
+        <el-input v-model="shipForm.shipCompany" placeholder="如 顺丰速运" />
+      </el-form-item>
+      <el-form-item label="物流单号" required>
+        <el-input v-model="shipForm.shipNo" placeholder="运单号" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="shipVisible = false">取消</el-button>
+      <el-button type="primary" @click="onShipSave">确认发货</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -78,7 +96,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { fetchAddons } from '../../api'
 import {
   pageMemberExchanges, fetchMemberExchange, cancelMemberExchange,
-  consumeMemberExchangeItem, cancelMemberExchangeItem,
+  consumeMemberExchangeItem, cancelMemberExchangeItem, shipMemberExchange,
 } from '../../api'
 
 const dicts = ref({})
@@ -111,6 +129,30 @@ async function openDetail(row) {
   const res = await fetchMemberExchange(row.id)
   detail.value = res.data
   detailVisible.value = true
+}
+
+const shipRow = ref(null)
+const shipForm = ref({ shipCompany: '', shipNo: '' })
+const shipVisible = ref(false)
+
+function onShip(row) {
+  shipRow.value = row
+  shipForm.value = { shipCompany: '', shipNo: '' }
+  shipVisible.value = true
+}
+
+async function onShipSave() {
+  if (!shipForm.value.shipCompany || !shipForm.value.shipNo) {
+    return ElMessage.warning('请填写物流公司与单号')
+  }
+  try {
+    await shipMemberExchange(shipRow.value.id, shipForm.value)
+    ElMessage.success('发货登记完成')
+    shipVisible.value = false
+    load()
+  } catch (e) {
+    ElMessage.error(e.message || '发货失败')
+  }
 }
 
 async function onCancel(row) {

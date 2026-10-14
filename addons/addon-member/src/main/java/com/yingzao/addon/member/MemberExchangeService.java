@@ -53,6 +53,8 @@ public class MemberExchangeService {
     public static final int CODE_CUSTOMER = MemberPointService.CODE_CUSTOMER;
     public static final int CODE_NOT_ALLOWED = MemberPointService.CODE_NOT_ALLOWED;
     public static final int CODE_PARAM = 350020;
+    /** 发货状态非法(非受理/核销单发货;V1.1 投产 status=3)。 */
+    public static final int CODE_SHIP_STATE = 350022;
 
     public static final int STATUS_ACCEPTED = 0;
     public static final int STATUS_CONSUMED = 1;
@@ -195,6 +197,29 @@ public class MemberExchangeService {
         bus.publish(new ExchangeCreatedEvent(exchangeId, orgId, cmd.exchangeNo().trim(), cmd.customerId(),
                 pointType, total, cmd.orderId(), operatorId), "member-exchange:" + exchangeId + ":created");
         return echo(exchangeId, false);
+    }
+
+    /**
+     * 发货登记(V1.1 投产 status=3):0 受理/1 已核销均可发(到店自提与寄递两种履约并行),
+     * 2 已撤销不可发;物流公司/单号人工登记(承运商 API V2);已发货重复调用 = 改单(覆盖)。
+     */
+    @Transactional
+    public void ship(long orgId, long exchangeId, String shipCompany, String shipNo, Long operatorId) {
+        require(shipCompany != null && !shipCompany.isBlank() && shipNo != null && !shipNo.isBlank(),
+                CODE_PARAM, "exchange.ship.param");
+        Map<String, Object> exchange = find(orgId, exchangeId);
+        require(exchange != null, CODE_NOT_FOUND, "exchange.notfound");
+        int status = ((Number) exchange.get("status")).intValue();
+        require(status == STATUS_ACCEPTED || status == STATUS_CONSUMED, CODE_SHIP_STATE,
+                "exchange.ship.state");
+        int updated = jdbc.update("""
+                update member_exchange set status = 3, ship_company = ?, ship_no = ?, ship_time = now()
+                where org_id = ? and id = ? and status in (0, 1)
+                """, shipCompany.trim(), shipNo.trim(), orgId, exchangeId);
+        if (updated == 0) {
+            // 并发兜底:读到受理/核销后状态被并发改走
+            throw new BizException(CODE_SHIP_STATE, msg("exchange.ship.state"));
+        }
     }
 
     /** 整单撤销(仅受理单;已核销明细存在即拒;积分与库存对称回补+反向流水)。 */
@@ -367,29 +392,38 @@ public class MemberExchangeService {
 
     public Map<String, Object> configOf(long orgId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-                "select org_id, auto_sign_consume, sign_consume_content from member_config where org_id = ?", orgId);
+                "select org_id, auto_sign_consume, sign_consume_content, expire_clear_enabled from member_config where org_id = ?", orgId);
         if (!rows.isEmpty()) {
             return rows.get(0);
         }
         try {
-            jdbc.update("insert ignore into member_config (org_id, auto_sign_consume, sign_consume_content)"
-                    + " values (?, 0, '签约自动核销')", orgId);
+            jdbc.update("insert ignore into member_config (org_id, auto_sign_consume, sign_consume_content, expire_clear_enabled)"
+                    + " values (?, 0, '签约自动核销', 0)", orgId);
         } catch (DuplicateKeyException ignored) {
             // 并发懒初始化
         }
         rows = jdbc.queryForList(
-                "select org_id, auto_sign_consume, sign_consume_content from member_config where org_id = ?", orgId);
+                "select org_id, auto_sign_consume, sign_consume_content, expire_clear_enabled from member_config where org_id = ?", orgId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     @Transactional
     public void saveConfig(long orgId, Integer autoSignConsume, String signConsumeContent) {
+        saveConfig(orgId, autoSignConsume, signConsumeContent, null);
+    }
+
+    public void saveConfig(long orgId, Integer autoSignConsume, String signConsumeContent,
+            Integer expireClearEnabled) {
         require(autoSignConsume == null || autoSignConsume == 0 || autoSignConsume == 1,
                 CODE_PARAM, "param.invalid");
+        require(expireClearEnabled == null || expireClearEnabled == 0 || expireClearEnabled == 1,
+                CODE_PARAM, "param.invalid");
         configOf(orgId);
-        jdbc.update("update member_config set auto_sign_consume = ?, sign_consume_content = ? where org_id = ?",
+        jdbc.update("update member_config set auto_sign_consume = ?, sign_consume_content = ?, "
+                + "expire_clear_enabled = ? where org_id = ?",
                 autoSignConsume == null ? 0 : autoSignConsume,
                 signConsumeContent == null || signConsumeContent.isBlank() ? "签约自动核销" : signConsumeContent.trim(),
+                expireClearEnabled == null ? 0 : expireClearEnabled,
                 orgId);
     }
 
@@ -487,7 +521,8 @@ public class MemberExchangeService {
     private Map<String, Object> find(long orgId, long exchangeId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "select id, org_id, exchange_no, customer_id, customer_name, point_type, order_id,"
-                + " point_total, status, remark, created_by, created_at, updated_at from member_exchange"
+                + " point_total, status, remark, ship_company, ship_no, ship_time,"
+                + " created_by, created_at, updated_at from member_exchange"
                 + " where id = ? and org_id = ?", exchangeId, orgId);
         return rows.isEmpty() ? null : rows.get(0);
     }

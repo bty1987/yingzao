@@ -102,6 +102,12 @@ public class MemberController {
         return ApiResponse.ok();
     }
 
+    /** 过期清算手动触发(组织级开关开启与否均可手动;幂等,已清算批次跳过)。 */
+    @PostMapping("/points/expire-clear")
+    public ApiResponse<Map<String, Object>> expireClear(HttpServletRequest request) {
+        return ApiResponse.ok(points.expireClear(orgId(request)));
+    }
+
     // ---- 礼品 ----
 
     public record GiftBody(String no, String name, Long integralPrice, Long unitPrice,
@@ -194,6 +200,18 @@ public class MemberController {
     @GetMapping("/exchanges/{id}")
     public ApiResponse<Map<String, Object>> exchangeDetail(HttpServletRequest request, @PathVariable long id) {
         return ApiResponse.ok(exchanges.get(orgId(request), id));
+    }
+
+    public record ShipBody(String shipCompany, String shipNo) {
+    }
+
+    /** 发货登记(V1.1):受理/已核销单均可,登记物流公司+单号,状态 → 3 已发货。 */
+    @PostMapping("/exchanges/{id}/ship")
+    public ApiResponse<Void> ship(@PathVariable long id, @RequestBody ShipBody body,
+            HttpServletRequest request) {
+        exchanges.ship(orgId(request), id, body == null ? null : body.shipCompany(),
+                body == null ? null : body.shipNo(), userId(request));
+        return ApiResponse.ok();
     }
 
     @PostMapping("/exchanges/{id}/cancel")
