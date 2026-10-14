@@ -3704,6 +3704,78 @@ def main():
     # 清理 RBAC 测试角色
     api_ok("删除 RBAC 测试角色", "DELETE", "/api/roles/%s" % role_r2_id, tok_admin)
 
+    # ========= C 端门户(addon-portal V1,第 49 次;匿名面 org=配置 yingzao.portal.org-id 默认 1)=========
+    st, res = call("GET", "/api/c/cases?page=1&size=10")
+    step("C端案例库匿名可看(无 token)", st == 200 and res.get("code") == 0
+         and isinstance((res.get("data") or {}).get("rows"), list), res)
+
+    c_mobile = "139" + time.strftime("%d%H%M%S")
+    # 超 11 位/非 1 开头参数守卫 360000
+    api_err("C端发码参数非法拒绝 360000", "POST", "/api/c/auth/code", None,
+            {"mobile": "12345"}, 360000)
+    api_ok("C端发验证码", "POST", "/api/c/auth/code", None, {"mobile": c_mobile})
+    api_err("60s 内重发拒绝 360002", "POST", "/api/c/auth/code", None,
+            {"mobile": c_mobile}, 360002)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select code from portal_sms_code where mobile = %s order by id desc limit 1",
+                        (c_mobile,))
+            prow = cur.fetchone()
+    finally:
+        conn.close()
+    c_code = prow[0] if prow else None
+    step("验证码落表可取(6 位)", bool(c_code) and len(c_code) == 6, c_code)
+    api_err("错误验证码拒绝 360001", "POST", "/api/c/auth/login", None,
+            {"mobile": c_mobile, "code": "000000"}, 360001)
+    c_login = api_ok("C端验证码登录(get-or-create 建档)", "POST", "/api/c/auth/login", None,
+                     {"mobile": c_mobile, "code": c_code})
+    c_token = (c_login or {}).get("token")
+    c_cid = (c_login or {}).get("customerId")
+    if not c_token:
+        return finish()
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select name from customerprofile_customer where id = %s", (c_cid,))
+            crow = cur.fetchone()
+    finally:
+        conn.close()
+    step("C端建档脱敏名+幂等回显", bool(crow) and str(crow[0]).startswith("C端客户****"), crow)
+
+    # 重复登录(再走一遍发码-登录)应回显同一 customerId(exist 幂等);限发 60s,等待窗口
+    time.sleep(61)
+    api_ok("C端再次发码(限发窗口后)", "POST", "/api/c/auth/code", None, {"mobile": c_mobile})
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select code from portal_sms_code where mobile = %s order by id desc limit 1",
+                        (c_mobile,))
+            prow2 = cur.fetchone()
+    finally:
+        conn.close()
+    if prow2:
+        c_login2 = api_ok("C端二次登录幂等回显", "POST", "/api/c/auth/login", None,
+                          {"mobile": c_mobile, "code": prow2[0]})
+        step("同号二次登录同一 customerId", (c_login2 or {}).get("customerId") == c_cid, c_login2)
+
+    # c-customer 端点:C 端令牌通
+    pts = api_ok("C端本人积分查询(c-customer 通)", "GET", "/api/c/points", c_token)
+    step("积分视图结构(items/records)", isinstance((pts or {}).get("items"), list)
+         and isinstance((pts or {}).get("records"), list), pts)
+    # 员工令牌调 C 端点 → RBAC 拒(非 c-customer 主体)
+    api_err("员工令牌调C端点拒绝 122006", "GET", "/api/c/points", tok_admin, None, 122006)
+    # C 端令牌调员工端点 → RBAC 拒(越权面收口)
+    api_err("C端令牌调员工端点拒绝 122006", "GET", "/api/decoration/orders", c_token, None, 122006)
+    # 匿名调 c-customer 端点 → 401(认证链)
+    st, res = call("GET", "/api/c/points")
+    step("匿名调进度/积分 401", st == 401, (st, res))
+
+    # 进度归属校验:拿 admin 名下装修单(order_a)——C 端客户非本人 → 360004
+    if order_a:
+        api_err("非本人装修单进度拒绝 360004", "GET",
+                "/api/c/progress?orderId=%s" % order_a, c_token, None, 360004)
+
     return finish()
 
 

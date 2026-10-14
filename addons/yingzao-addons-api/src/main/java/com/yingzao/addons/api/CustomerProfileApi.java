@@ -12,6 +12,13 @@ public interface CustomerProfileApi {
     /** 客户摘要(只读);不存在或不属本组织返回 empty。 */
     Optional<CustomerSummary> queryCustomer(long orgId, long customerId);
 
+    /**
+     * C 端登录 get-or-create 建档(本契约唯一写方法,实现在 addon-customerprofile,
+     * 走 existCustomer 幂等范式:启用中同号存在即返回,否则以脱敏名建档并留痕 source=c-portal)。
+     * 返回 customerId;手机号明文由实现方加密落库,调用方不落任何 PII。
+     */
+    long ensureCustomerByPhone(long orgId, String mobile);
+
     /** 房屋摘要(只读,携楼盘名与门牌四要素明文辅助列);不存在或不属本组织返回 empty。 */
     Optional<HouseSummary> queryHouse(long orgId, long houseId);
 

@@ -70,13 +70,15 @@ public class RbacService {
         // 启动期校验(require 归属 + prefix 包含),只告警
         for (ApiRule rule : built) {
             AddonDescriptor owner = registry.get(rule.addonId());
-            boolean looksLikeMenu = rule.require().startsWith("/");
+            boolean reserved = "anonymous".equalsIgnoreCase(rule.require())
+                    || "c-customer".equalsIgnoreCase(rule.require());
+            boolean looksLikeMenu = !reserved && rule.require().startsWith("/");
             if (looksLikeMenu && owner.menus() != null
                     && owner.menus().stream().noneMatch(m -> rule.require().equals(m.path()))) {
                 log.warn("rbac: addon {} api {} requires menu {} which is not declared in its menus",
                         rule.addonId(), rule.pattern(), rule.require());
             }
-            if (!looksLikeMenu && owner.mounts() != null && !owner.mounts().isEmpty()
+            if (!reserved && !looksLikeMenu && owner.mounts() != null && !owner.mounts().isEmpty()
                     && owner.mounts().stream().noneMatch(m -> rule.require().equals(m.capability()))) {
                 log.warn("rbac: addon {} api {} requires capability {} which is not declared in its mounts",
                         rule.addonId(), rule.pattern(), rule.require());

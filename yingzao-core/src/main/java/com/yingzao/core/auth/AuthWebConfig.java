@@ -27,7 +27,7 @@ public class AuthWebConfig implements WebMvcConfigurer {
 
     // /api/addons 不在白名单:下发内容按登录人角色过滤(RBAC),菜单前置拉取不存在
     private static final List<String> WHITELIST = List.of(
-            "/api/auth/login", "/error", "/actuator/health");
+            "/api/auth/login", "/api/c/auth/", "/api/c/cases", "/error", "/actuator/health");
 
     private final TokenStore tokenStore;
     private final MessageSource messages;
@@ -70,9 +70,15 @@ public class AuthWebConfig implements WebMvcConfigurer {
                         messages.getMessage("auth.unauthorized", null, LocaleContextHolder.getLocale())));
                 return false;
             }
-            request.setAttribute("yz.userId", t.userId());
             request.setAttribute("yz.orgId", t.orgId());
-            YzContext.set(t.userId(), t.orgId());
+            if (TokenStore.PRINCIPAL_CUSTOMER.equals(t.principal())) {
+                // C 端主体:不写 yz.userId(RBAC 按 principal=customer 单独归类,防越权面)
+                request.setAttribute("yz.principal", TokenStore.PRINCIPAL_CUSTOMER);
+                request.setAttribute("yz.customerId", t.customerId());
+            } else {
+                request.setAttribute("yz.userId", t.userId());
+                YzContext.set(t.userId(), t.orgId());
+            }
             return true;
         }
 

@@ -41,4 +41,21 @@ public class ConstructionApiImpl implements ConstructionApi {
         }
         return new AccountNodesCheck(total > 0 && finished == total, total, finished, firstPending);
     }
+
+    /** C 端进度脱敏视图数据源:节点名+状态+计划/实际时间,零金额零人员。 */
+    @Override
+    public java.util.List<ProgressNode> progress(long orgId, long orderId) {
+        return jdbc.queryForList("""
+                select node_name, sort, status, plan_start, plan_end, end_time
+                from construction_schedule where org_id = ? and order_id = ?
+                order by sort, id
+                """, orgId, orderId).stream()
+                .map(r -> new ProgressNode((String) r.get("node_name"),
+                        ((Number) r.get("sort")).intValue(),
+                        ((Number) r.get("status")).intValue(),
+                        r.get("plan_start") == null ? null : String.valueOf(r.get("plan_start")),
+                        r.get("plan_end") == null ? null : String.valueOf(r.get("plan_end")),
+                        r.get("end_time") == null ? null : String.valueOf(r.get("end_time"))))
+                .toList();
+    }
 }

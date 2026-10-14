@@ -1,0 +1,22 @@
+addon:
+  id: portal
+  name: C端门户
+  version: 0.1.0
+  error-code-segment: 360000
+  # C 端无管理菜单(员工端 RBAC 菜单树不含);api 段走第四/五型 require
+  api:
+    - exact: /api/c/auth/code
+      methods: [POST]
+      require: anonymous
+    - exact: /api/c/auth/login
+      methods: [POST]
+      require: anonymous
+    - exact: /api/c/cases
+      methods: [GET]
+      require: anonymous
+    - exact: /api/c/progress
+      methods: [GET]
+      require: c-customer
+    - exact: /api/c/points
+      methods: [GET]
+      require: c-customer

@@ -23,4 +23,19 @@ public interface MarketApi {
 
     /** 进线手机号明文读取(建客源需要):解密强制留痕(修老报名手机明文+密文泄漏无痕)。 */
     String revealPhone(long inboundId, long orgId, long operatorId);
+
+    /**
+     * 案例库只读投影(C 端匿名浏览数据源;仅启用中案例,city 空=全部城市)。
+     * 返回 {total, rows:[CaseCard]};效果图片清单不在此口径(C 端详情 V2)。
+     */
+    CasePage cCases(long orgId, String city, int page, int size);
+
+    /** 案例卡片(只读,展示字段;figureName 为主案人物名)。 */
+    record CaseCard(long caseId, String title, String cityName, String style,
+                    String coverImage, long figureId, String figureName) {
+    }
+
+    /** 分页容器。 */
+    record CasePage(long total, java.util.List<CaseCard> rows) {
+    }
 }

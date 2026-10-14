@@ -17,4 +17,15 @@ public interface ConstructionApi {
     /** 决算节点检查结果:total/finished = 参与决算节点总数与已完工数,firstPendingName = 首个未完工节点名。 */
     record AccountNodesCheck(boolean allFinished, int total, int finished, String firstPendingName) {
     }
+
+    /**
+     * 施工进度时间轴(只读;C 端对外脱敏视图数据源:节点名+状态+计划/实际时间,
+     * 不含金额/人员/联系方式)。按排期顺序返回全部节点。
+     */
+    java.util.List<ProgressNode> progress(long orgId, long orderId);
+
+    /** 进度节点(只读投影):status 0 初始/1 开工/2 完工/3 开放工费。 */
+    record ProgressNode(String nodeName, int sort, int status,
+                        String planStart, String planEnd, String finishTime) {
+    }
 }

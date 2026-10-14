@@ -347,7 +347,46 @@ public class InboundService implements MarketApi {
         }
     }
 
+    /** C 端案例库只读投影(仅上架效果图;city 空=全部城市;主案人物=设计师,无则空串)。 */
     @Override
+    public com.yingzao.addons.api.MarketApi.CasePage cCases(long orgId, String city, int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        String cityFilter = city == null || city.isBlank() ? "" : "and c2.name = ? ";
+        List<Object> baseArgs = new ArrayList<>();
+        baseArgs.add(orgId);
+        if (!cityFilter.isEmpty()) {
+            baseArgs.add(city.trim());
+        }
+        Long total = jdbc.queryForObject(new StringBuilder()
+                .append("select count(*) from market_ecase e ")
+                .append("join market_ecity c2 on c2.id = e.city_id ")
+                .append("where e.org_id = ? and e.status = 1 and e.type = 0 ")
+                .append(cityFilter)
+                .toString(), Long.class, baseArgs.toArray());
+        List<Object> rowsArgs = new ArrayList<>(baseArgs);
+        rowsArgs.add((safePage - 1) * safeSize);
+        rowsArgs.add(safeSize);
+        List<com.yingzao.addons.api.MarketApi.CaseCard> rows = jdbc.queryForList(new StringBuilder()
+                .append("select e.id, e.name, c2.name as city_name, e.style, e.cover_url, ")
+                .append("e.designer_id, p.name as designer_name ")
+                .append("from market_ecase e ")
+                .append("join market_ecity c2 on c2.id = e.city_id ")
+                .append("left join market_eperson p on p.id = e.designer_id ")
+                .append("where e.org_id = ? and e.status = 1 and e.type = 0 ")
+                .append(cityFilter)
+                .append("order by e.id desc limit ?, ?")
+                .toString(), rowsArgs.toArray()).stream()
+                .map(r -> new com.yingzao.addons.api.MarketApi.CaseCard(
+                        ((Number) r.get("id")).longValue(), (String) r.get("name"),
+                        (String) r.get("city_name"), (String) r.get("style"),
+                        (String) r.get("cover_url"),
+                        r.get("designer_id") == null ? 0 : ((Number) r.get("designer_id")).longValue(),
+                        r.get("designer_name") == null ? "" : (String) r.get("designer_name")))
+                .toList();
+        return new com.yingzao.addons.api.MarketApi.CasePage(total == null ? 0 : total, rows);
+    }
+
     public String revealPhone(long inboundId, long orgId, long operatorId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "select phone_cipher from market_inbound where id = ? and org_id = ? limit 1", inboundId, orgId);

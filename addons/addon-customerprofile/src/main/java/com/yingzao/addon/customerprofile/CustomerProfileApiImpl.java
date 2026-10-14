@@ -10,16 +10,27 @@ import org.springframework.stereotype.Component;
 import com.yingzao.addons.api.CustomerProfileApi;
 
 /**
- * CustomerProfileApi 只读实现:供业务插件建单时校验档案归属并取展示快照。
- * 只读、零业务知识;主数据唯一写点纪律不变(军规:其余模块一律只读)。
+ * CustomerProfileApi 实现:只读方法供业务插件建单时校验档案归属并取展示快照;
+ * ensureCustomerByPhone 是本契约唯一写方法(C 端登录 get-or-create 建档),
+ * 内部走 existCustomer 幂等范式(主数据唯一写点纪律保持,实现仍在 addon-customerprofile)。
  */
 @Component
 public class CustomerProfileApiImpl implements CustomerProfileApi {
 
     private final JdbcTemplate jdbc;
+    private final CustomerService customers;
 
-    public CustomerProfileApiImpl(JdbcTemplate jdbc) {
+    public CustomerProfileApiImpl(JdbcTemplate jdbc, CustomerService customers) {
         this.jdbc = jdbc;
+        this.customers = customers;
+    }
+
+    /** C 端登录建档:existCustomer 幂等;档案名用脱敏形(C 端无姓名来源,到店后员工端改名)。 */
+    @Override
+    public long ensureCustomerByPhone(long orgId, String mobile) {
+        String tail = mobile == null || mobile.length() < 4 ? mobile : mobile.substring(mobile.length() - 4);
+        Map<String, Object> r = customers.exist(orgId, mobile, "C端客户****" + tail, null);
+        return ((Number) r.get("customerId")).longValue();
     }
 
     @Override

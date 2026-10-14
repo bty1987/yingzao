@@ -11,6 +11,7 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import com.yingzao.core.auth.TokenStore;
 import com.yingzao.core.web.ApiResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,6 +48,17 @@ public class RbacInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
+        // C 端主体(principal=customer):只允许显式 require=c-customer 的端点,
+        // 其余(含未声明/员工端点)一律拒——越权面收口在拦截器一处,防 C 端令牌横调员工 API。
+        if (TokenStore.PRINCIPAL_CUSTOMER.equals(request.getAttribute("yz.principal"))) {
+            String cUri = request.getRequestURI();
+            var cHit = rbac.match(cUri, request.getMethod());
+            if (cHit.isPresent() && "c-customer".equalsIgnoreCase(cHit.get().require())) {
+                return true;
+            }
+            return deny(response, cUri, "c-customer");
+        }
+
         // 白名单请求(login/health/error)未过认证拦截器,无 yz.userId → RBAC 不适用,直接放行
         Object uidAttr = request.getAttribute("yz.userId");
         if (!(uidAttr instanceof Long)) {
@@ -77,8 +89,14 @@ public class RbacInterceptor implements HandlerInterceptor {
 
         RbacService.ApiRule rule = hit.get();
         // method 兼容性已在 match 内判定(pattern 命中但 methods 不兼容的规则已跳过),命中即可归类
-        if ("authenticated".equalsIgnoreCase(rule.require())) {
+        if ("authenticated".equalsIgnoreCase(rule.require())
+                || "anonymous".equalsIgnoreCase(rule.require())) {
+            // anonymous:免认证端点(声明即文档);员工令牌/匿名请求一视同仁放行
             return true;
+        }
+        if ("c-customer".equalsIgnoreCase(rule.require())) {
+            // C 端专属端点:员工主体(含 admin)一律拒——语义上不属管理面(设计稿 §3)
+            return deny(response, uri, "c-customer");
         }
 
         RoleService.Grants grants = roles.grantsCached(orgId, userId);
