@@ -16,15 +16,19 @@
 
     <view v-if="!loading && rows.length === 0" class="empty">暂无案例,敬请期待</view>
     <view v-for="it in rows" :key="it.caseId" class="card case">
-      <image v-if="it.coverImage" :src="it.coverImage" mode="aspectFill" class="cover" />
-      <view v-else class="cover ph"><text class="yz-display">案例</text></view>
+      <image v-if="it.coverImage && !broken[it.caseId]" :src="it.coverImage" mode="aspectFill"
+        class="cover" @error="broken[it.caseId] = true" />
+      <view v-else class="cover ph">
+        <view class="yz-seal ph-seal yz-display">案</view>
+        <view class="ph-name yz-display">{{ it.title }}</view>
+      </view>
       <view class="c-body">
         <view class="yz-display c-title">{{ it.title }}</view>
         <view class="c-meta">
           <text v-if="it.cityName">{{ it.cityName }}</text>
           <text v-if="it.style"> · {{ it.style }}</text>
-          <text v-if="it.figureName"> · 设计 {{ it.figureName }}</text>
         </view>
+        <view v-if="it.figureName" class="c-designer">设计 · {{ it.figureName }}</view>
       </view>
     </view>
     <view v-if="rows.length && rows.length >= total" class="tip end">— 已全部加载 —</view>
@@ -42,6 +46,7 @@ const city = ref('')
 const cityOptions = ref([])
 const loading = ref(false)
 const page = ref(1)
+const broken = ref({})
 
 async function load(reset) {
   if (loading.value) return
@@ -68,25 +73,32 @@ onReachBottom(() => { if (rows.value.length < total.value) load(false) })
 </script>
 
 <style scoped>
-.page { padding: 24rpx 0 40rpx; }
+.page { padding: 24rpx 0 40rpx; overflow-x: hidden; }
 .head { display: flex; align-items: center; gap: 20rpx; padding: 12rpx 24rpx 24rpx; }
 .head-t { display: flex; flex-direction: column; gap: 6rpx; }
 .title { font-size: 40rpx; }
-.chips { white-space: nowrap; padding: 0 24rpx 20rpx; }
+.chips { white-space: nowrap; width: 100%; box-sizing: border-box; padding: 0 24rpx 20rpx; }
 .chip {
   display: inline-block; padding: 10rpx 28rpx; margin-right: 14rpx;
   border: 1rpx solid var(--yz-line); border-radius: 4rpx;
   font-size: 24rpx; color: var(--yz-ink-70);
 }
-.chip.on { border-color: var(--yz-seal); color: var(--yz-seal); }
+.chip.on { background: var(--yz-seal); border-color: var(--yz-seal); color: var(--yz-paper); }
 .case { padding: 0; overflow: hidden; }
 .cover { width: 100%; height: 340rpx; display: block; }
 .cover.ph {
-  display: flex; align-items: center; justify-content: center;
-  background: var(--yz-paper-deep); color: var(--yz-ink-35); font-size: 44rpx;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 20rpx; background: var(--yz-paper-deep);
+  border-bottom: 1rpx solid var(--yz-line);
+}
+.ph-seal { width: 64rpx; height: 64rpx; font-size: 30rpx; }
+.ph-name {
+  font-size: 30rpx; color: var(--yz-ink-50);
+  max-width: 80%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 .c-body { padding: 20rpx 24rpx 24rpx; }
 .c-title { font-size: 32rpx; }
 .c-meta { margin-top: 8rpx; font-size: 24rpx; color: var(--yz-ink-50); }
+.c-designer { margin-top: 4rpx; font-size: 22rpx; color: var(--yz-ink-35); }
 .end { text-align: center; margin-top: 8rpx; }
 </style>

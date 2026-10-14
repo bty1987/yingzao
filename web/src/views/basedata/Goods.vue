@@ -24,6 +24,8 @@
         <div style="flex: 1" />
         <el-button @click="dictVisible = true">品类 / 品牌字典</el-button>
         <el-button type="primary" @click="openCreate">新建商品</el-button>
+        <el-button @click="importVisible = true">Excel 导入</el-button>
+        <el-button link type="primary" @click="onTemplate">下载导入模板</el-button>
       </div>
 
       <el-table :data="rows" border stripe>
@@ -69,6 +71,25 @@
     </el-card>
 
     <!-- 新建 / 编辑商品 -->
+    <!-- Excel 导入 -->
+    <el-dialog v-model="importVisible" title="Excel 批量导入商品" width="560px">
+      <el-alert type="info" :closable="false" style="margin-bottom: 14px"
+        title="全量校验:任一行错误则整单拒绝;品类/品牌须已存在;金额单位为元,服务端转厘" />
+      <input type="file" accept=".xlsx" ref="importFile" style="display: block" />
+      <template v-if="importErrors.length">
+        <el-divider content-position="left">校验失败({{ importErrors.length }} 行)</el-divider>
+        <el-table :data="importErrors" size="small" border max-height="240">
+          <el-table-column prop="row" label="行" width="60" />
+          <el-table-column prop="field" label="字段" width="110" />
+          <el-table-column prop="message" label="原因" />
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="importVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="importing" @click="onImport">开始导入</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="editVisible" :title="editId ? '编辑商品' : '新建商品'" width="520px">
       <el-form label-width="90px">
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
@@ -292,6 +313,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   pageGoods, fetchGoods, createGoods, updateGoods, updateGoodsStatus,
+  importGoods, downloadImportTemplate,
   listCategories, createCategory, renameCategory, updateCategoryStatus,
   listBrands, createBrand, renameBrand, updateBrandStatus,
   listGoodsSkuAttrs, addGoodsSkuAttr, updateGoodsSkuAttrStatus,
@@ -408,6 +430,46 @@ function resetForm() {
   form.sellingYuan = null
   form.confineYuan = null
   form.unitRate = 1000
+}
+
+// ---- Excel 导入 ----
+const importVisible = ref(false)
+const importing = ref(false)
+const importErrors = ref([])
+const importFile = ref(null)
+
+async function onImport() {
+  const f = importFile.value && importFile.value.files && importFile.value.files[0]
+  if (!f) return ElMessage.warning('请选择 .xlsx 文件')
+  importing.value = true
+  importErrors.value = []
+  try {
+    const fd = new FormData()
+    fd.append('file', f)
+    const res = await importGoods(fd)
+    const d = res.data || {}
+    ElMessage.success('导入成功 ' + d.imported + ' 条')
+    importVisible.value = false
+    load()
+  } catch (e) {
+    // 260023:校验失败,http 封装在 err.data 携带逐行明细
+    importErrors.value = (e.data && e.data.errors) || [{ row: '-', field: '-', message: e.message }]
+    ElMessage.error(e.message)
+  }
+}
+
+async function onTemplate() {
+  try {
+    const res = await downloadImportTemplate()
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'goods-import-template.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error('模板下载失败')
+  }
 }
 
 function openCreate() {

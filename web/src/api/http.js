@@ -15,6 +15,7 @@ http.interceptors.response.use(
     if (body && typeof body.code === 'number' && body.code !== 0) {
       const err = new Error(body.message || `错误码 ${body.code}`)
       err.code = body.code
+      err.data = body.data
       return Promise.reject(err)
     }
     return body

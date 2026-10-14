@@ -180,6 +180,8 @@ ENDPOINTS = [
     ("portal", "POST", "/api/c/auth/code"), ("portal", "POST", "/api/c/auth/login"),
     ("portal", "GET", "/api/c/cases"), ("portal", "GET", "/api/c/progress"), ("portal", "GET", "/api/c/points"),
     ("portal", "GET", "/api/c/orders"),
+    ("basedata", "GET", "/api/basedata/goods/import-template"),
+    ("basedata", "POST", "/api/basedata/goods/import"),
     ("decoration", "GET", "/api/decoration/orders/1/account-check"), ("decoration", "GET", "/api/decoration/config"),
     ("decoration", "PUT", "/api/decoration/config"),
     ("decoration", "POST", "/api/decoration/measures/1/success"), ("decoration", "POST", "/api/decoration/measures/1/fail"),

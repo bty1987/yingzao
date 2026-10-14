@@ -89,6 +89,11 @@ export const updateBrandStatus = (id, data) => http.post(`/api/basedata/brands/$
 export const pageGoods = (params) => http.get('/api/basedata/goods', { params })
 export const fetchGoods = (id) => http.get(`/api/basedata/goods/${id}`)
 export const createGoods = (data) => http.post('/api/basedata/goods', data)
+export const importGoods = (formData) => http.post('/api/basedata/goods/import', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+})
+export const downloadImportTemplate = () =>
+  http.get('/api/basedata/goods/import-template', { responseType: 'blob' })
 export const updateGoods = (id, data) => http.put(`/api/basedata/goods/${id}`, data)
 export const updateGoodsStatus = (id, data) => http.post(`/api/basedata/goods/${id}/status`, data)
 export const listGoodsSkuAttrs = (id, params) => http.get(`/api/basedata/goods/${id}/sku-attrs`, { params })

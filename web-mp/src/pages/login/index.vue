@@ -81,10 +81,11 @@ async function onLogin() {
 .field {
   display: flex; align-items: center; gap: 16rpx;
   border-bottom: 1rpx solid var(--yz-line-strong); padding: 16rpx 4rpx;
+  box-sizing: border-box; width: 100%;
 }
 .label { width: 120rpx; font-size: 26rpx; color: var(--yz-ink-70); flex-shrink: 0; }
-.field input { flex: 1; font-size: 30rpx; }
-.send { font-size: 24rpx; color: var(--yz-seal); flex-shrink: 0; }
+.field input { flex: 1; min-width: 0; font-size: 30rpx; }
+.send { font-size: 24rpx; color: var(--yz-seal); flex-shrink: 0; width: 180rpx; text-align: right; }
 .send.off { color: var(--yz-ink-35); }
 .go { margin-top: 16rpx; }
 .center { text-align: center; margin-top: 8rpx; }

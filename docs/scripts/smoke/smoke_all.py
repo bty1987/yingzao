@@ -5,6 +5,7 @@
 前置:服务已起(docs/scripts/smoke/README.md),python ensure_users.py 已跑(smoke_all 会自动先跑)。
 用法:python smoke_all.py   → 逐步 ✓/✗,汇总 N/N PASS,任何 ✗ 退出码 1。
 """
+import io
 import json
 import os
 import subprocess
@@ -578,6 +579,100 @@ def main():
     api_ok("套餐成员列表", "GET", "/api/basedata/goods/%s/packages" % pkg_goods_id, tok_admin)
     api_ok("停用商品(事件留痕)", "POST", "/api/basedata/goods/%s/status" % goods_id,
            tok_admin, {"status": 1})
+
+    # ---- 商品 Excel 导入器 V1.1(全量校验,全过才入库;第 51 次)----
+    def upload_xlsx(xbytes, token, fname="goods.xlsx"):
+        import io
+        boundary = "smokebound50x"
+        body = (("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" +
+                 fname + "\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode("utf-8")
+                + xbytes + ("\r\n--" + boundary + "--\r\n").encode("utf-8"))
+        req = urllib.request.Request(BASE + "/api/basedata/goods/import", data=body, method="POST")
+        req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
+        req.add_header("Authorization", "Bearer " + token)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                res = resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            res = e.code, json.loads(e.read())
+        if isinstance(res[1], dict) and res[1].get("code") == 110000:
+            print("UPLOAD-DEBUG status=", res[0], "url=", req.get_full_url(),
+                  "ct=", req.headers.get("Content-type"), "bodyhead=", body[:60])
+        return res
+
+    _treq = urllib.request.Request(BASE + "/api/basedata/goods/import-template")
+    _treq.add_header("Authorization", "Bearer " + tok_admin)
+    with urllib.request.urlopen(_treq) as _tresp:
+        tpl_bytes = _tresp.read()
+        tpl_status = _tresp.status
+    step("导入模板下载(xlsx 魔数 PK)", tpl_status == 200 and tpl_bytes[:2] == b"PK", (tpl_status, len(tpl_bytes)))
+
+    # 导入专用品类/品牌(避免依赖 basedata 段被停用测试翻动过的 cat_child 状态)
+    imp_cat = api_ok("建导入专用品类", "POST", "/api/basedata/categories", tok_admin,
+                     {"name": "导入品类" + stamp3})
+    imp_brand = api_ok("建导入专用品牌", "POST", "/api/basedata/brands", tok_admin,
+                       {"name": "导入品牌" + stamp3, "pinyin": "drpp" + stamp3[-6:]})
+
+    # 错误场景:品类不存在+拼音大写+文件内重名 → 260023 逐行明细,零入库
+    wb_rows = [
+        ["坏品类商品" + stamp3, "hpls", "不存在的品类", ("导入品牌" + stamp3), "片", "", "99.00", "", ""],
+        ["大写拼音商品" + stamp3, "DXPY", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", "", "50.00", "", ""],
+        ["重复名商品" + stamp3, "cfm", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", "", "10.00", "", ""],
+        ["重复名商品" + stamp3, "cfm2", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", "", "11.00", "", ""],
+    ]
+    import openpyxl as _opx
+    _wb = _opx.Workbook(); _ws = _wb.active
+    _ws.append(["商品名称", "拼音", "品类", "品牌", "单位", "条码", "售价(元)", "进价(元)", "限价(元)"])
+    for r in wb_rows:
+        _ws.append(r)
+    _buf = io.BytesIO(); _wb.save(_buf)
+    st, res = upload_xlsx(_buf.getvalue(), tok_admin)
+    errs = (res.get("data") or {}).get("errors") or []
+    step("导入全量校验拒绝 260023(零部分成功)", st == 200 and res.get("code") == 260023
+         and (res.get("data") or {}).get("imported") == 0 and len(errs) == 3
+         and any(e.get("field") == "品类" for e in errs)
+         and any(e.get("field") == "拼音" for e in errs)
+         and any(e.get("message") == "文件内重复" for e in errs), res)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select count(*) from basedata_goods where name like %s",
+                        ("坏品类商品" + stamp3 + "%",))
+            cnt_bad = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("校验失败零入库", cnt_bad == 0, cnt_bad)
+
+    # 成功场景:三行全过(含条码),库直查断言 + 重复导入按行报 dupName
+    wb_rows2 = [
+        ["导入商品甲" + stamp3, "drspj", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", "69000000000%02d" % (int(stamp3[-2:])), "128.50", "80.00", ""],
+        ["导入商品乙" + stamp3, "drspe", ("导入品类" + stamp3), ("导入品牌" + stamp3), "桶", "", "45.00", "", "60.00"],
+        ["导入商品丙" + stamp3, "drspf", ("导入品类" + stamp3), ("导入品牌" + stamp3), "块", "", "666.666", "", ""],
+    ]
+    _wb2 = _opx.Workbook(); _ws2 = _wb2.active
+    _ws2.append(["商品名称", "拼音", "品类", "品牌", "单位", "条码", "售价(元)", "进价(元)", "限价(元)"])
+    for r in wb_rows2:
+        _ws2.append(r)
+    _buf2 = io.BytesIO(); _wb2.save(_buf2)
+    st, res = upload_xlsx(_buf2.getvalue(), tok_admin)
+    d = res.get("data") or {}
+    step("导入成功 3 条(元转厘)", st == 200 and res.get("code") == 0 and d.get("imported") == 3
+         and d.get("total") == 3, res)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select selling, barcode from basedata_goods where name = %s",
+                        ("导入商品甲" + stamp3,))
+            prow = cur.fetchone()
+    finally:
+        conn.close()
+    step("导入数值元转厘(128.50 元→128500 厘)+条码落库",
+         prow and prow[0] == 128500 and prow[1] == "69000000000%02d" % (int(stamp3[-2:])), prow)
+    st, res = upload_xlsx(_buf2.getvalue(), tok_admin)
+    errs2 = (res.get("data") or {}).get("errors") or []
+    step("重复导入逐行报 dupName 260023", res.get("code") == 260023
+         and len([e for e in errs2 if e.get("message") and "已存在" in str(e.get("message"))]) >= 3, res)
+
 
     model_id = api_ok("建主材型号(点位计价)", "POST", "/api/basedata/models", tok_admin,
                       {"name": "烟测型号" + stamp3, "goodsId": goods_id, "brandId": brand_id,
