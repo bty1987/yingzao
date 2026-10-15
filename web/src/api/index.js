@@ -462,6 +462,8 @@ export const pageMemberExchanges = (params) => http.get('/api/member/exchanges',
 export const fetchMemberExchange = (id) => http.get(`/api/member/exchanges/${id}`)
 export const createMemberExchange = (data) => http.post('/api/member/exchanges', data)
 export const cancelMemberExchange = (id) => http.post(`/api/member/exchanges/${id}/cancel`)
+export const getLeadDupStrategy = () => http.get('/api/customer/lead-config')
+export const saveLeadDupStrategy = (strategy) => http.post('/api/customer/lead-config', { strategy })
 export const shipMemberExchange = (id, data) => http.post(`/api/member/exchanges/${id}/ship`, data)
 export const expireClearPoints = () => http.post('/api/member/points/expire-clear')
 export const consumeMemberExchangeItem = (itemId, data) =>

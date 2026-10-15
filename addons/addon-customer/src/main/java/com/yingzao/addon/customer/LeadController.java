@@ -39,6 +39,23 @@ public class LeadController {
         return ApiResponse.ok(leadService.list(orgId));
     }
 
+    /** 组织撞单策略读写(B 类#1):GET 回显 / POST 更新(0 允许重复/1 合并回显/2 拒绝)。 */
+    @GetMapping("/lead-config")
+    public ApiResponse<Integer> getDupStrategy(HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(leadService.dupStrategy(orgId));
+    }
+
+    public record DupStrategyBody(Integer strategy) {
+    }
+
+    @PostMapping("/lead-config")
+    public ApiResponse<Void> saveDupStrategy(@RequestBody DupStrategyBody body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        leadService.saveDupStrategy(orgId, body == null ? null : body.strategy());
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/leads/{id}/convert")
     public ApiResponse<Void> convert(@PathVariable long id, HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");

@@ -183,6 +183,7 @@ ENDPOINTS = [
     ("basedata", "GET", "/api/basedata/goods/import-template"),
     ("basedata", "POST", "/api/basedata/goods/import"),
     ("member", "POST", "/api/member/exchanges/1/ship"), ("member", "POST", "/api/member/points/expire-clear"),
+    ("customer", "GET", "/api/customer/lead-config"), ("customer", "POST", "/api/customer/lead-config"),
     ("decoration", "GET", "/api/decoration/orders/1/account-check"), ("decoration", "GET", "/api/decoration/config"),
     ("decoration", "PUT", "/api/decoration/config"),
     ("decoration", "POST", "/api/decoration/measures/1/success"), ("decoration", "POST", "/api/decoration/measures/1/fail"),
@@ -365,7 +366,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(15 插件 55 条)", len({r["addon"] for r in rules}) == 15 and len(rules) == 55,
+    step("载入 api 规则(15 插件 56 条)", len({r["addon"] for r in rules}) == 15 and len(rules) == 56,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

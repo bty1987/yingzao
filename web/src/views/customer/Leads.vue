@@ -2,6 +2,7 @@
   <div>
     <div style="margin-bottom: 12px">
       <el-button type="primary" @click="dialog = true">登记客源</el-button>
+      <el-button @click="openDupConfig">撞单策略</el-button>
       <el-button @click="load">刷新</el-button>
     </div>
 
@@ -45,6 +46,26 @@
       </template>
     </el-dialog>
 
+    <!-- 撞单策略 -->
+    <el-dialog v-model="dupVisible" title="客源撞单策略(组织级)" width="480px">
+      <el-form label-width="110px">
+        <el-form-item label="策略">
+          <el-radio-group v-model="dupStrategy">
+            <el-radio :value="0">允许重复</el-radio>
+            <el-radio :value="1">同号合并回显</el-radio>
+            <el-radio :value="2">同号拒绝</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item>
+          <span class="tip">仅拦「未转化」客源;已转化客源视为新一轮获客</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dupVisible = false">取消</el-button>
+        <el-button type="primary" @click="onSaveDup">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="dialog" title="登记客源" width="480px">
       <el-form :model="form" label-width="80px">
         <el-form-item label="姓名"><el-input v-model="form.name" /></el-form-item>
@@ -67,7 +88,8 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listLeads, createLead, convertLead, assignLead, listOrgUsers } from '../../api'
+import { listLeads, createLead, convertLead, assignLead, listOrgUsers,
+  getLeadDupStrategy, saveLeadDupStrategy } from '../../api'
 import { addons } from '../../store/addons'
 
 const leads = ref([])

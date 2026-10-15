@@ -20,5 +20,7 @@ addon:
   api:
     - prefix: /api/customer/leads
       require: /customer/leads
+    - prefix: /api/customer/lead-config
+      require: /customer/leads
     - prefix: /api/customer/chances
       require: /customer/chances

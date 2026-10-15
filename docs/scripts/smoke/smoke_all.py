@@ -207,6 +207,23 @@ def main():
     print("== 客源 → 分配 → 机会 ==")
     stamp = time.strftime("%Y%m%d%H%M%S")
     lead_name = "夜烟客" + stamp
+    # ========= B 类#1:客源撞单策略可配置(第 55 次)=========
+    api_ok("撞单策略读(缺省 0)", "GET", "/api/customer/lead-config", tok_admin)
+    _dup_phone = "137" + time.strftime("%d%H%M%S")
+    api_ok("设撞单策略=合并回显", "POST", "/api/customer/lead-config", tok_admin, {"strategy": 1})
+    _d1 = api_ok("策略1首录客源", "POST", "/api/customer/leads", tok_admin,
+                 {"name": "撞单甲" + _dup_phone, "phone": _dup_phone, "source": "smoke"})
+    _d2 = api_ok("策略1同号再录(幂等回显)", "POST", "/api/customer/leads", tok_admin,
+                 {"name": "撞单乙" + _dup_phone, "phone": _dup_phone, "source": "smoke"})
+    step("合并回显同一 leadId", _d1 is not None and _d2 == _d1, (_d1, _d2))
+    api_ok("设撞单策略=拒绝", "POST", "/api/customer/lead-config", tok_admin, {"strategy": 2})
+    api_err("策略2同号再录拒绝 210008", "POST", "/api/customer/leads", tok_admin,
+            {"name": "撞单丙" + _dup_phone, "phone": _dup_phone, "source": "smoke"}, 210008)
+    api_ok("设撞单策略=允许重复", "POST", "/api/customer/lead-config", tok_admin, {"strategy": 0})
+    _d3 = api_ok("策略0同号可重复登记", "POST", "/api/customer/leads", tok_admin,
+                 {"name": "撞单丁" + _dup_phone, "phone": _dup_phone, "source": "smoke"})
+    step("允许重复=新 leadId", _d3 is not None and _d3 != _d1, (_d1, _d3))
+
     lead_id = api_ok("中文登记客源", "POST", "/api/customer/leads", tok_b,
                      {"name": lead_name, "phone": "138%08d" % (int(stamp) % 100000000),
                       "source": "referral", "note": "冒烟自动登记"})
