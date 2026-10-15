@@ -645,7 +645,7 @@ def main():
 
     # 成功场景:三行全过(含条码),库直查断言 + 重复导入按行报 dupName
     wb_rows2 = [
-        ["导入商品甲" + stamp3, "drspj", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", "69000000000%02d" % (int(stamp3[-2:])), "128.50", "80.00", ""],
+        ["导入商品甲" + stamp3, "drspj", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", "6901" + time.strftime("%d%H%M%S"), "128.50", "80.00", ""],
         ["导入商品乙" + stamp3, "drspe", ("导入品类" + stamp3), ("导入品牌" + stamp3), "桶", "", "45.00", "", "60.00"],
         ["导入商品丙" + stamp3, "drspf", ("导入品类" + stamp3), ("导入品牌" + stamp3), "块", "", "666.666", "", ""],
     ]
@@ -667,7 +667,7 @@ def main():
     finally:
         conn.close()
     step("导入数值元转厘(128.50 元→128500 厘)+条码落库",
-         prow and prow[0] == 128500 and prow[1] == "69000000000%02d" % (int(stamp3[-2:])), prow)
+         prow and prow[0] == 128500 and prow[1] == "6901" + time.strftime("%d%H%M%S"), prow)
     st, res = upload_xlsx(_buf2.getvalue(), tok_admin)
     errs2 = (res.get("data") or {}).get("errors") or []
     step("重复导入逐行报 dupName 260023", res.get("code") == 260023
@@ -3918,6 +3918,60 @@ def main():
 
     # 清理 RBAC 测试角色
     api_ok("删除 RBAC 测试角色", "DELETE", "/api/roles/%s" % role_r2_id, tok_admin)
+
+    # ========= 计划任务调度内核(V106,B 类#8 Plan 内核化,第 54 次)=========
+    api_err("非管理员查计划拒绝 123013", "GET", "/api/plans", tok_b, None, 123013)
+    api_err("处理器未注册拒绝 123012", "POST", "/api/plans", tok_admin,
+            {"handler": "no-such-handler", "params": {}}, 123012)
+    _pid = api_ok("提交即时计划(echo)", "POST", "/api/plans", tok_admin,
+                  {"handler": "echo", "bizKey": "smoke-plan-" + stamp_bal,
+                   "params": {"message": "你好计划"}, "maxRetries": 2})
+    if _pid is None:
+        return finish()
+    for _ in range(10):
+        time.sleep(1)
+        _p = api_ok("计划详情", "GET", "/api/plans/%s" % _pid, tok_admin)
+        if (_p or {}).get("status") in (1, 3):
+            break
+    step("即时计划已成功+结果回显", (_p or {}).get("status") == 1
+         and "你好计划" in str((_p or {}).get("result")), _p)
+
+    _fpid = api_ok("提交失败计划(maxRetries=1)", "POST", "/api/plans", tok_admin,
+                   {"handler": "echo", "params": {"fail": True}, "maxRetries": 1})
+    for _ in range(15):
+        time.sleep(1)
+        _fp = api_ok("失败计划详情", "GET", "/api/plans/%s" % _fpid, tok_admin)
+        if (_fp or {}).get("status") in (1, 3):
+            break
+    step("失败计划转死信(last_error 可见)", (_fp or {}).get("status") == 3
+         and "forced fail" in str((_fp or {}).get("last_error")), _fp)
+    api_ok("死信重跑(retry 重置)", "POST", "/api/plans/%s/retry" % _fpid, tok_admin)
+    for _ in range(10):
+        time.sleep(1)
+        _fp2 = api_ok("重跑后详情", "GET", "/api/plans/%s" % _fpid, tok_admin)
+        if (_fp2 or {}).get("status") in (1, 3):
+            break
+    step("重跑再失败仍死信(retry_count 重置后归 1)", (_fp2 or {}).get("status") == 3
+         and (_fp2 or {}).get("retry_count") == 1, _fp2)
+
+    _cpid = api_ok("提交未来计划(定时)", "POST", "/api/plans", tok_admin,
+                   {"handler": "echo", "params": {"message": "later"},
+                    "maxRetries": 1,
+                    "runAt": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() + 3600))})
+    time.sleep(2)
+    _cp = api_ok("定时计划详情", "GET", "/api/plans/%s" % _cpid, tok_admin)
+    step("定时计划未到期仍待执行", (_cp or {}).get("status") == 0, _cp)
+    api_ok("取消待执行计划", "POST", "/api/plans/%s/cancel" % _cpid, tok_admin)
+    _cp2 = api_ok("取消后详情", "GET", "/api/plans/%s" % _cpid, tok_admin)
+    step("已取消状态=4", (_cp2 or {}).get("status") == 4, _cp2)
+    api_err("取消已完成计划拒绝 123011", "POST", "/api/plans/%s/cancel" % _pid, tok_admin,
+            None, 123011)
+    _stats = api_ok("计划统计", "GET", "/api/plans/stats", tok_admin)
+    step("统计结构含五态", all(k in (_stats or {}) for k in
+         ("status0", "status1", "status2", "status3", "status4")), _stats)
+    _page = api_ok("计划分页(status=1 过滤)", "GET",
+                   "/api/plans?status=1&handler=echo&page=1&size=5", tok_admin)
+    step("分页过滤命中成功计划", (_page or {}).get("total", 0) >= 1, _page)
 
     # ========= C 端门户(addon-portal V1,第 49 次;匿名面 org=配置 yingzao.portal.org-id 默认 1)=========
     st, res = call("GET", "/api/c/cases?page=1&size=10")
