@@ -774,6 +774,55 @@ def main():
                 if n.get("source_type") == "payment.collected.consumed"]
     step("示范消费器留痕(收款事件→通知)", len(hit_demo) >= 1, len(hit_demo or []))
 
+    # ---- V105 exactly-once 投递语义:consumed 登记 + requeue 跳过 ----
+    _task_id = ((ev_col or {}).get("rows") or [{}])[0].get("id")
+    _n_before = len(hit_demo)
+    if _task_id:
+        import pymysql as _pym
+        _conn = _pym.connect(host="192.168.5.21", user="root", password="Neusoft!",
+                             database="yingzao", charset="utf8mb4")
+        try:
+            with _conn.cursor() as _cur:
+                _cur.execute("select consumer from yz_event_consumed where task_id = %s",
+                             (_task_id,))
+                _crows = _cur.fetchall()
+        finally:
+            _conn.close()
+        step("消费完成登记行=全部订阅消费者(装饰/示范/销售三家)",
+             len(_crows) == 3
+             and {r[0] for r in _crows} == {"PaymentEventDemoConsumer", "DecorationPaymentConsumer",
+                                            "SalesPaymentConsumer"},
+             _crows)
+        # requeue 已消费任务:登记表使双消费者全部跳过 → 通知零新增(以前=重放多一条)
+        api_ok("requeue 已消费任务(跳过语义)", "POST", "/api/events/%s/requeue" % _task_id, tok_admin)
+        for _ in range(10):
+            time.sleep(2)
+            _again = api_ok("requeue 后任务回查", "GET",
+                            "/api/events?eventType=PaymentCollectedEvent&status=1&page=1&size=5",
+                            tok_admin)
+            _hit = [r for r in ((_again or {}).get("rows") or []) if r.get("id") == _task_id]
+            if _hit:
+                break
+        step("requeue 后任务仍为已消费", bool(_hit) and _hit[0].get("status") == 1, _hit)
+        notifs_admin2 = api_ok("操作人通知列表(requeue 后)", "GET", "/api/notifications?page=1&size=50",
+                               tok_admin)
+        hit_demo2 = [n for n in (notifs_admin2 or [])
+                     if n.get("source_type") == "payment.collected.consumed"]
+        step("exactly-once:requeue 重投递通知零新增(以前重放多一条)",
+             len(hit_demo2) == _n_before, (len(hit_demo2), _n_before))
+        _conn = _pym.connect(host="192.168.5.21", user="root", password="Neusoft!",
+                             database="yingzao", charset="utf8mb4")
+        try:
+            with _conn.cursor() as _cur:
+                _cur.execute("select consumer from yz_event_consumed where task_id = %s",
+                             (_task_id,))
+                _crows2 = _cur.fetchall()
+        finally:
+            _conn.close()
+        step("登记行不因重投递增长", len(_crows2) == 3, _crows2)
+    else:
+        step("收款事件 task id 缺失,exactly-once 段跳过", True)
+
     # 死信链:直插一条坏载荷事件(服务以快退避+快轮询环境变量启动),等调度器重试至死信
     conn = db_conn()
     try:

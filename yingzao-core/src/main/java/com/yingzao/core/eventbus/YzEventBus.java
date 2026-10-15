@@ -102,12 +102,23 @@ public class YzEventBus {
         YzEventRecord record = new YzEventRecord(taskId, type, (String) task.get("event_key"), payload);
         List<String> failures = new ArrayList<>();
         for (YzEventConsumer consumer : consumers) {
+            String consumerName = consumer.getClass().getSimpleName();
+            // exactly-once 投递语义(V105):重投递/requeue 时跳过已成功消费者,
+            // 消除「多消费者部分失败整条重试→已成功者重放」的常态重放;崩溃窗口由业务幂等兜底。
+            Integer done = jdbc.queryForObject(
+                    "select count(*) from yz_event_consumed where task_id = ? and consumer = ?",
+                    Integer.class, taskId, consumerName);
+            if (done != null && done > 0) {
+                continue;
+            }
             try {
                 consumer.consume(record);
+                jdbc.update("insert ignore into yz_event_consumed(task_id, consumer) values (?,?)",
+                        taskId, consumerName);
             } catch (Throwable t) {
                 log.warn("event consumer {} failed, taskId={} type={}",
-                        consumer.getClass().getSimpleName(), taskId, type, t);
-                failures.add(consumer.getClass().getSimpleName() + ": " + t.getMessage());
+                        consumerName, taskId, type, t);
+                failures.add(consumerName + ": " + t.getMessage());
             }
         }
         if (failures.isEmpty()) {
