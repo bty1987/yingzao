@@ -90,6 +90,7 @@
 - 提交 = 批量(同一装修单)聚合生成**一笔**款项(正补负退,1e6 归一,见 §3.1),未付可整体撤销(cancel);
 - 切换默认报价被拒的条件:功能区存在拓展项/增减项(200028/200032)——**变更链与报价版本强绑定**;
 - 【方林嫌疑】漏项(LEAKAGE)单列类型 + 漏项追责玩法是方林管理特色,行业少见于系统化 → v1 保留 type 枚举位但漏项流程不做。
+- 【营造映射定案 2026-10-16】增减线 V2 详细设计见 docs/prd/addon-quotation-addreduce.md:差量单(0 草稿/1 已提交/2 已付款/3 已确认,草稿可删、已提交未付款可撤)+明细行挂 ref_qiid+金额全厘服务端算+提交单事务聚合经 PaymentApi.createBill(typeCode=ar_diff)+PaymentConfirmedEvent 回程置已付+财务 confirm 终态;paytype COM/ARO 不迁(方林财务口径);重签前置「无未确认差量单」与决算金额「折后合计+Σ已确认差量」双向联动。
 
 ## 7. 测量/复测(Qeasure/Remeasure)与拓展项(Extension)
 

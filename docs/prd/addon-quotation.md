@@ -25,7 +25,7 @@
 3. 定稿:`lock` → status 0→1(前置:无未关联选材项;lockTime 首次幂等),`unlock` → 1→0;
 4. 审核:`submit` → attstatus=1 → `audit` → 2 → `finish` → 3(记 finishTime),三步各发领域事件(通知归通知中心订阅);
 5. 切默认:`setDefault` → 同单唯一默认,默认报价变更对外可见价格以查询期汇总为准(不回写装修单,v1 不双写);
-6. 增减(V2):对已确认价格线做差量单(增/减/漏项枚举位),`submit` → 生成差量聚合(正补负退)→ 发 `QuotationAddReduceSubmittedEvent`,addon-payment 承接款项 → 付款后 status=2 → 确认 3;
+6. 增减(V2):对已确认价格线做差量单(增/减/漏项枚举位),`submit` → 生成差量聚合(正补负退)→ 发 `QuotationAddReduceSubmittedEvent`,addon-payment 承接款项 → 付款后 status=2 → 确认 3; **→ 详细设计已出:[addon-quotation-addreduce.md](addon-quotation-addreduce.md)(2026-10-16,含状态机/守卫/端点/冒烟验收,按推荐口径可进写码)**;
 7. 保价重算(V2):按时间点取价格快照回填明细(价格快照 quotation_price 表)。
 
 ## 闭环校验
