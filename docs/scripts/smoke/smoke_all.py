@@ -1971,9 +1971,6 @@ def main():
     acc2 = api_ok("撤销后额度归零(refund 回退)", "GET",
                   "/api/construction/orders/%s/accessory" % order_g, tok_admin)
     step("consumed_total 归 0", acc2 and acc2.get("accessoryConsumedTotal") == 0, acc2)
-    api_err("撤销单再出库拒绝 310002", "POST", "/api/inventory/requisitions/%s/outbound" % rq1,
-            tok_admin, None, 310002)
-
     rq2 = api_ok("再领水泥3包", "POST", "/api/inventory/requisitions", tok_admin,
                  {"orderId": order_g, "type": 0,
                   "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 3000}]})
@@ -2001,6 +1998,60 @@ def main():
     inv1_rq = [x for x in (stocks_rq or {}).get("rows", []) if x.get("goods_id") == goods_inv1]
     # 30(出返后) -10(CR进退) -3(rq2出库) +2(rq2退回) -5(售后出库) = 14
     step("水泥库存 14.000(进退/出库/退回/售后全链过账)", inv1_rq and inv1_rq[0].get("num") == 14000, inv1_rq)
+
+    api_err("撤销单再出库拒绝 310002", "POST", "/api/inventory/requisitions/%s/outbound" % rq1,
+            tok_admin, None, 310002)
+
+    # ---- B 类#7:领料定材校验(定材包成员=定额来源;组织开关默认关)----
+    pkg_b7 = api_ok("B7建定材包(surplus=0)", "POST", "/api/basedata/packages", tok_admin,
+                    {"name": "定材包B7" + stamp_inv, "surplus": 0})
+    _g_b7 = api_ok("B7建专用商品(零残留)", "POST", "/api/basedata/goods", tok_admin,
+                   {"name": "B7定材漆" + stamp_inv, "categoryId": cat_child,
+                    "brandId": brand_id, "unit": "桶", "selling": 45000})
+    api_ok("B7加成员(专用商品 2桶定额)", "POST", "/api/basedata/packages/%s/items" % pkg_b7, tok_admin,
+           {"goodsId": _g_b7, "num": 2000})
+    _pkg_items = api_ok("B7成员列表", "GET", "/api/basedata/packages/%s/items" % pkg_b7, tok_admin)
+    step("B7成员明细可查", isinstance(_pkg_items, list) and len(_pkg_items) == 1
+         and _pkg_items[0].get("num") == 2000, _pkg_items)
+    api_err("B7重复加同商品拒绝 260024", "POST", "/api/basedata/packages/%s/items" % pkg_b7,
+            tok_admin, {"goodsId": _g_b7, "num": 100}, 260024)
+
+    _q_b7 = api_ok("B7建报价(编辑态)", "POST", "/api/quotation/quotations", tok_admin,
+                   {"orderId": order_g, "name": "定材校验方案" + stamp_inv, "versionId": q_ver})
+    api_ok("B7报价挂定材包", "POST", "/api/quotation/quotations/%s/material-package" % _q_b7,
+           tok_admin, {"packageId": pkg_b7})
+    api_ok("B7报价锁定", "POST", "/api/quotation/quotations/%s/lock" % _q_b7, tok_admin)
+    api_ok("B7设默认报价", "POST", "/api/quotation/quotations/%s/default" % _q_b7, tok_admin)
+
+    api_ok("B7开启定材校验", "POST", "/api/inventory/config", tok_admin, {"enabled": 1})
+    _cfg = api_ok("B7配置回显", "GET", "/api/inventory/config", tok_admin)
+    step("B7配置回显开关=1", (_cfg or {}).get("quotaCheckEnabled") == 1, _cfg)
+
+    _rq_ok = api_ok("B7定额内领料(漆2桶=定额)", "POST", "/api/inventory/requisitions", tok_admin,
+                    {"orderId": order_g, "type": 0,
+                     "items": [{"goodsId": _g_b7, "warehouseId": wh_main, "num": 2000}]})
+    if _rq_ok is None:
+        return finish()
+    api_err("B7超定额领料拒绝 310067", "POST", "/api/inventory/requisitions", tok_admin,
+            {"orderId": order_g, "type": 0,
+             "items": [{"goodsId": _g_b7, "warehouseId": wh_main, "num": 100}]}, 310067)
+    _rq_np = api_ok("B7非定材商品领料放行", "POST", "/api/inventory/requisitions", tok_admin,
+                    {"orderId": order_g, "type": 0,
+                     "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 100}]})
+    if _rq_np is None:
+        return finish()
+    api_ok("B7关闭定材校验", "POST", "/api/inventory/config", tok_admin, {"enabled": 0})
+    _rq_off = api_ok("B7关闸后超定额放行(行为回归)", "POST", "/api/inventory/requisitions", tok_admin,
+                     {"orderId": order_g, "type": 0,
+                      "items": [{"goodsId": _g_b7, "warehouseId": wh_main, "num": 100}]})
+    if _rq_off is None:
+        return finish()
+    api_ok("B7清理:撤销两笔测试领料", "POST", "/api/inventory/requisitions/%s/cancel" % _rq_np,
+           tok_admin)
+    api_ok("B7清理:撤销定额内领料(2000,额度回冲)", "POST",
+           "/api/inventory/requisitions/%s/cancel" % _rq_ok, tok_admin)
+    api_ok("B7清理:撤销关闸后领料", "POST", "/api/inventory/requisitions/%s/cancel" % _rq_off,
+           tok_admin)
 
     # 外辅(向厂商定材辅料;order_d 已竣工=锁定反例,order_g 施工中可登记)
     # V1202 厂商引用化:assign 必传 supplierId 经 SupplierApi 校验,外辅段自建厂商+停用厂商各一

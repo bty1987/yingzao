@@ -1,6 +1,7 @@
 package com.yingzao.addon.inventory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.yingzao.addons.api.ConstructionAccessoryApi;
 import com.yingzao.addons.api.DecorationApi;
 import com.yingzao.addons.api.GoodsApi;
+import com.yingzao.addons.api.MaterialQuotaApi;
+import com.yingzao.addons.api.QuotationApi;
 import com.yingzao.core.web.BizException;
 
 /**
@@ -33,6 +36,8 @@ public class RequisitionService {
     public static final int CODE_RETURN_OVER = 310043;
     public static final int CODE_DECORATION_NOT_FOUND = 310044;
     public static final int CODE_CLOSED = 310041;
+    /** 定材校验(B 类#7):累计领用超定额+浮动 310067(老 260082 同义)。 */
+    public static final int CODE_QUOTA_OVER = 310067;
 
     public static final int TYPE_COMMON = 0;
     public static final int TYPE_POSTSALE = 1;
@@ -57,10 +62,13 @@ public class RequisitionService {
     private final ConstructionAccessoryApi accessoryQuotas;
     private final DecorationApi decorations;
     private final GoodsApi goods;
+    private final QuotationApi quotations;
+    private final MaterialQuotaApi materialQuota;
 
     public RequisitionService(JdbcTemplate jdbc, MessageSource messages, StockService stocks,
             ManifestService manifests, ConstructionAccessoryApi accessoryQuotas,
-            DecorationApi decorations, GoodsApi goods) {
+            DecorationApi decorations, GoodsApi goods, QuotationApi quotations,
+            MaterialQuotaApi materialQuota) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.stocks = stocks;
@@ -68,6 +76,8 @@ public class RequisitionService {
         this.accessoryQuotas = accessoryQuotas;
         this.decorations = decorations;
         this.goods = goods;
+        this.quotations = quotations;
+        this.materialQuota = materialQuota;
     }
 
     @Transactional
@@ -82,6 +92,8 @@ public class RequisitionService {
                         msg("inventory.requisition.decorationNotFound")));
         long total = 0;
         List<DerivedRow> rows = new ArrayList<>();
+        // 定材校验闸(B 类#7;组织开关,默认关):先校验后落库——累计领用(不含本单)+ 本次 ≤ 定额量 + 包浮动量
+        checkMaterialQuota(orgId, orderId, type, items);
         for (ItemCmd cmd : items) {
             require(cmd != null && cmd.goodsId() != null && cmd.warehouseId() != null
                     && cmd.num() != null, CODE_PARAM, "inventory.param.invalid");
@@ -420,6 +432,84 @@ public class RequisitionService {
         if (!cond) {
             throw new BizException(code, msg(msgKey));
         }
+    }
+
+    // ---- 定材校验(B 类#7)与组织配置 ----
+
+    /**
+     * 领料定材校验:开关开启 + 默认报价挂了定材包时,逐商品校验
+     * 「该单累计有效领用 + 本次 ≤ 成员定额量 + 包浮动量」(同量纲千分位)。
+     * 非包成员商品不拦(老:无定材/非计算型即不校验);售后单(type=1)跳过。
+     */
+    private void checkMaterialQuota(long orgId, long orderId, int type, List<ItemCmd> items) {
+        if (type != TYPE_COMMON || !quotaCheckEnabled(orgId)) {
+            return;
+        }
+        java.util.Optional<Long> packageId = quotations.designatedMaterialPackageId(orgId, orderId);
+        if (packageId.isEmpty()) {
+            return;
+        }
+        MaterialQuotaApi.PackageRef ref = materialQuota.queryPackage(orgId, packageId.get()).orElse(null);
+        if (ref == null || ref.status() != 0) {
+            return;
+        }
+        Map<Long, Long> batch = new HashMap<>();
+        for (ItemCmd cmd : items) {
+            batch.merge(cmd.goodsId(), cmd.num(), Long::sum);
+        }
+        for (Map.Entry<Long, Long> e : batch.entrySet()) {
+            MaterialQuotaApi.PackageQuota quota = materialQuota
+                    .queryQuota(orgId, packageId.get(), e.getKey()).orElse(null);
+            if (quota == null) {
+                continue;
+            }
+            long issued = issuedNum(orgId, orderId, e.getKey());
+            long allow = quota.quotaNum() + quota.surplus();
+            if (issued + e.getValue() > allow) {
+                throw new BizException(CODE_QUOTA_OVER, msgArg("inventory.quota.over",
+                        allow, issued + e.getValue(), quotaName(orgId, e.getKey())));
+            }
+        }
+    }
+
+    /** 该单该商品累计有效领用(千分位;撤销 3/拒绝 4 不计)。 */
+    private long issuedNum(long orgId, long orderId, long goodsId) {
+        Long sum = jdbc.queryForObject("""
+                select coalesce(sum(i.num), 0) from inventory_requisition_item i
+                join inventory_requisition r on r.id = i.requisition_id
+                where r.org_id = ? and r.order_id = ? and i.goods_id = ? and r.status not in (3, 4)
+                """, Long.class, orgId, orderId, goodsId);
+        return sum == null ? 0 : sum;
+    }
+
+    private String quotaName(long orgId, long goodsId) {
+        return goods.queryGoods(orgId, goodsId).map(GoodsApi.GoodsSummary::name).orElse("商品" + goodsId);
+    }
+
+    /** 组织级定材校验开关(懒初始化缺省关=行为不变)。 */
+    public boolean quotaCheckEnabled(long orgId) {
+        jdbc.update("insert ignore into inventory_config(org_id, quota_check_enabled) values (?, 0)", orgId);
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select quota_check_enabled from inventory_config where org_id = ?", orgId);
+        return !rows.isEmpty() && ((Number) rows.get(0).get("quota_check_enabled")).intValue() == 1;
+    }
+
+    public Map<String, Object> configOf(long orgId) {
+        boolean enabled = quotaCheckEnabled(orgId);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("quotaCheckEnabled", enabled ? 1 : 0);
+        return out;
+    }
+
+    @Transactional
+    public void saveQuotaCheck(long orgId, Integer enabled) {
+        require(enabled != null && (enabled == 0 || enabled == 1), CODE_PARAM, "inventory.param.invalid");
+        quotaCheckEnabled(orgId);
+        jdbc.update("update inventory_config set quota_check_enabled = ? where org_id = ?", enabled, orgId);
+    }
+
+    private String msgArg(String key, Object... args) {
+        return messages.getMessage(key, args, LocaleContextHolder.getLocale());
     }
 
     private String msg(String key) {

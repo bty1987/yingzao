@@ -52,6 +52,7 @@
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.level === 0" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button v-if="row.level === 0" link type="primary" @click="openItems(row)">成员明细</el-button>
             <el-button v-if="row.level === 0" link type="primary" @click="createRef(row)">引用</el-button>
             <el-button v-if="row.level === 1" link type="primary" @click="editSurplus(row)">调浮动量</el-button>
             <el-button link :type="row.status === 0 ? 'danger' : 'success'" @click="toggleStatus(row)">
@@ -78,6 +79,28 @@
         <el-button type="primary" @click="doSave">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 成员明细(定材包 × 商品 × 定额量;领料定材校验数据源) -->
+    <el-drawer v-model="itemsVisible" :title="'成员明细 — ' + (itemsPkg ? itemsPkg.name : '')" size="520px">
+      <div style="display: flex; gap: 8px; margin-bottom: 12px">
+        <el-input v-model="itemGoodsId" placeholder="商品 ID" style="width: 140px" />
+        <el-input v-model="itemNum" placeholder="定额量(千分位)" style="width: 160px" />
+        <el-button type="primary" @click="addItemRow">加成员</el-button>
+      </div>
+      <el-table :data="itemRows" border size="small">
+        <el-table-column prop="goods_id" label="商品ID" width="80" />
+        <el-table-column prop="goods_name" label="商品" min-width="140" />
+        <el-table-column label="定额量" width="110" align="right">
+          <template #default="{ row }">{{ (row.num / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 }) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="130">
+          <template #default="{ row }">
+            <el-button link size="small" @click="bumpItem(row)">+10%</el-button>
+            <el-button link type="danger" size="small" @click="delItem(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
   </div>
 </template>
 
@@ -86,7 +109,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   pageMaterialPackages, createMaterialPackage, createMaterialPackageReference,
-  updateMaterialPackage, updateMaterialPackageStatus
+  updateMaterialPackage, updateMaterialPackageStatus,
+  listMaterialPackageItems, addMaterialPackageItem, updateMaterialPackageItem,
+  removeMaterialPackageItem
 } from '../../api'
 
 const yuan = (li) => (li == null ? '-' : (li / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 }))
@@ -97,6 +122,53 @@ const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const size = 20
+
+const itemsVisible = ref(false)
+const itemsPkg = ref(null)
+const itemRows = ref([])
+const itemGoodsId = ref(null)
+const itemNum = ref(null)
+
+async function openItems(row) {
+  itemsPkg.value = row
+  const res = await listMaterialPackageItems(row.id)
+  itemRows.value = res.data || []
+  itemsVisible.value = true
+}
+
+async function addItemRow() {
+  if (!itemGoodsId.value || !itemNum.value) return ElMessage.warning('请填商品 ID 与定额量')
+  try {
+    await addMaterialPackageItem(itemsPkg.value.id,
+      { goodsId: itemGoodsId.value, num: Math.round(itemNum.value * 1000) })
+    itemGoodsId.value = null
+    itemNum.value = null
+    const res = await listMaterialPackageItems(itemsPkg.value.id)
+    itemRows.value = res.data || []
+  } catch (e) {
+    ElMessage.error(e.message || '加成员失败')
+  }
+}
+
+async function bumpItem(row) {
+  try {
+    await updateMaterialPackageItem(itemsPkg.value.id, row.id, { num: Math.round(row.num * 1.1) })
+    const res = await listMaterialPackageItems(itemsPkg.value.id)
+    itemRows.value = res.data || []
+  } catch (e) {
+    ElMessage.error(e.message || '调整失败')
+  }
+}
+
+async function delItem(row) {
+  try {
+    await removeMaterialPackageItem(itemsPkg.value.id, row.id)
+    const res = await listMaterialPackageItems(itemsPkg.value.id)
+    itemRows.value = res.data || []
+  } catch (e) {
+    ElMessage.error(e.message || '删除失败')
+  }
+}
 
 const editVisible = ref(false)
 const editId = ref(null)

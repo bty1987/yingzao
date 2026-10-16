@@ -30,6 +30,19 @@ public class QuotationApiImpl implements QuotationApi {
         return count != null && count > 0;
     }
 
+    /** 默认报价挂的定材包(未挂/无默认报价 → empty=领料不拦)。 */
+    @Override
+    public Optional<Long> designatedMaterialPackageId(long orgId, long orderId) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select material_package_id from quotation_quotation
+                where org_id = ? and order_id = ? and is_default = 1 limit 1
+                """, orgId, orderId);
+        if (rows.isEmpty() || rows.get(0).get("material_package_id") == null) {
+            return Optional.empty();
+        }
+        return Optional.of(((Number) rows.get(0).get("material_package_id")).longValue());
+    }
+
     @Override
     public Optional<QuotationSummary> queryDefaultQuotation(long orgId, long orderId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""

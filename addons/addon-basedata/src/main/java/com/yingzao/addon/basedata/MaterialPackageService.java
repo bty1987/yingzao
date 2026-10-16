@@ -22,6 +22,10 @@ public class MaterialPackageService {
 
     public static final int CODE_PACKAGE_NOT_FOUND = 260019;
     public static final int CODE_SNAPSHOT_LOCKED = 260020;
+    /** 成员明细(B 类#7):商品已在包内 260024 / 成员不存在 260025 / 定额量非法 260026。 */
+    public static final int CODE_ITEM_DUP = 260024;
+    public static final int CODE_ITEM_NOT_FOUND = 260025;
+    public static final int CODE_ITEM_NUM = 260026;
 
     public static final int STATUS_ENABLED = 0;
     public static final int STATUS_DISABLED = 1;
@@ -114,6 +118,88 @@ public class MaterialPackageService {
 
     /** 停用主数据行不级联引用行(引用行是快照,已建不受影响;老系统同理);仅归属组织可操作。 */
     @Transactional
+    // ---- 成员明细(定材包 × 商品 × 定额量;B 类#7 领料定材校验的数据源) ----
+
+    /** 成员列表(包维度,含商品名快照与定额量;千分位)。 */
+    public List<Map<String, Object>> listItems(long orgId, long packageId) {
+        return jdbc.queryForList("""
+                select i.id, i.package_id, i.goods_id, i.goods_name, i.num, i.created_at, i.updated_at
+                from basedata_material_package_item i
+                join basedata_material_package p on p.id = i.package_id
+                where i.package_id = ? and p.org_id = ?
+                order by i.id
+                """, packageId, orgId);
+    }
+
+    /** 加成员(包内商品唯一;定额量 >0,千分位与领料 num 同量纲)。 */
+    @Transactional
+    public long addItem(long orgId, long packageId, Long goodsId, Long num, Long createdBy) {
+        require(goodsId != null, CategoryService.CODE_INVALID_PARAM, "param.invalid");
+        require(num != null && num > 0, CODE_ITEM_NUM, "mpackage.itemNum");
+        Map<String, Object> pkg = loadPackage(orgId, packageId);
+        String goodsName = goodsNameOf(orgId, goodsId);
+        try {
+            jdbc.update("""
+                    insert into basedata_material_package_item(org_id, package_id, goods_id, goods_name, num)
+                    values (?,?,?,?,?)
+                    """, ownerOrgOf(pkg, orgId), packageId, goodsId, goodsName, num);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            throw new BizException(CODE_ITEM_DUP, msg("mpackage.itemDup"));
+        }
+        return jdbc.queryForObject("select last_insert_id()", Long.class);
+    }
+
+    /** 改成员定额量(仅 num 可改;商品不可换——换商品=删后加)。 */
+    @Transactional
+    public void updateItem(long orgId, long packageId, long itemId, Long num) {
+        require(num != null && num > 0, CODE_ITEM_NUM, "mpackage.itemNum");
+        loadPackage(orgId, packageId);
+        int updated = jdbc.update("""
+                update basedata_material_package_item set num = ?
+                where id = ? and package_id = ?
+                """, num, itemId, packageId);
+        if (updated == 0) {
+            throw new BizException(CODE_ITEM_NOT_FOUND, msg("mpackage.itemNotFound"));
+        }
+    }
+
+    /** 删成员(物理删:成员明细是配置数据,删除即不再纳入定额;已领用量不受影响)。 */
+    @Transactional
+    public void removeItem(long orgId, long packageId, long itemId) {
+        loadPackage(orgId, packageId);
+        int updated = jdbc.update(
+                "delete from basedata_material_package_item where id = ? and package_id = ?",
+                itemId, packageId);
+        if (updated == 0) {
+            throw new BizException(CODE_ITEM_NOT_FOUND, msg("mpackage.itemNotFound"));
+        }
+    }
+
+    private Map<String, Object> loadPackage(long orgId, long packageId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select id, org_id, owner_org_id, surplus, status from basedata_material_package"
+                        + " where id = ? and org_id = ?", packageId, orgId);
+        if (rows.isEmpty()) {
+            throw new BizException(CODE_PACKAGE_NOT_FOUND, msg("mpackage.notfound"));
+        }
+        return rows.get(0);
+    }
+
+    private long ownerOrgOf(Map<String, Object> pkg, long orgId) {
+        Object owner = pkg.get("owner_org_id");
+        return owner == null ? orgId : ((Number) owner).longValue();
+    }
+
+    private String goodsNameOf(long orgId, long goodsId) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select name from basedata_goods where id = ? and org_id = ?
+                """, goodsId, orgId);
+        if (rows.isEmpty()) {
+            throw new BizException(GoodsService.CODE_GOODS_NOT_FOUND, msg("goods.notfound"));
+        }
+        return (String) rows.get(0).get("name");
+    }
+
     public void updateStatus(long orgId, long id, int status) {
         require(status == STATUS_ENABLED || status == STATUS_DISABLED,
                 CategoryService.CODE_INVALID_PARAM, "param.invalid");

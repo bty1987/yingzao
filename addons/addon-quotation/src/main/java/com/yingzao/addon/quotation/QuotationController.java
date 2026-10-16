@@ -115,6 +115,19 @@ public class QuotationController {
         return ApiResponse.ok(quotations.detail(orgId, id));
     }
 
+    /** 挂/换定材包(B 类#7):body.packageId 空=解绑;仅编辑中报价可改。 */
+    public record MaterialPackageRequest(Long packageId) {
+    }
+
+    @PostMapping("/quotations/{id}/material-package")
+    public ApiResponse<Void> setMaterialPackage(@PathVariable long id,
+            @RequestBody MaterialPackageRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        quotations.setMaterialPackage(orgId, id, body == null ? null : body.packageId(), userId);
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/quotations/{id}/pricing")
     public ApiResponse<Void> updatePricing(@PathVariable long id, @RequestBody PricingRequest body,
             HttpServletRequest request) {

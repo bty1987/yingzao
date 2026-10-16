@@ -18,4 +18,10 @@ public interface QuotationApi {
     /** 默认报价摘要快照。 */
     record QuotationSummary(long quotationId, String name, long totalPrice, int discount) {
     }
+
+    /**
+     * 该装修单默认报价所挂的定材包(领料定材校验的定额来源;B 类#7)。未挂包/无默认报价返回 empty
+     * ——调用方语义=不拦(老:报价无定额单即返回 0 放行)。
+     */
+    java.util.Optional<Long> designatedMaterialPackageId(long orgId, long orderId);
 }

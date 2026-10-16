@@ -2,6 +2,7 @@ package com.yingzao.addon.basedata;
 
 import java.util.Map;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -72,6 +73,42 @@ public class MaterialPackageController {
         long orgId = (Long) request.getAttribute("yz.orgId");
         packageService.update(orgId, id, body.name(), body.selling(), body.balance(), body.surplus(),
                 body.calc());
+        return ApiResponse.ok();
+    }
+
+    // ---- 成员明细(定材包内容,B 类#7 领料定材校验数据源) ----
+
+    public record ItemBody(Long goodsId, Long num) {
+    }
+
+    @GetMapping("/packages/{id}/items")
+    public ApiResponse<Object> listItems(@PathVariable long id, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(packageService.listItems(orgId, id));
+    }
+
+    @PostMapping("/packages/{id}/items")
+    public ApiResponse<Long> addItem(@PathVariable long id, @RequestBody ItemBody body,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(packageService.addItem(orgId, id,
+                body == null ? null : body.goodsId(), body == null ? null : body.num(), userId));
+    }
+
+    @PutMapping("/packages/{id}/items/{itemId}")
+    public ApiResponse<Void> updateItem(@PathVariable long id, @PathVariable long itemId,
+            @RequestBody ItemBody body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        packageService.updateItem(orgId, id, itemId, body == null ? null : body.num());
+        return ApiResponse.ok();
+    }
+
+    @DeleteMapping("/packages/{id}/items/{itemId}")
+    public ApiResponse<Void> removeItem(@PathVariable long id, @PathVariable long itemId,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        packageService.removeItem(orgId, id, itemId);
         return ApiResponse.ok();
     }
 

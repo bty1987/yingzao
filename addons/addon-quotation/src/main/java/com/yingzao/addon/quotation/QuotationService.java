@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.yingzao.addons.api.DecorationApi;
+import com.yingzao.addons.api.MaterialQuotaApi;
 import com.yingzao.addons.api.event.QuotationCreatedEvent;
 import com.yingzao.addons.api.event.QuotationStatusChangedEvent;
 import com.yingzao.core.eventbus.YzEventBus;
@@ -39,6 +40,8 @@ public class QuotationService {
     // ---- 错误码(230000 段,同码同消息见 i18n/quotation.properties) ----
     public static final int CODE_INVALID_PARAM = 230001;
     public static final int CODE_NOT_FOUND = 230002;
+    /** 定材包不存在/停用(B 类#7;报价挂包校验)。 */
+    public static final int CODE_PACKAGE_INVALID = 230023;
     public static final int CODE_LOCKED = 230003;
     public static final int CODE_LIMIT = 230004;
     public static final int CODE_ORDER_NOT_FOUND = 230005;
@@ -98,19 +101,22 @@ public class QuotationService {
 
     private record QuotationRow(long id, long orgId, long orderId, String orderNo, String name, int status,
             int attstatus, int isDefault, int discount, int manageRate, int manageDiscount,
-            int carryRate, int carryDiscount, int taxRate, int taxDiscount) {
+            int carryRate, int carryDiscount, int taxRate, int taxDiscount, Long materialPackageId) {
     }
 
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
     private final YzEventBus eventBus;
     private final DecorationApi decorations;
+    private final MaterialQuotaApi materialQuota;
 
-    public QuotationService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus, DecorationApi decorations) {
+    public QuotationService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
+            DecorationApi decorations, MaterialQuotaApi materialQuota) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.eventBus = eventBus;
         this.decorations = decorations;
+        this.materialQuota = materialQuota;
     }
 
     // ---- 报价版本(组织级配置域:费率默认值/启税) ----
@@ -400,7 +406,25 @@ public class QuotationService {
             Integer carryDiscount, Integer taxRate, Integer taxDiscount) {
     }
 
+    /**
+     * 挂/换定材包(B 类#7 领料定材校验的定额来源):仅编辑中报价可挂(requireEditable);
+     * 传 null = 解绑(领料闸随之不生效)。包必须存在且启用(经 MaterialQuotaApi 契约,禁直查他域表)。
+     */
     @Transactional
+    public void setMaterialPackage(long orgId, long quotationId, Long packageId, long operatorId) {
+        QuotationRow q = load(orgId, quotationId);
+        requireEditable(q);
+        if (packageId != null) {
+            MaterialQuotaApi.PackageRef ref = materialQuota.queryPackage(orgId, packageId)
+                    .orElseThrow(() -> new BizException(CODE_PACKAGE_INVALID, msg("quotation.package.notFound")));
+            require(ref.status() == 0, CODE_PACKAGE_INVALID, "quotation.package.disabled");
+        }
+        jdbc.update("update quotation_quotation set material_package_id = ? where id = ? and org_id = ?",
+                packageId, quotationId, orgId);
+        track(orgId, quotationId, "materialPackage", null, null, null, null, operatorId,
+                packageId == null ? "解绑定材包" : "挂定材包 " + packageId);
+    }
+
     public void updatePricing(long orgId, long quotationId, PricingCmd cmd, long operatorId) {
         require(cmd != null, CODE_INVALID_PARAM, "quotation.param.invalid");
         QuotationRow q = load(orgId, quotationId);
@@ -731,13 +755,16 @@ public class QuotationService {
         require(quotationId > 0, CODE_INVALID_PARAM, "quotation.param.invalid");
         List<QuotationRow> rows = jdbc.query("""
                 select id, org_id, order_id, order_no, name, status, attstatus, is_default, discount,
-                       manage_rate, manage_discount, carry_rate, carry_discount, tax_rate, tax_discount
+                       manage_rate, manage_discount, carry_rate, carry_discount, tax_rate, tax_discount,
+                       material_package_id
                 from quotation_quotation where id = ? and org_id = ?
                 """, (rs, rowNum) -> new QuotationRow(rs.getLong("id"), rs.getLong("org_id"),
                 rs.getLong("order_id"), rs.getString("order_no"), rs.getString("name"), rs.getInt("status"),
                 rs.getInt("attstatus"), rs.getInt("is_default"), rs.getInt("discount"), rs.getInt("manage_rate"),
                 rs.getInt("manage_discount"), rs.getInt("carry_rate"), rs.getInt("carry_discount"),
-                rs.getInt("tax_rate"), rs.getInt("tax_discount")), quotationId, orgId);
+                rs.getInt("tax_rate"), rs.getInt("tax_discount"),
+                rs.getObject("material_package_id") == null ? null : rs.getLong("material_package_id")),
+                quotationId, orgId);
         if (rows.isEmpty()) {
             throw new BizException(CODE_NOT_FOUND, msg("quotation.quotation.notfound"));
         }
