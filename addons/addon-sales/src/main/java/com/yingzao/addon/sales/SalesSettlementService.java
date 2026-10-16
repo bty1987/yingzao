@@ -25,6 +25,10 @@ import com.yingzao.core.web.BizException;
 @Service
 public class SalesSettlementService {
 
+    /** 结算桶级分级维度(销售线恒 A;枚举位预留,material 单等级 grade 不迁——B 类#4 收口,
+     *  协议登记见 docs/rules/balance.md §grade)。 */
+    public static final String GRADE_DEFAULT = "A";
+
     public static final int CODE_NOT_FOUND = 300013;
     public static final int CODE_VBALANCE = 300014;
     public static final int CODE_BAD_STATE = 300015;
@@ -149,7 +153,7 @@ public class SalesSettlementService {
         eventBus.publish(new SettlementItemReadyEvent(orgId, SalesOrderService.BIZ_ADDON,
                 SOURCE_TYPE_SETTLEMENT, String.valueOf(rowId),
                 ((Number) row.get("brand_id")).longValue(),
-                String.valueOf(row.get("brand_name")), "", "", "A",
+                String.valueOf(row.get("brand_name")), "", "", GRADE_DEFAULT,
                 0L, 0L, total, 0L, pbalance,
                 "销售结算行 " + rowId + " 结算"), "settle-item:sales:settlement:" + rowId + ":ready");
     }

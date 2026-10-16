@@ -126,6 +126,8 @@ isAffirm 客户确认轴(0→1;affirmSales :740,验证码+手机号三重校验,
 | balance | 对账打包回写 checker/checkStatus/coupon/venderTime/postTime+读 oales 置 accountStatus | BalanceSalesBalance/BalanceOalesServiceImpl |
 | decoration | 装修单账户状态(未完结单数驱动)+销售比例回写(postSalesBalance→updateDecorationForSaleScale) | SalesBalanceServiceImpl.java:696 等 |
 | kingdee/salary | 只读(金蝶凭证取 grade/pompany;薪酬挂 SalesPO) | SalesKingdeeServiceImpl/MaterialSalaryServiceImpl |
+
+> **grade 口径注记(B 类#4,2026-10-15)**:老金蝶取的 sales 单等级 grade 与 balance 桶级 grade 是两语义;营造中 sales 域不持等级 grade,结算 post 发 `SettlementItemReadyEvent` 时 grade 恒 `GRADE_DEFAULT="A"`(桶级维度枚举位预留),见 balance.md §15。
 | information | 活动主档+awardstock 扣减+awardrecord 流水 | SalesActivityItemServiceImpl |
 
 【营造映射】以上全部改领域事件:PaymentCollected(带款型)→sales 侧自生成结算行;RefundApproved→退货单+结算;OutboundShipped/Purchased→计数事件流水(替代直改五计数);DeliveryAdvanced→分成克隆(若保留该玩法)。

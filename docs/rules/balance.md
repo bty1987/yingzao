@@ -341,3 +341,17 @@ balanceaccount/balancedccount/balancedetail/apportdetail 仍 0 行、balancecutp
 8. **完结规则**:balance 头两写点冲突(余量清零条件完结 vs 付款无条件完结)+生产零执行——V1 完结唯一定义(建议=余量清零 AND 已付款,单向无逆向)?
 9. **2023 年 3 万行突增**:balance 主表 2023 批量数据是启用还是补录迁移?影响存量数据迁移口径。
 10. **死件四件定案**:comcost/apport/balancedetail/balancepicture + balanceoales 字典 3/4 死键——确认不迁。
+
+## 15. grade 语义收口(B 类#4 定案,2026-10-15)
+
+老系统「grade 同名异义」两处:**balance 桶级 grade**(balancesales 按 brand+supplier+grade 聚桶,
+销售桶恒 "A"/选材桶恒 "C" 硬编码)与 **material 单等级 grade**(company==1 硬编码等级升降,
+"C"→"B" 魔法串)。营造收口:
+
+- **唯一存续 = balance 桶级 grade,已 V2 终态落地**(V1301 `balance_settlement.grade`):
+  上游事件携带、本域不解释、缺省 "A"、参与聚桶键(uk 维度)——老硬编码嫌疑的配置化改造兑现;
+- **material 单等级 grade 不迁**:material 主链不迁(以 addon-sales 为唯一口径,material.md §13),
+  company 硬编码等级升降随之消亡,同名异义在营造不存在;
+- **当前实况**:上游(addon-sales 结算 post)恒发 "A"(`GRADE_DEFAULT` 常量),枚举位预留——
+  多级分桶(如按客户等级 A/B/C 分结算桶)待真实业务出现再启用,不预设枚举字典;
+- 消费方注意:grade 是字符串维度非布尔,聚桶键含 grade 意味着不同 grade 永不共桶。

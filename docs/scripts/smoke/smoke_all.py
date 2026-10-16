@@ -661,8 +661,9 @@ def main():
     step("校验失败零入库", cnt_bad == 0, cnt_bad)
 
     # 成功场景:三行全过(含条码),库直查断言 + 重复导入按行报 dupName
+    _imp_barcode = "6901" + time.strftime("%d%H%M%S")
     wb_rows2 = [
-        ["导入商品甲" + stamp3, "drspj", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", "6901" + time.strftime("%d%H%M%S"), "128.50", "80.00", ""],
+        ["导入商品甲" + stamp3, "drspj", ("导入品类" + stamp3), ("导入品牌" + stamp3), "片", _imp_barcode, "128.50", "80.00", ""],
         ["导入商品乙" + stamp3, "drspe", ("导入品类" + stamp3), ("导入品牌" + stamp3), "桶", "", "45.00", "", "60.00"],
         ["导入商品丙" + stamp3, "drspf", ("导入品类" + stamp3), ("导入品牌" + stamp3), "块", "", "666.666", "", ""],
     ]
@@ -684,7 +685,7 @@ def main():
     finally:
         conn.close()
     step("导入数值元转厘(128.50 元→128500 厘)+条码落库",
-         prow and prow[0] == 128500 and prow[1] == "6901" + time.strftime("%d%H%M%S"), prow)
+         prow and prow[0] == 128500 and prow[1] == _imp_barcode, prow)
     st, res = upload_xlsx(_buf2.getvalue(), tok_admin)
     errs2 = (res.get("data") or {}).get("errors") or []
     step("重复导入逐行报 dupName 260023", res.get("code") == 260023

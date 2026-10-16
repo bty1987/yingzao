@@ -117,7 +117,7 @@
 
 ## 12. 方林嫌疑机制级汇总
 
-1. `company==1` 硬编码等级升降(`MaterialServiceImpl.java:248-252`);grade "C"→"B" 魔法串。
+1. `company==1` 硬编码等级升降(`MaterialServiceImpl.java:248-252`);grade "C"→"B" 魔法串。**【不迁定案 B 类#4,2026-10-15】单等级 grade 随主链不迁消亡**(主链以 addon-sales 为唯一口径);balance 桶级 grade 为另一语义(聚桶维度),已 V1301 上游携带化,见 balance.md §15;
 2. company int 冗余到每笔收款且由前端覆盖(§5)。
 3. 中文支付方式常量(`MaterialPaymentPO.java:59-71`);"正林"第二品牌账户 zhenglinBalance 硬编码(`:81`)。
 4. ds/material.json **同文件两套 status 口径互相矛盾**(数组 2=删除 vs map 2=退货);type 枚举黑话"员工自购/老总关系/场内销售场外"。
