@@ -8,6 +8,12 @@ addon:
       title: 报价管理
       icon: edit
   dicts:
+    arStatus:
+      - { key: '0', label: 草稿 }
+      - { key: '1', label: 已提交 }
+      - { key: '2', label: 已付款 }
+      - { key: '3', label: 已确认 }
+
     quotationStatus:
       - { key: '0', label: 编辑中 }
       - { key: '1', label: 已锁定 }

@@ -66,6 +66,8 @@ public class DecorationService {
     public static final int CODE_BELONG_BAD_STATE = 250020;
     public static final int CODE_NO_CONFLICT = 250021;
     public static final int CODE_PRESIGN_NO_QUOTATION = 250022;
+    /** 重签前置:存在未确认增减差量单(B 类联动回补,经 QuotationApi 契约)。 */
+    public static final int CODE_AR_PENDING = 250024;
 
     // ---- 合同线状态(老 DecorationPO:51-113;跳号过渡态不迁,审批用内核显式审批单) ----
     public static final int STATUS_INIT = 0;
@@ -313,6 +315,11 @@ public class DecorationService {
         OrderRow order = load(orgId, orderId);
         requireTransition(order.status(), STATUS_RESIGNED);
         requireNoRunningApproval(orderId);
+        // 重签前置「无增减项」(老 ContractServiceImpl:689-740;B 类联动回补):
+        // 存在未确认增减差量单(草稿/已提交/已付款)不可重签——差量款未落定前价格不得重置
+        if (quotations.hasUnconfirmedAddReduce(orgId, orderId)) {
+            throw new BizException(CODE_AR_PENDING, msg("decoration.order.arPending"));
+        }
         int updated = jdbc.update(
                 "update decoration_order set status = ?, recontract_time = now() where id = ? and status = ?",
                 STATUS_RESIGNED, orderId, STATUS_SIGNED);

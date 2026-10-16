@@ -24,4 +24,10 @@ public interface QuotationApi {
      * ——调用方语义=不拦(老:报价无定额单即返回 0 放行)。
      */
     java.util.Optional<Long> designatedMaterialPackageId(long orgId, long orderId);
+
+    /**
+     * 该装修单是否存在未确认增减差量单(B 类联动/decoration 重签前置「无增减项」;
+     * 草稿/已提交/已付款均算未确认,已确认终态不算)。无差量单返回 false。
+     */
+    boolean hasUnconfirmedAddReduce(long orgId, long orderId);
 }

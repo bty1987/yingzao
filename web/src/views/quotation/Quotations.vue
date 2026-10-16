@@ -274,6 +274,33 @@
           <el-button v-if="detail.status === 0 && detail.attstatus < 2" size="small" @click="openAreaForm">加功能区</el-button>
         </div>
 
+        <div class="section">
+          <div class="section-title">增减差量(合同后变更)</div>
+          <el-button size="small" type="primary" @click="openAr">开差量单</el-button>
+          <el-table :data="arRows" border size="small" style="margin-top: 10px">
+            <el-table-column prop="ar_no" label="单号" width="150" />
+            <el-table-column label="状态" width="90">
+              <template #default="{ row }">
+                {{ ({ 0: '草稿', 1: '已提交', 2: '已付款', 3: '已确认' })[row.status] || row.status }}
+              </template>
+            </el-table-column>
+            <el-table-column label="增补(元)" width="100" align="right">
+              <template #default="{ row }">{{ (row.total_add / 1000).toLocaleString() }}</template>
+            </el-table-column>
+            <el-table-column label="退减(元)" width="100" align="right">
+              <template #default="{ row }">{{ (row.total_sub / 1000).toLocaleString() }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="180">
+              <template #default="{ row }">
+                <el-button v-if="row.status === 0" link size="small" type="danger" @click="onDeleteAr(row)">删除</el-button>
+                <el-button v-if="row.status === 0" link size="small" type="primary" @click="onSubmitAr(row)">提交</el-button>
+                <el-button v-if="row.status === 1" link size="small" @click="onCancelAr(row)">撤回</el-button>
+                <el-button v-if="row.status === 2" link size="small" type="success" @click="onConfirmAr(row)">确认</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
         <div class="section" v-for="area in detail.areas" :key="area.id">
           <div class="section-title">
             {{ area.name }}
@@ -344,7 +371,8 @@ import {
   addQuotationArea, updateQuotationArea, deleteQuotationArea,
   addQuotationItem, updateQuotationItem, deleteQuotationItem,
   listQuotationVersions, createQuotationVersion, updateQuotationVersion, updateQuotationVersionStatus,
-  pageDecorations
+  pageDecorations, pageAddReduce, openAddReduce, deleteAddReduce, submitAddReduce,
+  cancelSubmitAddReduce, confirmAddReduce
 } from '../../api'
 import { addons } from '../../store/addons'
 
@@ -366,6 +394,7 @@ const areaDialog = ref(false)
 const itemDialog = ref(false)
 const detailDrawer = ref(false)
 const detail = ref(null)
+const arRows = ref([])
 const orderOptions = ref([])
 const orderLoading = ref(false)
 const versionRows = ref([])
@@ -512,6 +541,7 @@ async function refreshDetail() {
   if (detail.value) {
     const res = await fetchQuotation(detail.value.id)
     detail.value = res.data
+    await loadAr()
   }
   load()
 }
@@ -523,6 +553,70 @@ async function onAct(promise, done) {
     await refreshDetail()
   } catch (e) {
     ElMessage.error(e.message || '操作失败')
+  }
+}
+
+// ---- 增减差量 ----
+async function loadAr() {
+  if (!detail.value) return
+  try {
+    const res = await pageAddReduce({ orderId: detail.value.order_id, size: 50 })
+    arRows.value = (res.data && res.data.rows) || []
+  } catch (e) {
+    arRows.value = []
+  }
+}
+
+async function openAr() {
+  try {
+    await openAddReduce({
+      orderId: detail.value.order_id,
+      items: [{ itemType: 0, goodsName: '增项(请在提交前修改名称与金额)', unitPrice: 1000, num: 1000 }]
+    })
+    ElMessage.success('差量草稿已创建,请编辑后提交')
+    await refreshDetail()
+    await loadAr()
+  } catch (e) {
+    ElMessage.error(e.message || '开单失败')
+  }
+}
+
+async function onDeleteAr(row) {
+  try {
+    await deleteAddReduce(row.id)
+    await loadAr()
+  } catch (e) {
+    ElMessage.error(e.message || '删除失败')
+  }
+}
+
+async function onSubmitAr(row) {
+  try {
+    await submitAddReduce(row.id)
+    ElMessage.success('差量单已提交,差量款项单已生成')
+    await loadAr()
+  } catch (e) {
+    ElMessage.error(e.message || '提交失败')
+  }
+}
+
+async function onCancelAr(row) {
+  try {
+    await cancelSubmitAddReduce(row.id)
+    ElMessage.success('已撤回草稿')
+    await loadAr()
+  } catch (e) {
+    ElMessage.error(e.message || '撤回失败')
+  }
+}
+
+async function onConfirmAr(row) {
+  try {
+    await confirmAddReduce(row.id)
+    ElMessage.success('差量单已确认(终态)')
+    await loadAr()
+  } catch (e) {
+    ElMessage.error(e.message || '确认失败')
   }
 }
 

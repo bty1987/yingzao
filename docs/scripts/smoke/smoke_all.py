@@ -2053,6 +2053,78 @@ def main():
     api_ok("B7清理:撤销关闸后领料", "POST", "/api/inventory/requisitions/%s/cancel" % _rq_off,
            tok_admin)
 
+    # ---- 增减差量线 V2(B 类联动/用户关注;靶单 order_h:签约 3 + quota_h 锁定)----
+    # 前置:默认报价锁定+审核完成(attstatus 0→1→2→3)+设默认
+    api_ok("AR前置:quota_h 提交审核", "POST", "/api/quotation/quotations/%s/submit" % quota_h, tok_admin)
+    api_ok("AR前置:quota_h 审核", "POST", "/api/quotation/quotations/%s/audit" % quota_h, tok_admin)
+    api_ok("AR前置:quota_h 审核完成", "POST", "/api/quotation/quotations/%s/finish" % quota_h, tok_admin)
+    api_ok("AR前置:quota_h 设默认", "POST", "/api/quotation/quotations/%s/default" % quota_h, tok_admin)
+    # 非签约单拒(order_g 合同线 0):开单即拒
+    api_err("非签约单开差量拒 230102", "POST", "/api/quotation/ar", tok_admin,
+            {"orderId": order_g, "items": [{"itemType": 0, "goodsName": "增项X", "unitPrice": 1000, "num": 1000}]},
+            230102)
+    # 成功链:草稿(增 3000 + 减 -1000,净 2000)→ 提交生成差量款项
+    _ar = api_ok("开增减差量单(草稿)", "POST", "/api/quotation/ar", tok_admin,
+                 {"orderId": order_h, "remark": "增减冒烟",
+                  "items": [
+                      {"itemType": 0, "goodsName": "增项-背景墙", "unitPrice": 45000, "num": 2000},
+                      {"itemType": 1, "refQiid": None, "goodsName": "减项-吊顶", "unitPrice": 30000, "num": -1000}]})
+    if _ar is None:
+        return finish()
+    api_ok("改草稿(重算)", "PUT", "/api/quotation/ar/%s" % _ar, tok_admin,
+           {"items": [
+               {"itemType": 0, "goodsName": "增项-背景墙", "unitPrice": 45000, "num": 3000},
+               {"itemType": 1, "goodsName": "减项-吊顶", "unitPrice": 30000, "num": -1000}],
+            "remark": "增减冒烟v2"})
+    _zero = api_ok("开零差量草稿(+1000/-1000)", "POST", "/api/quotation/ar", tok_admin,
+                   {"orderId": order_h,
+                    "items": [{"itemType": 0, "goodsName": "A", "unitPrice": 1000, "num": 1000},
+                              {"itemType": 1, "goodsName": "B", "unitPrice": 1000, "num": -1000}]})
+    api_err("零差量提交拒绝 230105", "POST", "/api/quotation/ar/%s/submit" % _zero,
+            tok_admin, None, 230105)
+    api_ok("零差量草稿删除", "DELETE", "/api/quotation/ar/%s" % _zero, tok_admin)
+    _dp = api_ok("差量单提交(生成差量款项)", "POST", "/api/quotation/ar/%s/submit" % _ar, tok_admin)
+    if _dp is None:
+        return finish()
+    _ar_det = api_ok("提交后回读", "GET", "/api/quotation/ar/%s" % _ar, tok_admin)
+    step("差量单已提交+dp_id 回写+聚合正确",
+         _ar_det and _ar_det.get("status") == 1 and _ar_det.get("dp_id") == _dp
+         and _ar_det.get("total_add") == 135000 and _ar_det.get("total_sub") == 30000, _ar_det)
+    # 差量款项单在 payment 域可查(bizAddon=quotation/type=ar_diff)
+    _bill = api_ok("差量款项单反查", "GET",
+                   "/api/payment/bills?bizAddon=quotation&bizType=ar_diff&bizId=%s" % _ar, tok_admin)
+    step("差量款项单在册(status=0 已录)", bool(_bill) and _bill.get("total", 0) >= 1, _bill)
+    # 收款→确认 → PaymentConfirmedEvent 回程 → 差量单 1→2
+    api_ok("差量款项收款", "POST", "/api/payment/bills/%s/collect" % _dp, tok_admin,
+           {"channels": [{"channelCode": "bank", "amount": 105000}]})
+    api_ok("差量款项财务确认", "POST", "/api/payment/bills/%s/confirm" % _dp, tok_admin)
+    for _ in range(10):
+        time.sleep(2)
+        _paid = api_ok("回程后差量单回读", "GET", "/api/quotation/ar/%s" % _ar, tok_admin)
+        if (_paid or {}).get("status") == 2:
+            break
+    step("付款回程置已付款(1→2)", (_paid or {}).get("status") == 2, _paid)
+    # 财务确认 2→3 终态
+    api_ok("差量单财务确认", "POST", "/api/quotation/ar/%s/confirm" % _ar, tok_admin)
+    _conf = api_ok("确认后回读", "GET", "/api/quotation/ar/%s" % _ar, tok_admin)
+    step("差量单已确认(终态)", (_conf or {}).get("status") == 3, _conf)
+    # 已付款撤回拒:再开一张提交+收款 → cancel-submit 拒 230108
+    _ar2 = api_ok("开第二张差量单", "POST", "/api/quotation/ar", tok_admin,
+                  {"orderId": order_h,
+                   "items": [{"itemType": 0, "goodsName": "增项2", "unitPrice": 20000, "num": 1000}]})
+    _dp2 = api_ok("第二张提交", "POST", "/api/quotation/ar/%s/submit" % _ar2, tok_admin)
+    api_ok("第二张收款", "POST", "/api/payment/bills/%s/collect" % _dp2, tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 20000}]})
+    api_err("已收款撤回拒绝 230108", "POST", "/api/quotation/ar/%s/cancel-submit" % _ar2,
+            tok_admin, None, 230108)
+    # 重签守卫:order_h 存在未确认差量单(_ar2 已付款未确认)→ resign 拒 250024
+    api_err("存在未确认差量单重签拒 250024", "POST", "/api/decoration/orders/%s/resign" % order_h,
+            tok_admin, None, 250024)
+    # 分页
+    _pg = api_ok("差量单分页(order_h)", "GET",
+                 "/api/quotation/ar?orderId=%s&page=1&size=10" % order_h, tok_admin)
+    step("差量单分页命中", (_pg or {}).get("total", 0) >= 2, _pg)
+
     # 外辅(向厂商定材辅料;order_d 已竣工=锁定反例,order_g 施工中可登记)
     # V1202 厂商引用化:assign 必传 supplierId 经 SupplierApi 校验,外辅段自建厂商+停用厂商各一
     sup_os1 = api_ok("外辅建引用厂商", "POST", "/api/supplier/suppliers", tok_admin,
