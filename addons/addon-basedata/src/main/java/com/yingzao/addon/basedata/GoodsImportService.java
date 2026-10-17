@@ -101,60 +101,7 @@ public class GoodsImportService {
         Set<String> barcodeSeen = new HashSet<>();
         Map<Integer, Long> categoryIds = new LinkedHashMap<>();
         Map<Integer, Long> brandIds = new LinkedHashMap<>();
-
-        for (int i = 0; i < rows.size(); i++) {
-            int rowNo = i + 2; // Excel 行号(1 表头)
-            RowData r = rows.get(i);
-            check(errors, rowNo, "商品名称", notBlank(r.name), "goods.import.required");
-            check(errors, rowNo, "拼音", r.pinyin != null && r.pinyin.matches("[a-z][a-z0-9]*"),
-                    "goods.import.pinyin");
-            check(errors, rowNo, "单位", notBlank(r.unit), "goods.import.required");
-            check(errors, rowNo, "售价(元)", r.selling != null, "goods.import.number");
-
-            if (notBlank(r.category)) {
-                Long cid = categoryIdByName(orgId, r.category);
-                if (cid == null) {
-                    check(errors, rowNo, "品类", false, "goods.import.category");
-                } else {
-                    categoryIds.put(i, cid);
-                }
-            } else {
-                check(errors, rowNo, "品类", false, "goods.import.required");
-            }
-            if (notBlank(r.brand)) {
-                Long bid = brandIdByName(orgId, r.brand);
-                if (bid == null) {
-                    check(errors, rowNo, "品牌", false, "goods.import.brand");
-                } else {
-                    brandIds.put(i, bid);
-                }
-            } else {
-                check(errors, rowNo, "品牌", false, "goods.import.required");
-            }
-
-            String nameKey = r.name == null ? "" : r.name.trim();
-            if (!nameKey.isEmpty()) {
-                if (!nameSeen.add(nameKey)) {
-                    check(errors, rowNo, "商品名称", false, "goods.import.dupRow");
-                } else if (nameExists(orgId, nameKey)) {
-                    check(errors, rowNo, "商品名称", false, "goods.import.dupName");
-                }
-            }
-            if (notBlank(r.barcode)) {
-                if (!barcodeSeen.add(r.barcode.trim())) {
-                    check(errors, rowNo, "条码", false, "goods.import.dupRow");
-                } else if (barcodeExists(orgId, r.barcode.trim())) {
-                    check(errors, rowNo, "条码", false, "goods.import.dupBarcode");
-                }
-            }
-        }
-
-        if (!errors.isEmpty()) {
-            throw new ImportInvalidException(new ImportReport(rows.size(), 0, errors));
-        }
-
-        // 套餐行分组:packageName 非空 = 套餐成员行(挂在套餐商品下);同一套餐名可多成员行
-        // 套餐商品本体也由本文件创建(首行成员行携带套餐商品定义,type=1 由 goods.create 落)
+        // 套餐行先分组(packageName 非空=成员行,引用既有商品——不参与新建商品的查重与必填校验)
         java.util.LinkedHashMap<String, java.util.List<Integer>> byPackage = new java.util.LinkedHashMap<>();
         java.util.HashSet<Integer> packageRows = new java.util.HashSet<>();
         for (int i = 0; i < rows.size(); i++) {
@@ -164,7 +111,79 @@ public class GoodsImportService {
                 packageRows.add(i);
             }
         }
-        // 非套餐行:常规商品导入
+
+        for (int i = 0; i < rows.size(); i++) {
+            int rowNo = i + 2; // Excel 行号(1 表头)
+            boolean isPackageRow = packageRows.contains(i);
+            RowData r = rows.get(i);
+            check(errors, rowNo, "商品名称", notBlank(r.name), "goods.import.required");
+            if (!isPackageRow) {
+                check(errors, rowNo, "拼音", r.pinyin != null && r.pinyin.matches("[a-z][a-z0-9]*"),
+                        "goods.import.pinyin");
+                check(errors, rowNo, "售价(元)", r.selling != null, "goods.import.number");
+            }
+            check(errors, rowNo, "单位", notBlank(r.unit), "goods.import.required");
+
+            if (isPackageRow) {
+                // 成员行:品类/品牌可空(引用既有商品,不新建)
+                if (notBlank(r.category)) {
+                    Long cid = categoryIdByName(orgId, r.category);
+                    if (cid != null) {
+                        categoryIds.put(i, cid);
+                    }
+                }
+                if (notBlank(r.brand)) {
+                    Long bid = brandIdByName(orgId, r.brand);
+                    if (bid != null) {
+                        brandIds.put(i, bid);
+                    }
+                }
+            } else {
+                if (notBlank(r.category)) {
+                    Long cid = categoryIdByName(orgId, r.category);
+                    if (cid == null) {
+                        check(errors, rowNo, "品类", false, "goods.import.category");
+                    } else {
+                        categoryIds.put(i, cid);
+                    }
+                } else {
+                    check(errors, rowNo, "品类", false, "goods.import.required");
+                }
+                if (notBlank(r.brand)) {
+                    Long bid = brandIdByName(orgId, r.brand);
+                    if (bid == null) {
+                        check(errors, rowNo, "品牌", false, "goods.import.brand");
+                    } else {
+                        brandIds.put(i, bid);
+                    }
+                } else {
+                    check(errors, rowNo, "品牌", false, "goods.import.required");
+                }
+            }
+
+            if (!isPackageRow) {
+                String nameKey = r.name == null ? "" : r.name.trim();
+                if (!nameKey.isEmpty()) {
+                    if (!nameSeen.add(nameKey)) {
+                        check(errors, rowNo, "商品名称", false, "goods.import.dupRow");
+                    } else if (nameExists(orgId, nameKey)) {
+                        check(errors, rowNo, "商品名称", false, "goods.import.dupName");
+                    }
+                }
+                if (notBlank(r.barcode)) {
+                    if (!barcodeSeen.add(r.barcode.trim())) {
+                        check(errors, rowNo, "条码", false, "goods.import.dupRow");
+                    } else if (barcodeExists(orgId, r.barcode.trim())) {
+                        check(errors, rowNo, "条码", false, "goods.import.dupBarcode");
+                    }
+                }
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new ImportInvalidException(new ImportReport(rows.size(), 0, errors));
+        }
+
         for (int i = 0; i < rows.size(); i++) {
             if (packageRows.contains(i)) {
                 continue;
@@ -196,6 +215,15 @@ public class GoodsImportService {
                 } else {
                     throw ex;
                 }
+            }
+            if (categoryIds.get(headIdx) == null) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("row", headIdx + 2);
+                err.put("field", "品类");
+                err.put("message", messages.getMessage("goods.import.category",
+                        null, LocaleContextHolder.getLocale()));
+                errors.add(err);
+                continue;
             }
             long memberTotal = 0;
             for (int idx : e.getValue()) {
