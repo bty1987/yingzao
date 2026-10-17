@@ -691,6 +691,41 @@ def main():
     step("重复导入逐行报 dupName 260023", res.get("code") == 260023
          and len([e for e in errs2 if e.get("message") and "已存在" in str(e.get("message"))]) >= 3, res)
 
+    # ---- V1.2 套餐导入(套餐行:packageName 非空 = 套餐成员行)+ 历史台账 ----
+    wb_rows3 = [
+        ["套餐成员砖" + stamp3, "tczz", ("烟测品类" + stamp3), ("烟测品牌" + stamp3), "片", "", "88.00", "", "", "", ""],
+        ["套餐成员凳" + stamp3, "tcd", ("烟测品类" + stamp3), ("烟测品牌" + stamp3), "张", "", "66.00", "", "", "", ""],
+        ["套餐成员灯" + stamp3, "tcd2", ("烟测品类" + stamp3), ("烟测品牌" + stamp3), "盏", "", "33.00", "", "",
+         "导入套餐" + stamp3, 1000],
+        ["套餐成员毯" + stamp3, "tct", ("烟测品类" + stamp3), ("烟测品牌" + stamp3), "块", "", "22.00", "", "",
+         "导入套餐" + stamp3, 2000],
+    ]
+    _wb3 = _opx.Workbook(); _ws3 = _wb3.active
+    _ws3.append(["商品名称", "拼音", "品类", "品牌", "单位", "条码", "售价(元)", "进价(元)", "限价(元)",
+                 "套餐名", "成员量"])
+    for r in wb_rows3:
+        _ws3.append(r)
+    _buf3 = io.BytesIO(); _wb3.save(_buf3)
+    st, res = upload_xlsx(_buf3.getvalue(), tok_admin)
+    _d3 = (res.get("data") or {})
+    step("V1.2套餐导入成功(4行)", st == 200 and res.get("code") == 0
+         and _d3.get("imported") == 4, res)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select count(*) from basedata_goods_package gp
+                join basedata_goods p on p.id = gp.package_goods_id
+                where gp.org_id = 1 and p.name = %s
+            """, ("导入套餐" + stamp3,))
+            pkg_cnt = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("套餐成员关系 2 条落库", pkg_cnt == 2, pkg_cnt)
+    _his = api_ok("导入历史台账查询", "GET",
+                  "/api/basedata/goods/import-history?page=1&size=5", tok_admin)
+    step("导入台账含本轮记录", bool(_his) and _his.get("total", 0) >= 1, _his)
+
 
     model_id = api_ok("建主材型号(点位计价)", "POST", "/api/basedata/models", tok_admin,
                       {"name": "烟测型号" + stamp3, "goodsId": goods_id, "brandId": brand_id,

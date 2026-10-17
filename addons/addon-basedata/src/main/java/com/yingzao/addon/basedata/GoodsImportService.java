@@ -38,6 +38,9 @@ public class GoodsImportService {
 
     /** 导入数据错误(260000 段;明细走返回体 errors,不塞消息)。 */
     public static final int CODE_IMPORT_INVALID = 260023;
+    /** 套餐导入(B 类联动 V1.2):套餐商品不存在 260027 / 成员商品不存在 260028。 */
+    public static final int CODE_PACKAGE_GOODS_MISSING = 260027;
+    public static final int CODE_MEMBER_GOODS_MISSING = 260028;
 
     private static final String[] HEADERS = {
             "商品名称", "拼音", "品类", "品牌", "单位", "条码", "售价(元)", "进价(元)", "限价(元)"};
@@ -150,14 +153,84 @@ public class GoodsImportService {
             throw new ImportInvalidException(new ImportReport(rows.size(), 0, errors));
         }
 
+        // 套餐行分组:packageName 非空 = 套餐成员行(挂在套餐商品下);同一套餐名可多成员行
+        // 套餐商品本体也由本文件创建(首行成员行携带套餐商品定义,type=1 由 goods.create 落)
+        java.util.LinkedHashMap<String, java.util.List<Integer>> byPackage = new java.util.LinkedHashMap<>();
+        java.util.HashSet<Integer> packageRows = new java.util.HashSet<>();
         for (int i = 0; i < rows.size(); i++) {
+            String pkg = rows.get(i).packageName();
+            if (pkg != null && !pkg.isBlank()) {
+                byPackage.computeIfAbsent(pkg.trim(), k -> new ArrayList<>()).add(i);
+                packageRows.add(i);
+            }
+        }
+        // 非套餐行:常规商品导入
+        for (int i = 0; i < rows.size(); i++) {
+            if (packageRows.contains(i)) {
+                continue;
+            }
             RowData r = rows.get(i);
             goods.create(orgId, new GoodsService.CreateGoodsCmd(r.name.trim(), null, r.pinyin,
                     blankToNull(r.barcode), categoryIds.get(i), brandIds.get(i), r.unit.trim(),
                     GoodsService.TYPE_GOODS, toLi(r.purchase), toLi(r.selling), toLi(r.confine),
                     null), operatorId);
         }
-        return new ImportReport(rows.size(), rows.size(), errors);
+        // 套餐导入:套餐主商品(type=1,售價=Σ成员) + 成员关系
+        for (java.util.Map.Entry<String, java.util.List<Integer>> e : byPackage.entrySet()) {
+            String pkgName = e.getKey();
+            // 套餐主商品:取该组第一行定义(名称=套餐名,分类/品牌/单位沿用首行)
+            Integer headIdx = e.getValue().get(0);
+            RowData headRow = rows.get(headIdx);
+            long packageGoodsId;
+            try {
+                packageGoodsId = goods.create(orgId, new GoodsService.CreateGoodsCmd(
+                        pkgName, null, null, null, categoryIds.get(headIdx), brandIds.get(headIdx),
+                        headRow.unit == null ? "套" : headRow.unit.trim(),
+                        GoodsService.TYPE_PACKAGE, 0L, 0L, null, null), operatorId);
+            } catch (BizException ex) {
+                if (ex.getCode() == GoodsService.CODE_GOODS_NAME_EXISTS) {
+                    List<Map<String, Object>> exist = jdbc.queryForList(
+                            "select id from basedata_goods where org_id = ? and name = ?",
+                            orgId, pkgName);
+                    packageGoodsId = ((Number) exist.get(0).get("id")).longValue();
+                } else {
+                    throw ex;
+                }
+            }
+            long memberTotal = 0;
+            for (int idx : e.getValue()) {
+                RowData r = rows.get(idx);
+                Long memberGoodsId = goodsIdByName(orgId, r.name.trim());
+                if (memberGoodsId == null) {
+                    Map<String, Object> err = new LinkedHashMap<>();
+                    err.put("row", idx + 2);
+                    err.put("field", "套餐成员");
+                    err.put("message", messages.getMessage("goods.import.memberMissing",
+                            new Object[]{r.name.trim()}, LocaleContextHolder.getLocale()));
+                    errors.add(err);
+                    continue;
+                }
+                int memberNum = r.memberNum() == null || r.memberNum() <= 0
+                        ? 1 : r.memberNum().intValue();
+                try {
+                    goods.addPackageMember(orgId, packageGoodsId, memberGoodsId, memberNum);
+                } catch (BizException ex) {
+                    if (ex.getCode() == GoodsService.CODE_MEMBER_EXISTS) {
+                        continue; // 同文件同成员已加(组内去重)
+                    }
+                    throw ex;
+                }
+                memberTotal += memberNum;
+            }
+            // 套餐售价 = Σ(成员 selling × num)服务端聚合(与 createPackageMember 口径一致则维持 0,
+            // 这里按零落库与套餐商品语义一致:套餐售价业务侧维护)
+        }
+        if (!errors.isEmpty()) {
+            throw new ImportInvalidException(new ImportReport(rows.size(), 0, errors));
+        }
+        int importedGoods = rows.size();
+        recordImportHistory(orgId, "goods", importedGoods, 0, null, operatorId);
+        return new ImportReport(importedGoods, importedGoods, errors);
     }
 
     /** 携报告的业务异常(controller 捕获后把 errors 放返回体;消息统一 260023)。 */
@@ -168,6 +241,40 @@ public class GoodsImportService {
             super("import invalid");
             this.report = report;
         }
+    }
+
+    private Long goodsIdByName(long orgId, String name) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select id from basedata_goods where org_id = ? and name = ? limit 1",
+                orgId, name);
+        return rows.isEmpty() ? null : ((Number) rows.get(0).get("id")).longValue();
+    }
+
+    /** 导入历史台账(V1.2):goods/type 两类;org 级记录,失败导入由异常路径不落台账。 */
+    /** 导入历史台账落库(带操作人)。 */
+    private void recordImportHistory(long orgId, String type, int imported, int failed, String detail,
+            long operatorId) {
+        jdbc.update("""
+                insert into basedata_import_history(org_id, import_type, imported, failed, detail, created_by)
+                values (?,?,?,?,?,?)
+                """, orgId, type, imported, failed, detail, operatorId);
+    }
+
+    /** 导入历史查询(V1.2 台账)。 */
+    public Map<String, Object> history(long orgId, int pageNo, int size) {
+        int safePage = Math.max(pageNo, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        Long total = jdbc.queryForObject(
+                "select count(*) from basedata_import_history where org_id = ?", Long.class, orgId);
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select id, import_type, imported, failed, detail, created_at
+                from basedata_import_history where org_id = ?
+                order by id desc limit ? offset ?
+                """, orgId, safeSize, (safePage - 1) * safeSize);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", total == null ? 0 : total);
+        result.put("rows", rows);
+        return result;
     }
 
     private String msg(String key) {
@@ -181,7 +288,8 @@ public class GoodsImportService {
     // ---- 解析 ----
 
     private record RowData(String name, String pinyin, String category, String brand, String unit,
-            String barcode, Long selling, Long purchase, Long confine) {
+            String barcode, Long selling, Long purchase, Long confine,
+            String packageName, Long memberNum) {
     }
 
     private List<RowData> parse(byte[] xlsx) {
@@ -195,7 +303,8 @@ public class GoodsImportService {
                 }
                 out.add(new RowData(
                         str(row, 0), str(row, 1), str(row, 2), str(row, 3), str(row, 4),
-                        str(row, 5), num(row, 6), num(row, 7), num(row, 8)));
+                        str(row, 5), num(row, 6), num(row, 7), num(row, 8),
+                        str(row, 9), num(row, 10)));
             }
             return out;
         } catch (BizException e) {

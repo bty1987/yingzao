@@ -26,6 +26,7 @@
         <el-button type="primary" @click="openCreate">新建商品</el-button>
         <el-button @click="importVisible = true">Excel 导入</el-button>
         <el-button link type="primary" @click="onTemplate">下载导入模板</el-button>
+        <el-button link type="primary" @click="openHistory">导入历史</el-button>
       </div>
 
       <el-table :data="rows" border stripe>
@@ -87,6 +88,20 @@
       <template #footer>
         <el-button @click="importVisible = false">关闭</el-button>
         <el-button type="primary" :loading="importing" @click="onImport">开始导入</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 导入历史 -->
+    <el-dialog v-model="historyVisible" title="导入历史台账" width="560px">
+      <el-table :data="historyRows" border size="small">
+        <el-table-column prop="created_at" label="时间" width="170" />
+        <el-table-column prop="import_type" label="类型" width="90" />
+        <el-table-column prop="imported" label="成功行" width="80" align="right" />
+        <el-table-column prop="failed" label="失败行" width="80" align="right" />
+        <el-table-column prop="detail" label="摘要" />
+      </el-table>
+      <template #footer>
+        <el-button @click="historyVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -313,7 +328,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   pageGoods, fetchGoods, createGoods, updateGoods, updateGoodsStatus,
-  importGoods, downloadImportTemplate,
+  importGoods, downloadImportTemplate, importHistory,
   listCategories, createCategory, renameCategory, updateCategoryStatus,
   listBrands, createBrand, renameBrand, updateBrandStatus,
   listGoodsSkuAttrs, addGoodsSkuAttr, updateGoodsSkuAttrStatus,
@@ -432,6 +447,19 @@ function resetForm() {
   form.unitRate = 1000
 }
 
+// ---- Excel 导入 ----
+const historyVisible = ref(false)
+const historyRows = ref([])
+
+async function openHistory() {
+  try {
+    const res = await importHistory({ page: 1, size: 20 })
+    historyRows.value = (res.data && res.data.rows) || []
+    historyVisible.value = true
+  } catch (e) {
+    ElMessage.error(e.message || '历史加载失败')
+  }
+}
 // ---- Excel 导入 ----
 const importVisible = ref(false)
 const importing = ref(false)

@@ -34,6 +34,14 @@ public class GoodsImportController {
         this.messages = messages;
     }
 
+    /** 导入历史台账(V1.2;仅成功导入落账)。 */
+    @GetMapping("/import-history")
+    public ApiResponse<Map<String, Object>> history(@RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(imports.history(orgId, page, size));
+    }
+
     @GetMapping("/import-template")
     public void template(jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
         response.setContentType(
