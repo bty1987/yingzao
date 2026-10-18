@@ -3129,6 +3129,88 @@ def main():
     step("额度流水 append-only 在册(consume/refund 多轮)", ledger_rows >= 4, ledger_rows)
     step("单号计数器多前缀在册", counter_rows >= 4, counter_rows)
 
+    # ========= 销售定金款线 V2(第 65 次;deposit_amount 拆 sales_deposit+sales_full 双线)=========
+    # 老双轴正统形态回归:字典 sort 顺序门控(先定金后尾款)+事件 typeCode 分流双轴+定金确认即解锁结算
+    print("\n== 销售定金款线 V2(拆线/顺序门控/双轴分流/预结幂等) ==")
+    all_types_d = api_ok("类型字典全量(sales_deposit 前置)", "GET",
+                         "/api/payment/bill-types?includeDisabled=true", tok_admin)
+    if "sales_deposit" not in [t.get("code") for t in (all_types_d or [])]:
+        api_ok("协议键 sales_deposit 类型登记(sort=2 先于尾款)", "POST", "/api/payment/bill-types",
+               tok_admin, {"code": "sales_deposit", "name": "销售定金", "sort": 2})
+    else:
+        step("sales_deposit 类型已在册", True)
+
+    sale_dep = api_ok("开单(定金40/总额120)", "POST", "/api/sales/orders", tok_admin,
+                      {"orderId": order_s, "depositAmount": 40000,
+                       "items": [{"goodsId": goods_sale1, "num": 1000}]})
+    if sale_dep is None:
+        return finish()
+    dep_det = api_ok("开单复查(定金字段)", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
+    step("deposit_amount=40元+双轴未录", dep_det.get("deposit_amount") == 40000
+         and dep_det.get("deposit_status") == -1 and dep_det.get("fullpay_status") == -1, dep_det)
+    api_err("定金>=总额拒绝 300030", "PUT", "/api/sales/orders/%s/items" % sale_dep, tok_admin,
+            {"items": [{"goodsId": goods_sale1, "num": 1000}], "depositAmount": 120000}, 300030)
+    api_err("负定金拒绝 300030", "PUT", "/api/sales/orders/%s/items" % sale_dep, tok_admin,
+            {"items": [{"goodsId": goods_sale1, "num": 1000}], "depositAmount": -1}, 300030)
+    api_ok("改单改定金(60元)", "PUT", "/api/sales/orders/%s/items" % sale_dep, tok_admin,
+           {"items": [{"goodsId": goods_sale1, "num": 1000}], "depositAmount": 60000})
+    api_ok("生成款项单(拆线)", "POST", "/api/sales/orders/%s/bill" % sale_dep, tok_admin)
+    dep_det = api_ok("拆线复查", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
+    dep_bills = {b.get("typeCode"): b for b in (dep_det.get("bills") or [])
+                 if b.get("direction") == 0 and b.get("status") == 0}
+    dep_bill = (dep_bills.get("sales_deposit") or {}).get("billId")
+    full_bill = (dep_bills.get("sales_full") or {}).get("billId")
+    step("双线在册(定金60+尾款60)+双轴已录",
+         bool(dep_bill) and bool(full_bill)
+         and (dep_bills.get("sales_deposit") or {}).get("amount") == 60000
+         and (dep_bills.get("sales_full") or {}).get("amount") == 60000
+         and dep_det.get("deposit_status") == 0 and dep_det.get("fullpay_status") == 0,
+         dep_det.get("bills"))
+
+    # 顺序门控:同组 sort=2 定金未收,先收 sort=3 尾款拒 270010
+    api_err("跳过定金先收尾款拒绝 270010", "POST", "/api/payment/bills/%s/collect" % full_bill,
+            tok_admin, {"channels": [{"channelCode": "cash", "amount": 60000}]}, 270010)
+    api_ok("定金收款(cash 60元)", "POST", "/api/payment/bills/%s/collect" % dep_bill,
+           tok_admin, {"channels": [{"channelCode": "cash", "amount": 60000}]})
+    for _ in range(10):
+        time.sleep(1)
+        dep_det = api_ok("定金收款后复查", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
+        if (dep_det or {}).get("deposit_status") == 1:
+            break
+    step("定金轴1已付(事件按typeCode分流,尾款轴不受扰)", dep_det.get("deposit_status") == 1
+         and dep_det.get("fullpay_status") == 0, dep_det)
+    api_ok("财务确认定金", "POST", "/api/payment/bills/%s/confirm" % dep_bill, tok_admin)
+    for _ in range(10):
+        time.sleep(1)
+        dep_det = api_ok("定金确认后复查", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
+        if (dep_det or {}).get("deposit_status") == 2:
+            break
+    step("定金轴2已确认+结算轴1预结(定金确认即解锁结算)",
+         dep_det.get("deposit_status") == 2 and dep_det.get("balance_status") == 1
+         and len(dep_det.get("settlements") or []) == 1, dep_det)
+    api_err("尾款未确认完结拒绝 300002", "POST", "/api/sales/orders/%s/finish" % sale_dep,
+            tok_admin, None, 300002)
+    api_ok("尾款收款(cash 60元)", "POST", "/api/payment/bills/%s/collect" % full_bill,
+           tok_admin, {"channels": [{"channelCode": "cash", "amount": 60000}]})
+    for _ in range(10):
+        time.sleep(1)
+        dep_det = api_ok("尾款收款后复查", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
+        if (dep_det or {}).get("fullpay_status") == 1:
+            break
+    step("尾款轴1已付", dep_det.get("fullpay_status") == 1, dep_det)
+    api_ok("财务确认尾款", "POST", "/api/payment/bills/%s/confirm" % full_bill, tok_admin)
+    for _ in range(10):
+        time.sleep(1)
+        dep_det = api_ok("尾款确认后复查", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
+        if (dep_det or {}).get("fullpay_status") == 2:
+            break
+    step("尾款轴2已确认+预结行不重复(uk 幂等)",
+         dep_det.get("fullpay_status") == 2 and dep_det.get("balance_status") == 1
+         and len(dep_det.get("settlements") or []) == 1, dep_det)
+    api_ok("完结(双线全确认)", "POST", "/api/sales/orders/%s/finish" % sale_dep, tok_admin)
+    dep_det = api_ok("完结复查", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
+    step("销售单状态5完结", dep_det.get("status") == 5, dep_det)
+
     # ========= 营销获客(addon-market 第 27 次扩展)=========
     print("\n== 营销获客(addon-market:投放物+进线承接+归因漏斗+案例库) ==")
     stamp_mkt = time.strftime("%H%M%S") + "m"

@@ -75,6 +75,10 @@
       </div>
       <el-button link type="primary" @click="form.items.push({ goodsId: null, num: 1, discount: 100 })">+ 加一行</el-button>
       <el-form label-width="90px" style="margin-top: 12px">
+        <el-form-item label="定金(元)">
+          <el-input-number v-model="form.depositYuan" :min="0" :precision="2" :step="100" placeholder="0=不拆线(单全款)" />
+          <span class="tip">填写后录款时拆「销售定金+尾款」两线,先收定金后收尾款</span>
+        </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
       </el-form>
       <template #footer>
@@ -131,13 +135,18 @@
         <div class="axis-row">
           <el-tag :type="orderTag(detail.status)" effect="plain">{{ label('orderStatus', detail.status) }}</el-tag>
           <el-tag :type="balanceTag(detail.balance_status)" effect="plain">{{ label('balanceStatus', detail.balance_status) }}</el-tag>
+          <el-tag v-if="detail.deposit_amount > 0" :type="payTag(detail.deposit_status)" effect="plain">
+            定金{{ label('payStatus', detail.deposit_status) }}
+          </el-tag>
           <el-tag :type="payTag(detail.fullpay_status)" effect="plain">{{ label('payStatus', detail.fullpay_status) }}</el-tag>
           <el-tag :type="detail.customer_confirmed === 1 ? 'success' : 'info'" effect="plain">
             {{ detail.customer_confirmed === 1 ? '客户已确认' : '客户未确认' }}
           </el-tag>
         </div>
         <div class="kv"><span>装修单</span>{{ detail.order_no }} · {{ detail.customer_name }} · {{ detail.house_label }}</div>
-        <div class="kv"><span>总额</span>{{ yuan(detail.total) }} 元(服务端重算)</div>
+        <div class="kv"><span>总额</span>{{ yuan(detail.total) }} 元(服务端重算)<template
+          v-if="detail.deposit_amount > 0">;定金 {{ yuan(detail.deposit_amount) }} + 尾款
+          {{ yuan(detail.total - detail.deposit_amount) }}</template></div>
 
         <div class="section">明细</div>
         <el-table :data="detail.items" border size="small">
@@ -163,8 +172,12 @@
           </el-table-column>
         </el-table>
         <div style="margin-top: 8px; display: flex; gap: 8px">
-          <el-button size="small" :disabled="detail.fullpay_status > 0" @click="openEditItems">调整明细</el-button>
-          <el-button size="small" :disabled="detail.fullpay_status > 0" @click="onGenerateBill">生成全款款项单</el-button>
+          <el-button size="small"
+            :disabled="detail.fullpay_status > 0 || detail.deposit_status > 0"
+            @click="openEditItems">调整明细</el-button>
+          <el-button size="small"
+            :disabled="detail.fullpay_status > 0 || detail.deposit_status > 0"
+            @click="onGenerateBill">生成款项单</el-button>
           <el-button size="small" :disabled="detail.customer_confirmed === 1" type="primary" @click="confirmDialog = true">客户确认</el-button>
           <el-button size="small" :disabled="!(detail.fullpay_status >= 1 && [0, 5].includes(detail.status))" @click="openDelivery">生成配送</el-button>
           <el-button size="small" :disabled="![0, 5].includes(detail.status)" type="warning" @click="openRefund">发起退货</el-button>
@@ -271,6 +284,12 @@
         <el-input-number v-model="line.discount" :min="0.1" :max="100" :precision="1" :step="0.1" />
         <span class="tip">折扣(100=无折)</span>
       </div>
+      <el-form label-width="90px" style="margin-top: 12px">
+        <el-form-item label="定金(元)">
+          <el-input-number v-model="editDepositYuan" :min="0" :precision="2" :step="100" />
+          <span class="tip">0=不拆线;改定金将重生成款项单</span>
+        </el-form-item>
+      </el-form>
       <template #footer>
         <el-button @click="editDialog = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="onSaveItems">保存</el-button>
@@ -312,7 +331,7 @@ const saving = ref(false)
 const users = ref([])
 
 const createDialog = ref(false)
-const form = ref({ orderId: null, items: [{ goodsId: null, num: 1, discount: 100 }], remark: '' })
+const form = ref({ orderId: null, items: [{ goodsId: null, num: 1, discount: 100 }], remark: '', depositYuan: 0 })
 const orderOptions = ref([])
 const goodsOptions = ref([])
 const searching = ref(false)
@@ -327,6 +346,7 @@ const refundForm = ref({ type: 2, assigneeId: null, items: [{ saleItemId: null, 
 const refundableItems = ref([])
 const editDialog = ref(false)
 const editItems = ref([])
+const editDepositYuan = ref(0)
 const deliveryDialog = ref(false)
 const deliveryItems = ref([])
 
@@ -374,7 +394,7 @@ async function searchGoods(keyword) {
 }
 
 function openCreate() {
-  form.value = { orderId: null, items: [{ goodsId: null, num: 1, discount: 100 }], remark: '' }
+  form.value = { orderId: null, items: [{ goodsId: null, num: 1, discount: 100 }], remark: '', depositYuan: 0 }
   orderOptions.value = []
   goodsOptions.value = []
   createDialog.value = true
@@ -388,7 +408,8 @@ async function onCreate() {
   if (items.length === 0) return ElMessage.warning('请补全明细')
   saving.value = true
   try {
-    await createSalesOrder({ orderId: f.orderId, items, remark: f.remark || null })
+    await createSalesOrder({ orderId: f.orderId, items, remark: f.remark || null,
+      depositAmount: f.depositYuan ? Math.round(f.depositYuan * 1000) : 0 })
     ElMessage.success('已开单')
     createDialog.value = false
     load()
@@ -435,6 +456,7 @@ async function onConfirm() {
 function openEditItems() {
   editItems.value = (detail.value.items || []).filter((it) => it.package_id === 0)
     .map((it) => ({ goodsId: it.goods_id, goodsName: it.goods_name, num: it.num / 1000, discount: it.discount / 10 }))
+  editDepositYuan.value = (detail.value.deposit_amount || 0) / 1000
   editDialog.value = true
 }
 
@@ -442,7 +464,8 @@ async function onSaveItems() {
   saving.value = true
   try {
     const items = editItems.value.map((l) => ({ goodsId: l.goodsId, num: Math.round(l.num * 1000), discount: Math.round(l.discount * 10) }))
-    await updateSalesOrderItems(detail.value.id, { items })
+    await updateSalesOrderItems(detail.value.id, { items,
+      depositAmount: editDepositYuan.value ? Math.round(editDepositYuan.value * 1000) : 0 })
     ElMessage.success('明细已更新(服务端重算)')
     editDialog.value = false
     openDetail(detail.value)

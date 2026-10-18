@@ -41,17 +41,19 @@ public class SalesPaymentConsumer implements YzEventConsumer {
                 PaymentCollectedEvent p = event.payloadAs(PaymentCollectedEvent.class);
                 Long saleId = saleIdOf(p.bizAddon(), p.bizType(), p.bizId(), p.billId());
                 if (saleId != null) {
-                    orders.onPaymentCollected(p.orgId(), saleId);
-                    log.info("sales order {} fullpay collected by bill {}", saleId, p.billId());
+                    orders.onPaymentCollected(p.orgId(), saleId, p.typeCode());
+                    log.info("sales order {} line {} collected by bill {}", saleId, p.typeCode(),
+                            p.billId());
                 }
             }
             case "PaymentConfirmedEvent" -> {
                 PaymentConfirmedEvent p = event.payloadAs(PaymentConfirmedEvent.class);
                 Long saleId = saleIdOf(p.bizAddon(), p.bizType(), p.bizId(), p.billId());
                 if (saleId != null) {
-                    orders.onPaymentConfirmed(p.orgId(), saleId,
+                    orders.onPaymentConfirmed(p.orgId(), saleId, p.typeCode(),
                             p.confirmerId() == null ? 0 : p.confirmerId());
-                    log.info("sales order {} fullpay confirmed by bill {}", saleId, p.billId());
+                    log.info("sales order {} line {} confirmed by bill {}", saleId, p.typeCode(),
+                            p.billId());
                 }
             }
             case "PaymentRefundedEvent" -> {

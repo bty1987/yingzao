@@ -24,10 +24,11 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/sales")
 public class SalesController {
 
-    public record CreateRequest(Long orderId, List<SalesOrderService.ItemCmd> items, String remark) {
+    public record CreateRequest(Long orderId, List<SalesOrderService.ItemCmd> items, String remark,
+            Long depositAmount) {
     }
 
-    public record ItemsRequest(List<SalesOrderService.ItemCmd> items) {
+    public record ItemsRequest(List<SalesOrderService.ItemCmd> items, Long depositAmount) {
     }
 
     public record VerifyCodeRequest(String phone) {
@@ -65,7 +66,8 @@ public class SalesController {
         long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(orders.create(orgId, body == null || body.orderId() == null ? 0
                 : body.orderId(), body == null ? null : body.items(),
-                body == null ? null : body.remark(), userId));
+                body == null ? null : body.remark(),
+                body == null ? null : body.depositAmount(), userId));
     }
 
     @GetMapping("/orders")
@@ -93,7 +95,8 @@ public class SalesController {
             HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");
         long userId = (Long) request.getAttribute("yz.userId");
-        return ApiResponse.ok(orders.updateItems(orgId, id, body == null ? null : body.items(), userId));
+        return ApiResponse.ok(orders.updateItems(orgId, id, body == null ? null : body.items(),
+                body == null ? null : body.depositAmount(), userId));
     }
 
     @PostMapping("/orders/{id}/bill")

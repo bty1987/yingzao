@@ -187,7 +187,9 @@
 | 协议键 | 归属插件 | 语义 | 落点 |
 |---|---|---|---|
 | `deposit` | addon-decoration | 装修定金(首收升定金线) | DecorationService.TYPE_CODE_DEPOSIT |
-| `sales_full` | addon-sales | 主材销售全款线=**材料款唯一口径**(material.md §13-3 定案,materialpayment 不迁) | SalesOrderService.TYPE_CODE_FULL |
+| `sales_full` | addon-sales | 主材销售全款线=**材料款唯一口径**(material.md §13-3 定案,materialpayment 不迁);V2 起金额=总额-定金(尾款线) | SalesOrderService.TYPE_CODE_FULL |
+| `sales_deposit` | addon-sales | 主材销售定金线(V2,2026-10-18 第 65 次;`deposit` 已被装修定金占用故另起键;sort 建议先于 sales_full=字典顺序门控先定金后尾款;deposit_amount=0 不生成) | SalesOrderService.TYPE_CODE_DEPOSIT |
+| `ar_diff` | addon-quotation | 增减差量款(提交时懒预置) | QuotationAddReduceService.TYPE_CODE |
 | (签约拆分组) | 组织自建 | 签约款线按比例模板(scale_template JSON ‰)拆分的类型组,code 不进协议、name 组织自定义 | addon-decoration sign() |
 
 约定:协议键只增不改;类型行由组织在「款项类型」页自建(冒烟/部署清单含 deposit/sales_full 两条);

@@ -24,7 +24,9 @@ import com.yingzao.core.web.BizException;
 /**
  * 销售单主链:开单(挂装修单,DecorationApi 校验+展示快照)→明细维护(服务端算价,拒前端金额)→
  * 客户确认(验证码+手机三重校验服务端强制,修老单传其一即绕过)→收款(addon-payment 事件驱动款项轴)→
- * 完结/废单。老定金线随 payment 多款项能力 V2,款项轴 V1 单全款线(typeCode=salesFull)。
+ * 完结/废单。款项轴 V2 双线(V1102):开单可约定定金 deposit_amount,录款时拆 sales_deposit(定金,
+ * sort 前置=字典顺序门控先定金后尾款)+ sales_full(尾款=总额-定金)两线,事件按 typeCode 分流
+ * deposit_status/fullpay_status 双轴;deposit_amount=0 时单全款线,行为与 V1 完全一致。
  * 五计数事件回写:出货扣 xgnum(原子,不足=超卖死信)/删行回加/采购入库加 punum/采购释放扣 punum——
  * 本域零直写他域表,inventory 亦零直写本域(修老互相直改)。
  * 算价:disPrice = selling×discount/1000,total = disPrice×num/1000(千分位件数×厘单价),HALF_UP。
@@ -47,6 +49,7 @@ public class SalesOrderService {
     public static final int CODE_VERIFY_FREQUENT = 300028;
     public static final int CODE_BILL_TYPE_MISSING = 300029;
     public static final int CODE_ITEM_MISMATCH = 300027;
+    public static final int CODE_DEPOSIT_INVALID = 300030;
 
     // 主单轴(沿老编号,缺 1 系历史痕迹;行业共性四轴保留)
     public static final int ST_INIT = 0;
@@ -70,6 +73,8 @@ public class SalesOrderService {
     /** 全款款项类型协议键(组织款项类型字典须预置启用行)。 */
     /** 全款线协议键(协议键登记见 docs/rules/payment.md §15;材料款唯一口径,material.md §13-3 定案)。 */
     public static final String TYPE_CODE_FULL = "sales_full";
+    /** 定金线协议键(第 65 次 V2;deposit 已归装修定金线,不得复用——payment.md §15)。 */
+    public static final String TYPE_CODE_DEPOSIT = "sales_deposit";
 
     private static final String PREFIX_XS = "XS";
 
@@ -100,7 +105,8 @@ public class SalesOrderService {
     // ---- 开单 ----
 
     @Transactional
-    public long create(long orgId, long orderId, List<ItemCmd> items, String remark, long operatorId) {
+    public long create(long orgId, long orderId, List<ItemCmd> items, String remark,
+            Long depositAmount, long operatorId) {
         DecorationApi.OrderSummary order = decorations.queryOrder(orgId, orderId)
                 .orElseThrow(() -> new BizException(CODE_DECORATION, msg("sales.decoration.notFound")));
         // 合同线废单(5)/终止(6)不可挂单
@@ -108,6 +114,7 @@ public class SalesOrderService {
             throw new BizException(CODE_DECORATION, msg("sales.decoration.notFound"));
         }
         require(items != null && !items.isEmpty(), CODE_EMPTY_ITEMS, "sales.items.empty");
+        long deposit = requireDeposit(depositAmount);
         // 单号撞号重试(uk_sales_code 兜底:计数器与历史单错位时重取流水,不裸炸)
         long saleId = -1;
         String code = null;
@@ -117,11 +124,11 @@ public class SalesOrderService {
                 jdbc.update("""
                         insert into sales_order(org_id, code, order_id, order_no, customer_name, house_label,
                             salesman_id, status, balance_status, fullpay_status, customer_confirmed, total,
-                            remark, created_by, created_by_name)
-                        values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            deposit_amount, remark, created_by, created_by_name)
+                        values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """, orgId, code, orderId, order.orderNo(), order.customerName(), order.houseLabel(),
-                        order.salesmanId(), ST_INIT, BS_NONE, FS_UNRECORDED, 0, 0L, blankToNull(remark),
-                        operatorId, displayName(operatorId));
+                        order.salesmanId(), ST_INIT, BS_NONE, FS_UNRECORDED, 0, 0L, deposit,
+                        blankToNull(remark), operatorId, displayName(operatorId));
                 saleId = jdbc.queryForObject("select last_insert_id()", Long.class);
                 break;
             } catch (DuplicateKeyException e) {
@@ -131,6 +138,7 @@ public class SalesOrderService {
             }
         }
         long total = replaceItems(orgId, saleId, items);
+        requireDepositAgainstTotal(deposit, total);
         jdbc.update("update sales_order set total = ? where id = ?", total, saleId);
         track(orgId, saleId, "create", "开单挂装修单 " + order.orderNo(), operatorId);
         eventBus.publish(new SalesOrderCreatedEvent(saleId, orgId, orderId, order.orderNo(),
@@ -138,52 +146,100 @@ public class SalesOrderService {
         return saleId;
     }
 
-    /** 明细全量替换(修老信任前端 total):仅初始态且款项未付;套餐展开+空配置降级;xgnum 基线=num。 */
+    /** 明细全量替换(修老信任前端 total):仅初始态且两款项线未付;套餐展开+空配置降级;xgnum 基线=num。 */
     @Transactional
-    public long updateItems(long orgId, long saleId, List<ItemCmd> items, long operatorId) {
+    public long updateItems(long orgId, long saleId, List<ItemCmd> items, Long depositAmount,
+            long operatorId) {
         Map<String, Object> sale = loadSale(orgId, saleId);
         int fs = ((Number) sale.get("fullpay_status")).intValue();
+        int ds = ((Number) sale.get("deposit_status")).intValue();
         require(((Number) sale.get("status")).intValue() == ST_INIT, CODE_BAD_STATE, "sales.state.illegal");
         require(fs == FS_UNRECORDED || fs == FS_RECORDED, CODE_ITEMS_FROZEN, "sales.items.frozen");
+        require(ds == FS_UNRECORDED || ds == FS_RECORDED, CODE_ITEMS_FROZEN, "sales.items.frozen");
         require(items != null && !items.isEmpty(), CODE_EMPTY_ITEMS, "sales.items.empty");
+        long deposit = depositAmount == null
+                ? ((Number) sale.get("deposit_amount")).longValue()
+                : requireDeposit(depositAmount);
         jdbc.update("delete from sales_order_item where org_id = ? and sale_id = ?", orgId, saleId);
         long total = replaceItems(orgId, saleId, items);
-        jdbc.update("update sales_order set total = ? where id = ?", total, saleId);
+        requireDepositAgainstTotal(deposit, total);
+        jdbc.update("update sales_order set total = ?, deposit_amount = ? where id = ?",
+                total, deposit, saleId);
         if (fs == FS_RECORDED) {
-            resyncBill(orgId, saleId, total);
+            resyncBill(orgId, saleId, total, deposit);
         }
-        track(orgId, saleId, "updateItem", "明细调整,总额 " + yuan(total), operatorId);
+        track(orgId, saleId, "updateItem", "明细调整,总额 " + yuan(total)
+                + (deposit > 0 ? "(定金 " + yuan(deposit) + ")" : ""), operatorId);
         return total;
     }
 
-    /** 生成/重生成全款款项单(款项轴 -1/0→0 已录;已付禁改)。 */
+    /** 生成/重生成款项单(V2 按 deposit_amount 拆定金+尾款两线;款项轴 -1/0→0 已录;已付禁改)。 */
     @Transactional
     public void generateBill(long orgId, long saleId, long operatorId) {
         Map<String, Object> sale = loadSale(orgId, saleId);
         int fs = ((Number) sale.get("fullpay_status")).intValue();
         require(fs == FS_UNRECORDED || fs == FS_RECORDED, CODE_ITEMS_FROZEN, "sales.items.frozen");
         long total = ((Number) sale.get("total")).longValue();
-        resyncBill(orgId, saleId, total);
+        long deposit = ((Number) sale.get("deposit_amount")).longValue();
+        resyncBill(orgId, saleId, total, deposit);
         if (fs == FS_UNRECORDED) {
             jdbc.update("update sales_order set fullpay_status = ? where id = ? and fullpay_status = ?",
                     FS_RECORDED, saleId, FS_UNRECORDED);
         }
-        track(orgId, saleId, "generateBill", "生成全款款项单 " + yuan(total), operatorId);
+        if (deposit > 0) {
+            jdbc.update("update sales_order set deposit_status = ? where id = ? and deposit_status = ?",
+                    FS_RECORDED, saleId, FS_UNRECORDED);
+        }
+        track(orgId, saleId, "generateBill", deposit > 0
+                ? "生成款项单 全款 " + yuan(total) + "(定金 " + yuan(deposit) + "+尾款 "
+                        + yuan(total - deposit) + ")"
+                : "生成全款款项单 " + yuan(total), operatorId);
     }
 
-    /** 款项单确保存在(生成/重建):作废未收旧单后按当前总额重建;录款动作显式走本方法。 */
-    /** 款项单确保存在(生成/重建):作废未收旧单后按当前总额重建;录款动作显式走本方法。 */
-    private void resyncBill(long orgId, long saleId, long total) {
+    /** 款项单确保存在(生成/重建):作废未收旧单后按当前总额拆线;录款动作显式走本方法。 */
+    private void resyncBill(long orgId, long saleId, long total, long deposit) {
         for (PaymentApi.BillSummary bill : payments.listBills(orgId, BIZ_ADDON, BIZ_TYPE_ORDER,
                 String.valueOf(saleId))) {
             if (bill.direction() == 0 && bill.status() == 0) {
                 payments.cancelBill(orgId, bill.billId());
             }
         }
-        if (total > 0) {
+        if (total <= 0) {
+            return;
+        }
+        if (deposit > 0) {
+            ensureDepositType(orgId);
+            payments.createBill(new PaymentApi.CreateBillCmd(orgId, BIZ_ADDON, BIZ_TYPE_ORDER,
+                    String.valueOf(saleId), TYPE_CODE_DEPOSIT, deposit, null));
+            payments.createBill(new PaymentApi.CreateBillCmd(orgId, BIZ_ADDON, BIZ_TYPE_ORDER,
+                    String.valueOf(saleId), TYPE_CODE_FULL, total - deposit, null));
+        } else {
             payments.createBill(new PaymentApi.CreateBillCmd(orgId, BIZ_ADDON, BIZ_TYPE_ORDER,
                     String.valueOf(saleId), TYPE_CODE_FULL, total, null));
         }
+    }
+
+    /** 定金类型懒预置(照 quotation ar_diff 科目懒预置惯例;组织自建字典,协议键全局约定)。 */
+    private void ensureDepositType(long orgId) {
+        Integer typeExists = jdbc.queryForObject(
+                "select count(*) from payment_bill_type where org_id = ? and code = ?",
+                Integer.class, orgId, TYPE_CODE_DEPOSIT);
+        if (typeExists == null || typeExists == 0) {
+            jdbc.update("insert into payment_bill_type(org_id, code, name, sort) values (?,?,?,2)",
+                    orgId, TYPE_CODE_DEPOSIT, msg("sales.bill.depositName"));
+        }
+    }
+
+    /** 定金守卫:非负;拆线时必须小于总额(=总额则尾款线消失,拆线无意义)。 */
+    private long requireDeposit(Long depositAmount) {
+        long deposit = depositAmount == null ? 0 : depositAmount;
+        require(deposit >= 0, CODE_DEPOSIT_INVALID, "sales.deposit.invalid");
+        return deposit;
+    }
+
+    private void requireDepositAgainstTotal(long deposit, long total) {
+        require(deposit == 0 || (total > 0 && deposit < total), CODE_DEPOSIT_INVALID,
+                "sales.deposit.invalid");
     }
 
     /** 明细展开落库,返回主项总额(套餐子项不计入,老口径保留);空配置套餐降级普通商品。 */
@@ -316,6 +372,10 @@ public class SalesOrderService {
         require(((Number) sale.get("status")).intValue() == ST_INIT, CODE_BAD_STATE, "sales.state.illegal");
         require(((Number) sale.get("fullpay_status")).intValue() == FS_CONFIRMED, CODE_BAD_STATE,
                 "sales.finish.notConfirmed");
+        // 定金线拆出时必须同至已确认(尾款先行确认放行属老尾款语义,V2 双线对称)
+        long deposit = ((Number) sale.get("deposit_amount")).longValue();
+        require(deposit == 0 || ((Number) sale.get("deposit_status")).intValue() == FS_CONFIRMED,
+                CODE_BAD_STATE, "sales.finish.notConfirmed");
         Integer delivering = jdbc.queryForObject("""
                 select count(*) from sales_delivery_item
                 where org_id = ? and sale_item_id in (select id from sales_order_item where sale_id = ?)
@@ -338,7 +398,9 @@ public class SalesOrderService {
         require(((Number) sale.get("balance_status")).intValue() == BS_NONE, CODE_BAD_STATE,
                 "sales.terminate.guard");
         int fs = ((Number) sale.get("fullpay_status")).intValue();
+        int ds = ((Number) sale.get("deposit_status")).intValue();
         require(fs == FS_UNRECORDED || fs == FS_RECORDED, CODE_BAD_STATE, "sales.terminate.guard");
+        require(ds == FS_UNRECORDED || ds == FS_RECORDED, CODE_BAD_STATE, "sales.terminate.guard");
         Integer deliveries = jdbc.queryForObject(
                 "select count(*) from sales_delivery where org_id = ? and sale_id = ?",
                 Integer.class, orgId, saleId);
@@ -354,8 +416,8 @@ public class SalesOrderService {
             }
         }
         int updated = jdbc.update(
-                "update sales_order set status = ?, fullpay_status = ? where id = ? and status = ?",
-                ST_TERMINATED, FS_UNRECORDED, saleId, ST_INIT);
+                "update sales_order set status = ?, fullpay_status = ?, deposit_status = ? where id = ? and status = ?",
+                ST_TERMINATED, FS_UNRECORDED, FS_UNRECORDED, saleId, ST_INIT);
         require(updated > 0, CODE_BAD_STATE, "sales.state.illegal");
         track(orgId, saleId, "terminate", "废单", operatorId);
         publishStatus(orgId, sale, saleId, ST_INIT, ST_TERMINATED,
@@ -391,7 +453,8 @@ public class SalesOrderService {
         Long count = jdbc.queryForObject("select count(*) from sales_order" + w, Long.class, args.toArray());
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select id, code, order_id, order_no, customer_name, house_label, status, balance_status,
-                       fullpay_status, customer_confirmed, total, finish_time, created_by_name, created_at
+                       fullpay_status, deposit_status, deposit_amount, customer_confirmed, total,
+                       finish_time, created_by_name, created_at
                 from sales_order""" + w + " order by id desc limit ? offset ?",
                 appendArgs(args, safeSize, (safePage - 1) * safeSize).toArray());
         Map<String, Object> result = new LinkedHashMap<>();
@@ -450,29 +513,46 @@ public class SalesOrderService {
 
     // ---- 事件回写:款项三事件(总线 SPI 由 SalesPaymentConsumer 调入) ----
 
-    /** 收款:-1/0 → 1 已付(条件 UPDATE,事件重放幂等)。 */
+    /** 收款:typeCode 分流两轴(-1/0 → 1 已付;条件 UPDATE,事件重放幂等)。 */
     @Transactional
-    public void onPaymentCollected(long orgId, long saleId) {
-        jdbc.update("""
-                update sales_order set fullpay_status = 1
-                where id = ? and org_id = ? and fullpay_status in (-1, 0)
-                """, saleId, orgId);
+    public void onPaymentCollected(long orgId, long saleId, String typeCode) {
+        if (TYPE_CODE_DEPOSIT.equals(typeCode)) {
+            jdbc.update("""
+                    update sales_order set deposit_status = 1
+                    where id = ? and org_id = ? and deposit_status in (-1, 0)
+                    """, saleId, orgId);
+        } else {
+            jdbc.update("""
+                    update sales_order set fullpay_status = 1
+                    where id = ? and org_id = ? and fullpay_status in (-1, 0)
+                    """, saleId, orgId);
+        }
     }
 
-    /** 确认:1 → 2 已确认;成功后生成按品牌预结算行(uk 兜底幂等)+结算轴 0→1。 */
+    /** 确认:typeCode 分流两轴(1 → 2 已确认);任一线确认即解锁结算(预结算行 uk 幂等,先到先建)+结算轴 0→1。 */
     @Transactional
-    public void onPaymentConfirmed(long orgId, long saleId, long operatorId) {
-        int updated = jdbc.update("""
-                update sales_order set fullpay_status = 2
-                where id = ? and org_id = ? and fullpay_status = 1
-                """, saleId, orgId);
+    public void onPaymentConfirmed(long orgId, long saleId, String typeCode, long operatorId) {
+        int updated;
+        if (TYPE_CODE_DEPOSIT.equals(typeCode)) {
+            updated = jdbc.update("""
+                    update sales_order set deposit_status = 2
+                    where id = ? and org_id = ? and deposit_status = 1
+                    """, saleId, orgId);
+        } else {
+            updated = jdbc.update("""
+                    update sales_order set fullpay_status = 2
+                    where id = ? and org_id = ? and fullpay_status = 1
+                    """, saleId, orgId);
+        }
         if (updated == 0) {
             return; // 事件重放/非已付态
         }
         generateSettlements(orgId, saleId, operatorId);
         jdbc.update("update sales_order set balance_status = ? where id = ? and balance_status = ?",
                 BS_PRE, saleId, BS_NONE);
-        track(orgId, saleId, "confirmPay", "全款确认,生成预结算行", operatorId);
+        track(orgId, saleId, "confirmPay",
+                (TYPE_CODE_DEPOSIT.equals(typeCode) ? "定金确认" : "尾款确认") + ",生成预结算行",
+                operatorId);
     }
 
     /** 按明细主项品牌分组生成购货预结行(type=0);uk(org,sale,brand,type,rid) 兜底幂等。 */

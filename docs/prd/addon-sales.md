@@ -67,3 +67,11 @@
 - 类:`com.fanglin.sales.service.impl.SalesServiceImpl`(主单)/`SalesItemServiceImpl`(明细套餐)/`SalesDeliveryServiceImpl`(履约+分成克隆)/`SalesBalanceServiceImpl`(结算线 932 行)/`SalesRefundsServiceImpl`(退货);
 - 表:`sales.sales / salesitem / salesdelivery(item) / salesbalance(item) / salesrefunds(item)`;
 - 已知坑:金额毫 ×1000、件数 ×1000、折扣 1000=无折;status 缺 1;260xxx/370xxx/400xxx 三段混用;让利公式量纲不自洽(rules/sales.md §4/§8/§13-1);免付款假收款单;五计数被 inventory 直改;厂结 vbalance≠0 闸只在前端。
+
+## 实施注记(V2 定金款线,2026-10-18 第 65 次回写)
+
+- **双线拆分**(V1102):开单/改单可约定 `deposit_amount`(厘,守卫 0≤deposit<total);录款(generateBill)时拆 `sales_deposit`(定金)+`sales_full`(尾款=总额-定金)两条款项单;deposit_amount=0 时单全款线,V1 行为完全不变;
+- **双轴回归**:`deposit_status`/`fullpay_status`(-1 未录/0 已录/1 已付/2 已确认)对齐老 depositpayStatus/fullpayStatus 正统形态;收款/确认事件按 typeCode 分流(PaymentCollected/ConfirmedEvent 携 typeCode);
+- **顺序门控复用字典基建**:sales_deposit sort 建议先于 sales_full(懒预置落 2/冒烟种子 2 vs 3),同组前置款未收即 270010——先定金后尾款,组织可经「款项类型」页自调;
+- **定金确认即解锁结算**:任一线确认→按品牌预结算行(uk 幂等,先到先建)+结算轴 0→1;完结守卫=两线全确认(线未生成豁免);废单重置双轴;改单/明细冻结看双轴任一已付;
+- **不迁**:退定金线单独退(老两路径不对称烂账,rules/sales.md §80,留 V2.1);定金行 onetype=3 单级结算行形态(营造以按品牌明细预结行统一承载,定金确认只推进资金与解锁,不另立单级行)。
