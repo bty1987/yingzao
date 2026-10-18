@@ -43,6 +43,16 @@ public class QuotationApiImpl implements QuotationApi {
         return Optional.of(((Number) rows.get(0).get("material_package_id")).longValue());
     }
 
+    /** 未确认差量单存在性(0 草稿/1 已提交/2 已付款均算;3 已确认终态不算)。 */
+    @Override
+    public boolean hasUnconfirmedAddReduce(long orgId, long orderId) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from quotation_add_reduce
+                where org_id = ? and order_id = ? and status in (0, 1, 2)
+                """, Integer.class, orgId, orderId);
+        return count != null && count > 0;
+    }
+
     @Override
     public Optional<QuotationSummary> queryDefaultQuotation(long orgId, long orderId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""

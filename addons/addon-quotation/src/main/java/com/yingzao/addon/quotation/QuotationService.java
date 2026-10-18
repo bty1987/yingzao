@@ -42,6 +42,8 @@ public class QuotationService {
     public static final int CODE_NOT_FOUND = 230002;
     /** 定材包不存在/停用(B 类#7;报价挂包校验)。 */
     public static final int CODE_PACKAGE_INVALID = 230023;
+    /** 挂定材包的报价存在已确认差量,不可解绑(B 类联动 230153)。 */
+    public static final int CODE_PACKAGE_BOUND = 230153;
     public static final int CODE_LOCKED = 230003;
     public static final int CODE_LIMIT = 230004;
     public static final int CODE_ORDER_NOT_FOUND = 230005;
@@ -418,6 +420,12 @@ public class QuotationService {
             MaterialQuotaApi.PackageRef ref = materialQuota.queryPackage(orgId, packageId)
                     .orElseThrow(() -> new BizException(CODE_PACKAGE_INVALID, msg("quotation.package.notFound")));
             require(ref.status() == 0, CODE_PACKAGE_INVALID, "quotation.package.disabled");
+        } else if (q.materialPackageId() != null) {
+            // 解绑守卫(B 类联动 230153):存在已确认差量单则不可解绑——定额基准已被差量引用
+            Integer confirmed = jdbc.queryForObject(
+                    "select count(*) from quotation_add_reduce where quotation_id = ? and status = 3",
+                    Integer.class, quotationId);
+            require(confirmed == null || confirmed == 0, CODE_PACKAGE_BOUND, "quotation.package.bound");
         }
         jdbc.update("update quotation_quotation set material_package_id = ? where id = ? and org_id = ?",
                 packageId, quotationId, orgId);
