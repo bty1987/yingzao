@@ -117,3 +117,8 @@ status: 0 有效 ⇄ 1 失效(可逆)
 - Flyway:**V1601+**(`db/migration/member/`),MySQL 5.6 兼容;
 - 表(建议 6 张):member_activity / member_gift / member_gift_record / member_point_account / member_point_record / member_exchange(+明细 JSON 或第 7 张 member_exchange_item,写码时定,倾向独立明细表满足限件唯一约束);
 - 事件:消费 PaymentConfirmed/PaymentRefunded(收款域,既有)+ 装修签约事件(decoration 域,既有);发布 GiftStockChanged/ExchangeCreated/ExchangeCancelled/ActivityStatusChanged(总线,协议键对齐既有风格)。
+
+## 实施注记(V1.1/V1.2,写码后回写)
+
+- **V1.1 积分过期清算**(第 52 次):`member_config.expire_clear_enabled` 组织开关(默认关);清算=过期正向批次逐行生成清算负行(REC_EXPIRE_CLEAR=6,`src_id=原正行 id` 作 uk 幂等锚),balance 向 available 收敛;账面不足该批次跳过(不制造负余额);手动入口 POST /api/member/points/expire-clear(开关无关,幂等)。
+- **V1.2 调度迁移 yz_plan**(第 63 次):废除 `@Scheduled` 硬调度(MemberExpireClearScheduler 已删,全局开关 `yingzao.member.clear-schedule-enabled` 一并作废),清算执行成为 yz_plan 内核首个业务消费方 `member-expire-clear`(YzPlanHandler SPI)。**续期模型=链式**:每次执行同事务内先挂下一轮 03:00 计划(biz_key=`member-expire-clear-{org}-{yyyyMMdd}` 按日幂等,重试重放撞在挂计划即跳过)再做本日清算;计划死亡→链条停摆,死信在 /api/plans 管理页可见可重试,重启对账(扫已开启组织补挂)兜底自愈。开关切换即收敛:配置保存后开启=确保计划在挂/关闭=撤销在挂计划(均幂等)。调度语义可观测:运行历史/下次执行时间/取消/死信重试全部进 yz_plan 管理面(对齐「Plan 管待办」的内核分工)。

@@ -4018,6 +4018,83 @@ def main():
     else:
         step("过期清算跳过(无可清算样本)", True)
 
+    # ========= member 过期清算迁 yz_plan(第 63 次;Plan 内核首个业务消费方)=========
+    # 开关→计划在挂;即时计划跑清算→链式续期去重;关开关→计划取消。配置全量合并防缺省重置。
+    cfg0 = api_ok("读组织配置(合并基线)", "GET", "/api/member/config", tok_admin)
+    _cfg_base = {
+        "autoSignConsume": int((cfg0 or {}).get("auto_sign_consume") or 0),
+        "signConsumeContent": (cfg0 or {}).get("sign_consume_content") or "签约自动核销",
+    }
+    api_ok("开启每日清算(计划跟随配置态)", "POST", "/api/member/config", tok_admin,
+           dict(_cfg_base, expireClearEnabled=1))
+    prow = db_exec("""
+        select id, status, next_run_time is not null from yz_plan
+        where org_id = 1 and handler = 'member-expire-clear' and status = 0
+        order by id desc limit 1
+    """)
+    step("开启配置自动挂每日计划(status=0+到期时间)", bool(prow), prow)
+    daily_pid = prow[0][0] if prow else None
+
+    # 即时计划路径:再造过期样本 → POST /api/plans 立即执行 → 断言清算+链式续期去重
+    prow2 = db_exec("""
+        select r.id, r.customer_id, r.point_type, r.delta
+        from member_point_record r
+        where r.org_id = 1 and r.delta > 0 and r.point_type = 1
+          and r.expire_time is not null
+          and not exists (
+              select 1 from member_point_record c
+              where c.org_id = r.org_id and c.customer_id = r.customer_id
+                and c.point_type = r.point_type and c.type = 6
+                and c.src_type = 'expire_clear' and c.src_id = cast(r.id as char))
+        order by r.id limit 1
+    """)
+    if prow2 and daily_pid:
+        prec_id, p_cust, p_pt, p_delta = prow2[0]
+        db_exec("update member_point_record set expire_time = '2020-01-01 00:00:00' where id = %s",
+                (prec_id,))
+        m_pid = api_ok("提交即时清算计划(member-expire-clear)", "POST", "/api/plans", tok_admin,
+                       {"handler": "member-expire-clear", "maxRetries": 1})
+        _mp = None
+        for _ in range(10):
+            time.sleep(1)
+            _mp = api_ok("清算计划详情", "GET", "/api/plans/%s" % m_pid, tok_admin)
+            if (_mp or {}).get("status") in (1, 3):
+                break
+        step("即时清算计划成功(result 带清算摘要)", (_mp or {}).get("status") == 1
+             and "cleared=" in str((_mp or {}).get("result")), _mp)
+        mcrows = db_exec("""
+            select count(*) from member_point_record
+            where org_id = 1 and customer_id = %s and point_type = %s
+              and type = 6 and src_type = 'expire_clear' and src_id = %s
+        """, (p_cust, p_pt, str(prec_id)))
+        step("计划路径清算负行落库(uk 幂等锚)", mcrows and mcrows[0][0] == 1, mcrows)
+        pend = db_exec("""
+            select count(*) from yz_plan
+            where org_id = 1 and handler = 'member-expire-clear' and status = 0
+        """)
+        step("链式续期去重(在挂计划仍只有配置挂上的一条)", pend and pend[0][0] == 1, pend)
+        # 测试数据自清理(镜像手动清算块:删负行+回补余额+恢复过期时间)
+        pacct = db_exec("""
+            select id from member_point_account
+            where org_id = 1 and customer_id = %s and point_type = %s
+        """, (p_cust, p_pt))[0]
+        db_exec("delete from member_point_record where org_id = 1 and customer_id = %s"
+                " and point_type = %s and type = 6 and src_type = 'expire_clear' and src_id = %s",
+                (p_cust, p_pt, str(prec_id)))
+        db_exec("update member_point_account set balance = balance + %s where id = %s",
+                (p_delta, pacct[0]))
+        db_exec("update member_point_record set expire_time = date_add(now(), interval 29 day)"
+                " where id = %s", (prec_id,))
+        step("计划路径测试数据已自清理", True)
+    else:
+        step("即时清算计划跳过(无样本或未挂计划)", True)
+
+    api_ok("关闭每日清算(计划跟随取消)", "POST", "/api/member/config", tok_admin,
+           dict(_cfg_base, expireClearEnabled=0))
+    if daily_pid:
+        _dp = api_ok("在挂计划详情", "GET", "/api/plans/%s" % daily_pid, tok_admin)
+        step("关闭配置在挂计划转已取消(4)", (_dp or {}).get("status") == 4, _dp)
+
     # ========= RBAC v2 端点鉴权(observe 期,第 36 次扩展)=========
     print("\n== RBAC v2 端点鉴权(observe) ==")
 

@@ -7,6 +7,7 @@
         <div class="spacer" />
         <el-button type="primary" @click="openAdjust()">运营积分调整</el-button>
         <el-button type="warning" @click="onExpireClear">过期清算</el-button>
+        <el-button @click="openClearConfig">清算设置</el-button>
       </div>
       <el-table :data="rows" border stripe>
         <el-table-column prop="id" label="#" width="64" />
@@ -53,6 +54,27 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="clearConfigVisible" title="过期清算设置" width="480px">
+      <el-form label-width="120px">
+        <el-form-item label="每日自动清算">
+          <el-switch v-model="clearForm.expireClearEnabled" :active-value="1" :inactive-value="0" />
+          <div class="hint">开启后每日 03:00 自动清算过期批次(经计划任务调度,可在系统管理「计划任务」查看/取消/重试)</div>
+        </el-form-item>
+        <el-divider border-style="dashed" />
+        <el-form-item label="签约自动核销">
+          <el-switch v-model="clearForm.autoSignConsume" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="核销说明">
+          <el-input v-model="clearForm.signConsumeContent" :disabled="!clearForm.autoSignConsume" />
+          <div class="hint">签约自动核销积分流水上的说明文案</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="clearConfigVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveClearConfig">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="recordsVisible" :title="`积分流水 - ${recordsAccount?.customer_name || ''}(${'分项 ' + recordsAccount?.point_type})`" size="760px">
       <el-table :data="recordRows" border size="small">
         <el-table-column prop="id" label="#" width="64" />
@@ -81,6 +103,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { fetchAddons } from '../../api'
 import {
   pageMemberPointAccounts, listMemberPointRecords, adjustMemberPoint,
+  expireClearPoints, fetchMemberConfig, saveMemberConfig,
 } from '../../api'
 
 const dicts = ref({})
@@ -125,6 +148,27 @@ async function onExpireClear() {
   } catch (e) {
     ElMessage.error(e.message || '清算失败')
   }
+}
+
+const clearConfigVisible = ref(false)
+const clearForm = reactive({ expireClearEnabled: 0, autoSignConsume: 0, signConsumeContent: '签约自动核销' })
+
+async function openClearConfig() {
+  const res = await fetchMemberConfig()
+  const cfg = res.data || {}
+  Object.assign(clearForm, {
+    expireClearEnabled: Number(cfg.expire_clear_enabled) || 0,
+    autoSignConsume: Number(cfg.auto_sign_consume) || 0,
+    signConsumeContent: cfg.sign_consume_content || '签约自动核销',
+  })
+  clearConfigVisible.value = true
+}
+
+// 配置接口对缺省字段按 0/默认值落库,必须全量合并保存,防两处设置互相覆盖
+async function saveClearConfig() {
+  await saveMemberConfig({ ...clearForm })
+  ElMessage.success(clearForm.expireClearEnabled === 1 ? '已保存,每日 03:00 自动清算' : '已保存,自动清算已关闭')
+  clearConfigVisible.value = false
 }
 
 function openAdjust() {

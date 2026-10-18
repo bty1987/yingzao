@@ -28,13 +28,16 @@ public class MemberController {
     private final MemberGiftService gifts;
     private final MemberPointService points;
     private final MemberExchangeService exchanges;
+    private final MemberExpireClearPlanHandler expireClearPlans;
 
     public MemberController(MemberActivityService activities, MemberGiftService gifts,
-            MemberPointService points, MemberExchangeService exchanges) {
+            MemberPointService points, MemberExchangeService exchanges,
+            MemberExpireClearPlanHandler expireClearPlans) {
         this.activities = activities;
         this.gifts = gifts;
         this.points = points;
         this.exchanges = exchanges;
+        this.expireClearPlans = expireClearPlans;
     }
 
     // ---- 活动 ----
@@ -88,7 +91,8 @@ public class MemberController {
 
     // ---- 组织配置 ----
 
-    public record ConfigBody(Integer autoSignConsume, String signConsumeContent) {
+    public record ConfigBody(Integer autoSignConsume, String signConsumeContent,
+            Integer expireClearEnabled) {
     }
 
     @GetMapping("/config")
@@ -98,7 +102,16 @@ public class MemberController {
 
     @PostMapping("/config")
     public ApiResponse<Void> saveConfig(HttpServletRequest request, @RequestBody ConfigBody body) {
-        exchanges.saveConfig(orgId(request), body.autoSignConsume(), body.signConsumeContent());
+        long orgId = orgId(request);
+        exchanges.saveConfig(orgId, body.autoSignConsume(), body.signConsumeContent(),
+                body.expireClearEnabled());
+        // 清算计划跟随配置态收敛:开启=确保下一轮 03:00 计划在挂,关闭=撤销在挂计划(均幂等)
+        Map<String, Object> cfg = exchanges.configOf(orgId);
+        if (cfg != null && ((Number) cfg.get("expire_clear_enabled")).intValue() == 1) {
+            expireClearPlans.ensureScheduled(orgId);
+        } else {
+            expireClearPlans.cancelScheduled(orgId);
+        }
         return ApiResponse.ok();
     }
 
