@@ -63,6 +63,8 @@ yingzao:
 
 实现方式:Spring Boot 自动装配 + `@ConditionalOnProperty`;每个插件一个 `AutoConfiguration.imports`。**不做**类加载器隔离。
 
+**约定接入(2026-10-18 第 64 次运行落地)**:新插件接入除 `enabled` 一行激活开关外**零登记**——i18n basename(`i18n/<id>`)与迁移位置(`classpath:db/migration/<id>`)由内核 `AddonConventionPostProcessor`(EnvironmentPostProcessor,配置绑定前)从 classpath 上的 `addon.yml` 按约定推导,追加进 `spring.messages.basename` 与 `spring.flyway.locations`(application.yml 只保留内核项)。收口早期「三处静态登记漏一即静默失效」的失败模式(插件不可见/错误码回落 110000/迁移静默不执行);`enabled` 漏仍静默,保留为部署侧显式激活决策(企业装插件 = 放 jar + 开一行)。
+
 ### 3.2 扩展点(核心留钩子,插件填实现)
 
 核心在业务关键路径定义扩展点接口,插件实现并注册:
