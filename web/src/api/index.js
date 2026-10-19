@@ -455,6 +455,13 @@ export const removeGoodsTerm = (id, brandId, goodsId) =>
 export const pageEvents = (params) => http.get('/api/events', { params })
 export const eventStats = () => http.get('/api/events/stats')
 export const requeueEvent = (id) => http.post(`/api/events/${id}/requeue`)
+// 计划任务管理面(内核 YzPlan,仅管理员 123013)
+export const pagePlans = (params) => http.get('/api/plans', { params })
+export const planStats = () => http.get('/api/plans/stats')
+export const fetchPlan = (id) => http.get(`/api/plans/${id}`)
+export const cancelPlan = (id) => http.post(`/api/plans/${id}/cancel`)
+export const retryPlan = (id) => http.post(`/api/plans/${id}/retry`)
+export const submitPlan = (data) => http.post('/api/plans', data)
 
 // 会员营销(addon-member):活动/礼品库存/兑换单/积分台账(积分=整数,金额=厘)
 export const pageMemberActivities = (params) => http.get('/api/member/activities', { params })
