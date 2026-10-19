@@ -322,6 +322,7 @@ export const updateSalesOrderItems = (id, data) => http.put(`/api/sales/orders/$
 export const generateSalesBill = (id) => http.post(`/api/sales/orders/${id}/bill`)
 export const sendSalesVerifyCode = (id, data) => http.post(`/api/sales/orders/${id}/verify-code`, data)
 export const confirmSalesOrder = (id, data) => http.post(`/api/sales/orders/${id}/confirm`, data)
+export const refundSalesDeposit = (id, data) => http.post(`/api/sales/orders/${id}/deposit-refund`, data)
 export const finishSalesOrder = (id) => http.post(`/api/sales/orders/${id}/finish`)
 export const terminateSalesOrder = (id) => http.post(`/api/sales/orders/${id}/terminate`)
 export const pageSalesSettlements = (params) => http.get('/api/sales/settlements', { params })

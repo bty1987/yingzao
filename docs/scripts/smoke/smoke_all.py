@@ -3211,6 +3211,60 @@ def main():
     dep_det = api_ok("完结复查", "GET", "/api/sales/orders/%s" % sale_dep, tok_admin)
     step("销售单状态5完结", dep_det.get("status") == 5, dep_det)
 
+    # ========= 退定金(第 67 次;定金款线整退→payment 退款审批→事件回写轴回已录+重建定金款)=========
+    print("\n== 退定金(守卫族/整退审批/事件回写/定金款重建) ==")
+    sale_dr = api_ok("退定金开单(定金40/总额120)", "POST", "/api/sales/orders", tok_admin,
+                     {"orderId": order_s, "depositAmount": 40000,
+                      "items": [{"goodsId": goods_sale1, "num": 1000}]})
+    if sale_dr is None:
+        return finish()
+    api_ok("生成款项单", "POST", "/api/sales/orders/%s/bill" % sale_dr, tok_admin)
+    api_err("未付定金不可退 300031", "POST", "/api/sales/orders/%s/deposit-refund" % sale_dr,
+            tok_admin, {"assigneeId": uid_c, "reason": "冒烟"}, 300031)
+    dr_det = api_ok("拆线复查", "GET", "/api/sales/orders/%s" % sale_dr, tok_admin)
+    dr_bills = {b.get("typeCode"): b for b in (dr_det.get("bills") or [])
+                if b.get("direction") == 0 and b.get("status") == 0}
+    dr_dep = (dr_bills.get("sales_deposit") or {}).get("billId")
+    api_ok("定金收款(cash 40元)", "POST", "/api/payment/bills/%s/collect" % dr_dep,
+           tok_admin, {"channels": [{"channelCode": "cash", "amount": 40000}]})
+    for _ in range(10):
+        time.sleep(1)
+        dr_det = api_ok("收款后复查", "GET", "/api/sales/orders/%s" % sale_dr, tok_admin)
+        if (dr_det or {}).get("deposit_status") == 1:
+            break
+    step("定金轴1已付", dr_det.get("deposit_status") == 1, dr_det)
+    api_err("缺审批人拒绝 300003", "POST", "/api/sales/orders/%s/deposit-refund" % sale_dr,
+            tok_admin, {"assigneeId": 0, "reason": "冒烟"}, 300003)
+    dr_ref = api_ok("退定金提交(审批人 example_c)", "POST",
+                    "/api/sales/orders/%s/deposit-refund" % sale_dr, tok_admin,
+                    {"assigneeId": uid_c, "reason": "冒烟退定金"})
+    if dr_ref is None:
+        return finish()
+    dr_refdet = api_ok("退款单回读", "GET", "/api/payment/bills/%s" % dr_ref, tok_admin)
+    dr_appr = (dr_refdet or {}).get("refund_approval_id")
+    step("退款审批在册(approval_id 回读)", bool(dr_appr), dr_refdet)
+    api_err("重复退定金拒绝 270012", "POST", "/api/sales/orders/%s/deposit-refund" % sale_dr,
+            tok_admin, {"assigneeId": uid_c, "reason": "重复"}, 270012)
+    api_ok("审批通过(example_c)", "POST", "/api/approvals/%s/approve" % dr_appr, tok_c,
+           {"comment": "同意退定"})
+    for _ in range(15):
+        time.sleep(1)
+        dr_det = api_ok("退款后复查", "GET", "/api/sales/orders/%s" % sale_dr, tok_admin)
+        if (dr_det or {}).get("deposit_status") == 0:
+            break
+    dr_old = [b for b in (dr_det.get("bills") or []) if b.get("direction") == 0
+              and b.get("typeCode") == "sales_deposit" and b.get("status") == 3]
+    dr_new = [b for b in (dr_det.get("bills") or []) if b.get("direction") == 0
+              and b.get("typeCode") == "sales_deposit" and b.get("status") == 0]
+    step("退定金回写:轴回已录+旧单退款终态(3)+新定金款未收在册(重建幂等锚)",
+         dr_det.get("deposit_status") == 0 and len(dr_old) == 1 and len(dr_new) == 1
+         and dr_new[0].get("amount") == 40000, dr_det.get("bills"))
+    api_ok("废单(联动取消未收新定金款)", "POST", "/api/sales/orders/%s/terminate" % sale_dr, tok_admin)
+    dr_det = api_ok("废单复查", "GET", "/api/sales/orders/%s" % sale_dr, tok_admin)
+    dr_left = [b for b in (dr_det.get("bills") or []) if b.get("direction") == 0
+               and b.get("status") == 0]
+    step("废单状态4+未收款项全联动作废", dr_det.get("status") == 4 and len(dr_left) == 0, dr_det)
+
     # ========= 营销获客(addon-market 第 27 次扩展)=========
     print("\n== 营销获客(addon-market:投放物+进线承接+归因漏斗+案例库) ==")
     stamp_mkt = time.strftime("%H%M%S") + "m"

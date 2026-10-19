@@ -91,10 +91,12 @@ public class BillService {
         Integer dup = jdbc.queryForObject("""
                 select count(*) from payment_bill
                 where org_id = ? and biz_addon = ? and biz_type = ? and biz_id = ? and type_code = ?
-                  and direction = ?
-                """, Integer.class, orgId, bizAddon, bizType, bizId, typeCode, DIRECTION_INCOME);
+                  and direction = ? and status in (?, ?, ?)
+                """, Integer.class, orgId, bizAddon, bizType, bizId, typeCode, DIRECTION_INCOME,
+                STATUS_UNPAID, STATUS_COLLECTED, STATUS_CONFIRMED);
         if (dup != null && dup > 0) {
-            // 修老签约款线「存量已收款 → 硬删重建」:已存在即拒绝,重建是业务插件的事
+            // 修老签约款线「存量已收款 → 硬删重建」:活单(未收/已收/已确认)存在即拒绝;
+            // 终态(已退款/已作废)不占同类型名额——退款后重开同类型新单是合法业务(如 sales 退定金重收)
             throw new BizException(CODE_BILL_DUP, msg("payment.bill.dup"));
         }
         jdbc.update("""
@@ -103,10 +105,8 @@ public class BillService {
                 values (?,?,?,?,?,?,?,?,?,?,?)
                 """, orgId, bizAddon, bizType, bizId, typeCode, (String) type.get("name"),
                 DIRECTION_INCOME, amount, ((Number) type.get("sort")).intValue(), blankToNull(remark), createdBy);
-        return jdbc.queryForObject("""
-                select id from payment_bill where org_id = ? and biz_addon = ? and biz_type = ? and biz_id = ?
-                  and type_code = ? and direction = 0
-                """, Long.class, orgId, bizAddon, bizType, bizId, typeCode);
+        // 连接级 last_insert_id 取新单:同组同类型可能存在终态历史单(已退款/已作废),按业务键回取会多行
+        return jdbc.queryForObject("select last_insert_id()", Long.class);
     }
 
     // ---- 收款(守卫三件套 + 顺序门控 + 渠道合计平衡;先验后写) ----

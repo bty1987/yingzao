@@ -15,8 +15,9 @@ import com.yingzao.core.eventbus.YzEventRecord;
 
 /**
  * 款项事件回程车:总线 SPI 消费 addon-payment 三事件,只处理 biz 三元组 =
- * (sales, order, 销售单id)。收款→款项轴 1 已付;确认→2 已确认+按品牌生成预结算行;
- * 退款完成→初始态退货单置已退款。消费失败总线重试直至死信,主流程早已提交。
+ * (sales, order, 销售单id)。收款/确认→按 typeCode 分流双轴(定金轴/尾款轴);
+ * 退款完成→定金线=轴回「已录」+重建定金款(退定金闭环),其余=初始态退货单置已退款。
+ * 消费失败总线重试直至死信,主流程早已提交。
  */
 @Component
 public class SalesPaymentConsumer implements YzEventConsumer {
@@ -60,8 +61,9 @@ public class SalesPaymentConsumer implements YzEventConsumer {
                 PaymentRefundedEvent p = event.payloadAs(PaymentRefundedEvent.class);
                 Long saleId = saleIdOf(p.bizAddon(), p.bizType(), p.bizId(), p.billId());
                 if (saleId != null) {
-                    orders.onPaymentRefunded(p.orgId(), saleId);
-                    log.info("sales order {} refund done by bill {}", saleId, p.billId());
+                    orders.onPaymentRefunded(p.orgId(), saleId, p.typeCode());
+                    log.info("sales order {} line {} refunded (origin bill {})", saleId, p.typeCode(),
+                            p.originBillId());
                 }
             }
             default -> {

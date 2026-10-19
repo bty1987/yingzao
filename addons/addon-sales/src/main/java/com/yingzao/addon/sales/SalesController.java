@@ -132,6 +132,20 @@ public class SalesController {
         return ApiResponse.ok();
     }
 
+    public record DepositRefundRequest(Long assigneeId, String reason) {
+    }
+
+    /** 退定金(定金款线整退,走 payment 退款审批;审批通过经事件回写定金轴并重建定金款)。 */
+    @PostMapping("/orders/{id}/deposit-refund")
+    public ApiResponse<Long> depositRefund(@PathVariable long id,
+            @RequestBody DepositRefundRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(orders.submitDepositRefund(orgId, id,
+                body == null || body.assigneeId() == null ? 0 : body.assigneeId(),
+                body == null ? null : body.reason(), userId));
+    }
+
     @PostMapping("/orders/{id}/terminate")
     public ApiResponse<Void> terminate(@PathVariable long id, HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");

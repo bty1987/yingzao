@@ -50,6 +50,7 @@ public class SalesOrderService {
     public static final int CODE_BILL_TYPE_MISSING = 300029;
     public static final int CODE_ITEM_MISMATCH = 300027;
     public static final int CODE_DEPOSIT_INVALID = 300030;
+    public static final int CODE_DEPOSIT_REFUND_GUARD = 300031;
 
     // 主单轴(沿老编号,缺 1 系历史痕迹;行业共性四轴保留)
     public static final int ST_INIT = 0;
@@ -424,6 +425,42 @@ public class SalesOrderService {
                 SalesOrderStatusChangedEvent.ACTION_TERMINATE, operatorId);
     }
 
+    // ---- 退定金(定金款线整退,走 payment 退款审批;第 67 次) ----
+
+    /**
+     * 退定金:对已收/已确认的 sales_deposit 款项单提交退款(内核轻量审批,270012 幂等闸)。
+     * 守卫=单据初始态+定金已付+尾款未付(付清单退定金无意义,整单退款走退货链);
+     * 审批通过→PaymentRefundedEvent→onPaymentRefunded 回写定金轴回「已录」并重建定金款
+     * (幂等锚=组内无未收定金单才建),此后可重收定金或废单——不复制老「退定金即废单」烂账。
+     */
+    @Transactional
+    public long submitDepositRefund(long orgId, long saleId, long assigneeId, String reason,
+            long operatorId) {
+        Map<String, Object> sale = loadSale(orgId, saleId);
+        require(((Number) sale.get("status")).intValue() == ST_INIT, CODE_BAD_STATE, "sales.state.illegal");
+        int ds = ((Number) sale.get("deposit_status")).intValue();
+        int fs = ((Number) sale.get("fullpay_status")).intValue();
+        require(ds == FS_PAID || ds == FS_CONFIRMED, CODE_DEPOSIT_REFUND_GUARD, "sales.deposit.refundGuard");
+        require(fs == FS_UNRECORDED || fs == FS_RECORDED, CODE_DEPOSIT_REFUND_GUARD,
+                "sales.deposit.refundGuard");
+        require(assigneeId > 0, CODE_PARAM, "sales.param.invalid");
+        Long depositBillId = null;
+        for (PaymentApi.BillSummary bill : payments.listBills(orgId, BIZ_ADDON, BIZ_TYPE_ORDER,
+                String.valueOf(saleId))) {
+            if (bill.direction() == 0 && TYPE_CODE_DEPOSIT.equals(bill.typeCode())
+                    && (bill.status() == FS_PAID || bill.status() == FS_CONFIRMED)) {
+                depositBillId = bill.billId();
+                break;
+            }
+        }
+        require(depositBillId != null, CODE_DEPOSIT_REFUND_GUARD, "sales.deposit.refundGuard");
+        long refundId = payments.submitRefund(new PaymentApi.RefundCmd(orgId, depositBillId,
+                operatorId, assigneeId, blankToNull(reason) == null ? msg("sales.deposit.refundReason")
+                        : reason.trim()));
+        track(orgId, saleId, "depositRefund", "提交退定金审批(款项单 " + depositBillId + ")", operatorId);
+        return refundId;
+    }
+
     // ---- 查询 ----
 
     public Map<String, Object> page(long orgId, String code, Long orderId, Integer status,
@@ -575,9 +612,30 @@ public class SalesOrderService {
         }
     }
 
-    /** 退款完成(PaymentRefundedEvent):该单初始态退货单 → 1 已退款。 */
+    /** 退款完成(PaymentRefundedEvent):按 typeCode 分流——定金线=轴回「已录」并重建定金款
+     * (幂等锚=组内无未收定金单才建,事件重放零重复);其余(退货整单退款)=初始态退货单置已退款。 */
     @Transactional
-    public void onPaymentRefunded(long orgId, long saleId) {
+    public void onPaymentRefunded(long orgId, long saleId, String typeCode) {
+        if (TYPE_CODE_DEPOSIT.equals(typeCode)) {
+            jdbc.update("""
+                    update sales_order set deposit_status = ?
+                    where id = ? and org_id = ? and deposit_status in (?, ?)
+                    """, FS_RECORDED, saleId, orgId, FS_PAID, FS_CONFIRMED);
+            ensureDepositType(orgId);
+            boolean pendingDeposit = payments.listBills(orgId, BIZ_ADDON, BIZ_TYPE_ORDER,
+                    String.valueOf(saleId)).stream().anyMatch(b -> b.direction() == 0
+                    && TYPE_CODE_DEPOSIT.equals(b.typeCode()) && b.status() == 0);
+            if (!pendingDeposit) {
+                Map<String, Object> sale = loadSale(orgId, saleId);
+                long deposit = ((Number) sale.get("deposit_amount")).longValue();
+                if (deposit > 0) {
+                    payments.createBill(new PaymentApi.CreateBillCmd(orgId, BIZ_ADDON, BIZ_TYPE_ORDER,
+                            String.valueOf(saleId), TYPE_CODE_DEPOSIT, deposit, null));
+                }
+            }
+            track(orgId, saleId, "depositRefunded", "退定金完成,定金轴回已录并重建定金款", 0L);
+            return;
+        }
         jdbc.update("""
                 update sales_refunds set status = 1
                 where org_id = ? and sale_id = ? and status = 0

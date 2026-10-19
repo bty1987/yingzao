@@ -129,6 +129,25 @@
       </template>
     </el-dialog>
 
+    <!-- 退定金 -->
+    <el-dialog v-model="depositRefundDialog" title="退定金(定金款线整退,走退款审批)" width="460px">
+      <el-form label-width="90px">
+        <el-form-item label="审批人" required>
+          <el-select v-model="depositRefundForm.assigneeId" filterable style="width: 260px">
+            <el-option v-for="u in users" :key="u.id" :label="u.display_name" :value="u.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="原因">
+          <el-input v-model="depositRefundForm.reason" type="textarea" :rows="2" placeholder="选填,留痕" />
+        </el-form-item>
+      </el-form>
+      <div class="tip" style="margin-bottom: 8px">审批通过后定金轴回「已录」并重建定金款,可重收或废单;尾款已付不可退定金</div>
+      <template #footer>
+        <el-button @click="depositRefundDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="onDepositRefund">提交审批</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 详情抽屉 -->
     <el-drawer v-model="detailDrawer" size="780px" :title="detail ? detail.code : '详情'">
       <template v-if="detail">
@@ -181,6 +200,9 @@
           <el-button size="small" :disabled="detail.customer_confirmed === 1" type="primary" @click="confirmDialog = true">客户确认</el-button>
           <el-button size="small" :disabled="!(detail.fullpay_status >= 1 && [0, 5].includes(detail.status))" @click="openDelivery">生成配送</el-button>
           <el-button size="small" :disabled="![0, 5].includes(detail.status)" type="warning" @click="openRefund">发起退货</el-button>
+          <el-button size="small" type="danger"
+            :disabled="!(detail.status === 0 && [1, 2].includes(detail.deposit_status) && detail.fullpay_status <= 0)"
+            @click="openDepositRefund">退定金</el-button>
         </div>
 
         <div class="section">结算行(三段式)</div>
@@ -317,7 +339,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { addons } from '../../store/addons'
 import {
   pageSalesOrders, fetchSalesOrder, createSalesOrder, updateSalesOrderItems, generateSalesBill,
-  sendSalesVerifyCode, confirmSalesOrder, finishSalesOrder, terminateSalesOrder,
+  sendSalesVerifyCode, confirmSalesOrder, finishSalesOrder, terminateSalesOrder, refundSalesDeposit,
   initiateSalesRefund, sendRefundVerifyCode, confirmSalesRefund,
   createSalesDelivery, advanceSalesDeliveryItem, pageDecorations, pageGoods, listOrgUsers
 } from '../../api'
@@ -344,6 +366,8 @@ const confirmForm = ref({ phone: '' })
 const refundDialog = ref(false)
 const refundForm = ref({ type: 2, assigneeId: null, items: [{ saleItemId: null, num: 1 }] })
 const refundableItems = ref([])
+const depositRefundDialog = ref(false)
+const depositRefundForm = ref({ assigneeId: null, reason: '' })
 const editDialog = ref(false)
 const editItems = ref([])
 const editDepositYuan = ref(0)
@@ -415,6 +439,28 @@ async function onCreate() {
     load()
   } catch (e) {
     ElMessage.error(e.message || '开单失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+function openDepositRefund() {
+  if (users.value.length === 0) listOrgUsers().then((res) => { users.value = res.data || [] })
+  depositRefundForm.value = { assigneeId: null, reason: '' }
+  depositRefundDialog.value = true
+}
+
+async function onDepositRefund() {
+  const f = depositRefundForm.value
+  if (!f.assigneeId) return ElMessage.warning('请选审批人')
+  saving.value = true
+  try {
+    await refundSalesDeposit(detail.value.id, { assigneeId: f.assigneeId, reason: f.reason || null })
+    ElMessage.success('退定金审批已提交')
+    depositRefundDialog.value = false
+    openDetail(detail.value)
+  } catch (e) {
+    ElMessage.error(e.message || '提交失败')
   } finally {
     saving.value = false
   }
