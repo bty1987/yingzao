@@ -215,6 +215,13 @@
 | 面积档限额/工期/节奏 + systemConfig per-company | 组织级配置表(数据驱动,零 if) |
 | 验收门槛(收款比例) | 组织级配置;进度依赖改查款项域事件/API |
 
+### 14.1 营造实现定案回写(第 68 次巡检补,细节见 docs/prd/addon-construction.md)
+
+- **addon-construction V1 落地**(第 22 次,V601 十四表,码段 240000):放线=开工点火三段(排期真查区间重叠 240007 修老 SQL 硬编码 status=0 双失效)/节点排期快照存值不存序(修 qualiter.sort 语义漂移)/计划时间按工期 ‰ 天正向累加(修老 /1e6 千倍漂移)/竣工唯一入口=验收全合格(修老按公司节点总数计数的方林嫌疑)/进出场流水 append-only 正序校验(修老 enter/leave 写反);
+- **款项双闸营造实现**(本文档 §0-53 老口径 120018/120033 的对应物):开工/完工比例闸 240006(经 PaymentApi.listBills 聚合已收/应收,零契约扩展;免检位必须带理由留痕——修老完全绕闸无痕);**销售款闸已启用**(第 24 次,240025 经 SalesApi.collectedRatio 聚合销售单名下收款比例,V1 曾 UNCHECK 快照占位后随 addon-sales 就绪切真);
+- 工程辅料额度=consume/refund 契约+ledger append-only(第 23 次,修老额度双侧口径漂移与零审计;inventory 领料闸经 ConstructionAccessoryApi 协作);
+- 验收=可配置检查项(mount 模板快照)+整改分支+收款比例门槛组织级配置(240011);决算六项检查(第 47 次,B 类#6 兑现)=ConstructionApi.accountNodes 只读快照+SalesApi.countUnfinishedOrders,选材子项预留 UNCHECK。
+
 ## 15. 待业务方确认清单
 
 1. **放线是否保留"点火"语义**:申请放线即创建施工单+初始化限额,还是拆成"开工准备"与"放线排期"两个用例?(建议拆分)

@@ -245,6 +245,14 @@ customer(794405, no=yyMMdd+4流水 UNIQUE)
 - **码段 330000 建议 / Flyway 迁移 1400+**(300000/310000/320000 已被 sales/inventory/balance 占用;军规 5 的"customerprofile 300+"系早期示例,已被顺延,建议随本 PRD 确认一并更新);
 - 验收必含老缺陷显式修正:无名字段过滤死雷(16-13)/updateHouse 契约漂移(16-14)/纯手机查重并发(16-12)/断链改名审批(16-6,新系统改名走内核轻量审批或直接事件通知客源插件更新快照)/「全部」=「启用」条件缺陷(15)。
 
+### 18.1 营造实现定案回写(第 68 次巡检补,细节见 docs/prd/addon-customerprofile.md)
+
+- **addon-customerprofile V1 落地**(第 17 次,V1401 七表,码段 330000):CryptoBox(AES-256-GCM 随机 IV+HMAC 等值检索双轨,**密钥独立于会话令牌**——§18 加密定案兑现)/唯一键全下沉 DB/get-or-create 幂等/多号码默认号显式切换(330008/330009 守卫)/reveal 解密强制留痕/收款账户软删+默认守卫;
+- **客源转化自动落主档**:LeadConvertedEvent 消费 get-or-create(第 17 次起,取代 lead 级镜像表);**C 端登录自动建档**(第 49 次,addon-portal 经 CustomerProfileApi.ensureCustomerByPhone 契约——主数据唯一写点纪律保持);
+- 楼盘房屋 Web 管理页(第 45 次:城市→城区树+楼盘台账+房屋抽屉+门牌 HMAC 检索);
+- 淘汰清单兑现:houselayout/换房审批/对公六要素双向同步均未迁 ✅;命名规则归 addon-basedata 未做(待真实诉求);
+- 新插件接入已「零登记」(第 64 次 AddonConventionPostProcessor 约定推导 i18n/迁移位置,enabled 一行激活)。
+
 ## 19. 待业务方确认清单
 
 1. **归属定案**:独立 addon-customerprofile(本文推荐,军规 5 预留段+主数据独立演化)vs 并入 addon-customer(docs/01 过堂表现行口径)——影响依赖方向(decoration/sales 引档案是否连带客源插件);

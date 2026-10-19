@@ -322,6 +322,14 @@ CR=addManifestForCR 只扣原 CG 货单项 surplus+出库,**全程不触碰 purc
 
 **正名表**:Occessories→外辅采购单(英文建议 outsourced purchase / subcontract);Accessories→领料单(material requisition);manifest→出入库单(stock manifest)。
 
+### 13.1 营造实现定案回写(第 68 次巡检补,细节见 docs/prd/addon-inventory.md)
+
+- **addon-inventory V1 落地**(第 23 次,V1201 十四表,码段 310000):单据即库存语义保留+实时库存原子扣减孤本收编+单号计数器 last_insert_id 原子自增(修读改写竞态)+12 类收敛类型字典+调拨走内核轻量审批+冲销=反向类型新单;
+- **领料定材校验**(第 57 次,B 类#7 兑现):本文档 260082 老口径的营造实现=V1204 inventory_config 组织开关(默认关)+MaterialQuotaApi 契约(basedata 实现:报价挂定材包 V402→包成员明细 V7002→定额量+浮动校验)+超限 **310067**;先校验后落库(修老闸门先插后查同款);非包成员不拦/售后跳过(老语义同构);
+- **厂商引用化两波**(第 45 次外辅 310058/310059、第 48 次采购 310065/310066):assign/create 签名 supplierName→supplierId 必传,经 SupplierApi 两态校验(不存在/停用),supplier_name 收窄官方名称快照(废「厂商即用户」,协同 addon-supplier);
+- 计数事件化兑现:xgnum/punum 出入全走事件(第 24 次 sales 订阅回写,超卖死信可见;修老「punum 永不释放」);工程辅料额度=construction 域 consume/refund 契约+ledger append-only(第 23 次,修老额度双侧口径漂移);
+- 采购结算 purchasebalance 不迁(统一 addon-payment)✅;模板/月结/盘点孤表未迁 ✅。
+
 ## 14. 待业务方确认清单
 
 1. **多租户边界**:库存/仓库是否组织级隔离?(老系统跨公司共享,单号序号全局)——影响所有表是否带 org_id 与授权模型;

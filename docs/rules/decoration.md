@@ -53,7 +53,7 @@
 |---|---|---|---|
 | 预签 | status∈{0,1,2} + 活动存在且全部锁定 + 预单存在且 Protation 锁定(值=2,注意与报价锁定值=1 不同) | 2 | ContractServiceImpl:744-818 |
 | 签约 | status∈{0,1,2,4} + **存在已付/已确认合同款** + 无未处理审批 + 默认报价存在 + 工程信息+预计放线时间必填 | 3(联动报价锁定/计奖规则/归属刷新/账户状态/事件 CUSTOMER_SIGNED) | ContractServiceImpl:507-685 |
-| 重签 | 仅 status=3 + 无未处理审批 + **无增减项** | 4(recontractTime,不覆盖 contractTime) | ContractServiceImpl:689-740 |
+| 重签 | 仅 status=3 + 无未处理审批 + **无增减项** | 4(recontractTime,不覆盖 contractTime) | ContractServiceImpl:689-740;【营造实现 第 59 次】resign 前置经 QuotationApi.hasUnconfirmedAddReduce 拒 250024(0/1/2 未确认算,3 终态不算——增减线 V2 回补,B 类联动) |
 | 废单 | 排除法:已废/已签约/已完工/已终止/已重签不可废(140021-140026) | 5 | DecorationServiceImpl:1468-1512 |
 | 终止 | 仅 status∈{32,33}(先经审批进"可终止"过渡态);联动:未付款项置 UNPAY、已付 Payment 置 PAID、报价留痕 Ruotation 置 EFFECT、归属置失效 | 6 | DecorationServiceImpl:1514-1656 |
 | 决算 | 仅 status=3 + 无未处理审批 + 六项前置检查(见 §8) | 7(accountTime) | DecorationAccountServiceImpl:182-216 |

@@ -183,3 +183,10 @@ atttype=1 每单限 1 件(**count>1 才拒=off-by-one,已有 1 件仍放行可�
 - `decoration\service\impl\DecorationActivityServiceImpl.java`/`DecorationActivityItemServiceImpl.java`/`decoration\dao\impl\DecorationActivityItemDaoImpl.java`
 - `payment\service\impl\PaymentActivityServiceImpl.java`(残缺)/`ActivityPaymentServiceImpl.java`(死)/`ServicePaymentServiceImpl.java:298`(唯一写点)
 - `utils\Arith.java`(DEF_SCALE=3 陷阱根源)
+
+## 14. 营造实现定案回写(第 68 次巡检补,细节见 docs/prd/addon-member.md 实施注记)
+
+- **addon-member V1 全量落地**(第 43/44 次,V1601 八表,码段 350000):活动时间窗真生效+validays 必填>0(修 §2 双哑弹)/积分事件驱动记账(消费 PaymentConfirmed/Refunded,废 §3 实时聚合 9 条)/礼品原子扣(修 §5 九处竞态)/兑换 no 幂等 upsert+DB 限件(修 off-by-one)/核销一次性+过期拦截;**积分=整数唯一换算点**(款项厘×千分位倍率÷1000 HALF_UP,灭 §3 量纲地狱);
+- **V1.1**(第 52 次):发货登记投产(到店自提与寄递并行);**过期清算钩子**——§11-3「V1 无清零任务」演进为组织开关 expire_clear_enabled(默认关),清算=过期正向批次逐行生成清算负行(src_id=原正行 id 作 uk 幂等锚),balance 向 available 收敛;
+- **清算调度迁 yz_plan 内核**(第 63 次,information.md §16「Plan 必迁」的首个业务消费方):@Scheduled 硬调度废除,链式续期模型(执行同事务挂下一轮 03:00 计划,biz_key 按日幂等),死信可见可重试+重启对账自愈;
+- 签约自动核销=SignAutoConsumeConsumer 监听 DecorationSignedEvent,说明文案组织配置(修 §6 硬编码 content)。

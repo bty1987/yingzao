@@ -158,6 +158,13 @@
 | Assassin | **删** | "外部调用留审计"思想归 infra 组件(成功失败都记) |
 | V 六表+克隆版 | **删**(确认) | 会销 2022 停办+克隆版 0 行;未来恢复归 addon-campaign 重做 |
 
+### 16.1 营造实现定案回写(第 68 次巡检补)
+
+- **Plan 内核化已兑现**(第 54 次,「必迁」裁决落地):内核 yz_plan V106(YzPlanHandler SPI+指数退避+死信可见可重试+取消+管理 REST)+Web 管理页(第 66 次);**首个业务消费方=member 过期清算**(第 63 次,链式续期:执行同事务挂下一轮 03:00 计划,biz_key 按日幂等);外部 Python 执行器=部署形态非模型,HTTP 回调型任务留 V2 对接口(§16 表「内核调度设施或 addon-system」定案为内核);
+- **MessageQueuing「44% 丢失」红线已收口**:内核事件总线三件套(第 19 次起,消费确认+重试+死信)+exactly-once 登记表(第 53 次 yz_event_consumed,消除常态重放);嵌套子事件由调度器秒级兜底(第 39 次,线程池化方案待拍板);
+- Message→内核通知中心 yz_notification ✅;33 种 event 按域还给插件做领域事件 ✅(第 39 次两波迁移后全仓 @TransactionalEventListener 归零);
+- Worksheet/Notice 公告/Events 日程/PhoneCall:未迁(维持裁决,待真实诉求)。
+
 ## 17. 待业务方确认清单(8 条)
 
 1. **Plan 调度平台归属定案**(🔴过堂表"删除节"改判):内核调度设施(定时任务/导出导入队列属平台能力,推荐)vs addon-system vs 独立 addon-plan;task 脚本资产(python 导出脚本族)是否随迁。
