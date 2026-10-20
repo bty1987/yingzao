@@ -41,6 +41,12 @@ public class TokenStore {
         return token;
     }
 
+    /** 踢出员工账号全部在管会话(停用/重置密码即时生效;C 端令牌 userId=0 不受影响)。 */
+    public void evictUser(Long userId) {
+        tokens.entrySet().removeIf(e -> PRINCIPAL_USER.equals(e.getValue().principal())
+                && userId.equals(e.getValue().userId()));
+    }
+
     public Token verify(String token) {
         Token t = tokens.get(token);
         if (t == null || t.expiresAt().isBefore(Instant.now())) {

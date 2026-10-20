@@ -4362,6 +4362,50 @@ def main():
                    "/api/plans?status=1&handler=echo&page=1&size=5", tok_admin)
     step("分页过滤命中成功计划", (_page or {}).get("total", 0) >= 1, _page)
 
+
+    # ========= 用户管理(第 70 次;内核账号面:建号/守卫族/停用踢会话/重置密码)=========
+    print("\n== 用户管理(建号/守卫族/停用踢会话/重置密码) ==")
+    stamp_u = time.strftime("%d%H%M%S") + "u"
+    api_err("非管理员建号拒绝 122003", "POST", "/api/users", tok_b,
+            {"username": "u" + stamp_u, "displayName": "冒烟", "password": "smoke123"}, 122003)
+    uid_new = api_ok("建号(初始无角色)", "POST", "/api/users", tok_admin,
+                     {"username": "u" + stamp_u, "displayName": "冒烟用户" + stamp_u, "password": "smoke123"})
+    if uid_new is None:
+        return finish()
+    api_err("重名拒绝 120101", "POST", "/api/users", tok_admin,
+            {"username": "u" + stamp_u, "displayName": "重复", "password": "smoke123"}, 120101)
+    api_err("弱密码拒绝 120103", "POST", "/api/users", tok_admin,
+            {"username": "w" + stamp_u, "displayName": "弱密", "password": "123"}, 120103)
+    login_new = api_ok("新号登录成功(建号可用)", "POST", "/api/auth/login",
+                       None, {"username": "u" + stamp_u, "password": "smoke123"})
+    step("新号回显 token+组织", bool((login_new or {}).get("token")), login_new)
+    api_ok("停用新号", "POST", "/api/users/%s/status" % uid_new, tok_admin, {"status": 1})
+    api_err("停用后登录拒绝 120102", "POST", "/api/auth/login", None,
+            {"username": "u" + stamp_u, "password": "smoke123"}, 120102)
+    api_err("停用自己拒绝 120104", "POST", "/api/users/1/status", tok_admin, {"status": 1}, 120104)
+    api_ok("重置密码(reset123)", "POST", "/api/users/%s/reset-password" % uid_new, tok_admin,
+           {"password": "reset123"})
+    _st, _res = call("POST", "/api/auth/login", None,
+                     {"username": "u" + stamp_u, "password": "smoke123"})
+    step("旧密码登录拒绝 110001", _st == 200 and _res.get("code") == 110001, _res)
+    api_ok("启用恢复(重置在停用态完成,启用后验证新密码)", "POST",
+           "/api/users/%s/status" % uid_new, tok_admin, {"status": 0})
+    login_r = api_ok("新密码登录成功", "POST", "/api/auth/login", None,
+                     {"username": "u" + stamp_u, "password": "reset123"})
+    step("重置后登录回显", bool((login_r or {}).get("token")), login_r)
+    _st2, _res2 = call("POST", "/api/users/%s/status" % uid_new, tok_admin, {"status": 1})
+    _st3, _res3 = call("POST", "/api/auth/login", None,
+                       {"username": "u" + stamp_u, "password": "reset123"})
+    step("再停用后登录拒绝 120102(重置不绕过停用闸)", _st3 == 200 and _res3.get("code") == 120102, _res3)
+    api_ok("再启用(清理至启用态)", "POST", "/api/users/%s/status" % uid_new, tok_admin, {"status": 0})
+    mg = api_ok("管理分页(keyword 过滤)", "GET",
+                "/api/users/manage?keyword=" + stamp_u, tok_admin)
+    step("分页命中新号+角色聚合字段", (mg or {}).get("total", 0) >= 1
+         and "roles" in ((mg.get("rows") or [{}])[0]), mg)
+    api_ok("清理:停用测试号(留审计,停用即不可登录不扰后续轮)",
+           "POST", "/api/users/%s/status" % uid_new, tok_admin, {"status": 1})
+
+
     # ========= C 端门户(addon-portal V1,第 49 次;匿名面 org=配置 yingzao.portal.org-id 默认 1)=========
     st, res = call("GET", "/api/c/cases?page=1&size=10")
     step("C端案例库匿名可看(无 token)", st == 200 and res.get("code") == 0
