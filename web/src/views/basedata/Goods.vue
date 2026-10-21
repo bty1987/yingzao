@@ -73,9 +73,14 @@
 
     <!-- 新建 / 编辑商品 -->
     <!-- Excel 导入 -->
-    <el-dialog v-model="importVisible" title="Excel 批量导入商品" width="560px">
+    <el-dialog v-model="importVisible" :title="`Excel 批量导入${kindLabel}`" width="560px">
+      <el-radio-group v-model="importKind" style="margin-bottom: 10px" :disabled="importing">
+        <el-radio-button value="goods">商品</el-radio-button>
+        <el-radio-button value="price">价格体系</el-radio-button>
+        <el-radio-button value="model">型号</el-radio-button>
+      </el-radio-group>
       <el-alert type="info" :closable="false" style="margin-bottom: 14px"
-        title="全量校验:任一行错误则整单拒绝;品类/品牌须已存在;金额单位为元,服务端转厘" />
+        title="全量校验:任一行错误则整单拒绝;引用的商品/品类/品牌须已存在;金额单位为元,服务端转厘" />
       <input type="file" accept=".xlsx" ref="importFile" style="display: block" />
       <template v-if="importErrors.length">
         <el-divider content-position="left">校验失败({{ importErrors.length }} 行)</el-divider>
@@ -465,6 +470,9 @@ const importVisible = ref(false)
 const importing = ref(false)
 const importErrors = ref([])
 const importFile = ref(null)
+const importKind = ref('goods')
+const KIND_LABEL = { goods: '商品', price: '价格体系', model: '型号' }
+const kindLabel = computed(() => KIND_LABEL[importKind.value] || '商品')
 
 async function onImport() {
   const f = importFile.value && importFile.value.files && importFile.value.files[0]
@@ -474,7 +482,7 @@ async function onImport() {
   try {
     const fd = new FormData()
     fd.append('file', f)
-    const res = await importGoods(fd)
+    const res = await importGoodsKind(importKind.value, fd)
     const d = res.data || {}
     ElMessage.success('导入成功 ' + d.imported + ' 条')
     importVisible.value = false
@@ -488,11 +496,11 @@ async function onImport() {
 
 async function onTemplate() {
   try {
-    const res = await downloadImportTemplate()
+    const res = await downloadImportTemplateKind(importKind.value)
     const url = URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a')
     a.href = url
-    a.download = 'goods-import-template.xlsx'
+    a.download = importKind.value + '-import-template.xlsx'
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {

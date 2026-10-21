@@ -747,7 +747,138 @@ def main():
     levels = sorted(str(r.get("level")) for r in (mpkgs or {}).get("rows", []))
     step("主数据行与引用行同时可见", bool(mpkgs) and mpkgs.get("total", 0) >= 2 and levels == ["0", "1"], mpkgs)
 
+    # ---- 导入器 V1.3:价格体系 + 型号批量导入(第 71 次;全量校验整单拒,uk 重复行报错,台账分型)----
+    print("\n== 导入器 V1.3(价格体系+型号) ==")
+    import openpyxl as _opx71
+
+    def upload_kind71(xbytes, token, kind):
+        boundary = "smokebound71x"
+        body = (("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" +
+                 kind + ".xlsx\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode("utf-8")
+                + xbytes + ("\r\n--" + boundary + "--\r\n").encode("utf-8"))
+        req = urllib.request.Request(BASE + "/api/basedata/goods/import" + ("" if kind == "goods" else "-" + kind),
+                                     data=body, method="POST")
+        req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
+        req.add_header("Authorization", "Bearer " + token)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read().decode("utf-8"))
+
+    stamp71 = time.strftime("%H%M%S") + "71"
+    cat71 = api_ok("V1.3 专建品类", "POST", "/api/basedata/categories", tok_admin,
+                   {"name": "烟测品类" + stamp71})
+    if cat71 is None:
+        return finish()
+    brand71 = api_ok("V1.3 专建品牌", "POST", "/api/basedata/brands", tok_admin,
+                     {"name": "烟测品牌" + stamp71, "pinyin": "ycpp" + stamp71})
+    _wb71 = _opx71.Workbook(); _ws71 = _wb71.active
+    _ws71.append(["商品名称", "拼音", "品类", "品牌", "单位", "条码", "售价(元)", "进价(元)", "限价(元)"])
+    _ws71.append(["烟测价格商品A" + stamp71, "ycja" + stamp71, "烟测品类" + stamp71,
+                  "烟测品牌" + stamp71, "片", None, "100.00", "60.00", None])
+    _ws71.append(["烟测价格商品B" + stamp71, "ycjb" + stamp71, "烟测品类" + stamp71,
+                  "烟测品牌" + stamp71, "片", None, "200.00", "120.00", None])
+    _buf71 = io.BytesIO(); _wb71.save(_buf71)
+    st, res = upload_kind71(_buf71.getvalue(), tok_admin, "goods")
+    step("V1.3 依赖商品导入(A/B)", st == 200 and res.get("code") == 0
+         and (res.get("data") or {}).get("imported") == 2, res)
+
+    # 价格体系:合法行(引用已存在商品)
+    _wb71 = _opx71.Workbook(); _ws71 = _wb71.active
+    _ws71.append(["商品名称", "价格体系名", "进价(元)", "售价(元)", "限价(元)", "生效日", "失效日"])
+    _ws71.append(["烟测价格商品A" + stamp71, "一级价", "60.00", "100.00", None, "2026-01-01", None])
+    _ws71.append(["烟测价格商品B" + stamp71, "渠道价", None, "200.00", "180.00", None, "2026-12-31"])
+    _buf71 = io.BytesIO(); _wb71.save(_buf71)
+    st, res = upload_kind71(_buf71.getvalue(), tok_admin, "price")
+    step("价格体系导入 2 行成功", st == 200 and res.get("code") == 0
+         and (res.get("data") or {}).get("imported") == 2, res)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select p.name, p.selling, p.begin_time, p.end_time
+                from basedata_goods_price p join basedata_goods g on g.id = p.goods_id
+                where g.name like %s order by p.id
+            """, ("烟测价格商品A" + stamp71 + "%",))
+            prows = cur.fetchall()
+    finally:
+        conn.close()
+    step("价格行落库(厘换算+日期生效)", len(prows) == 1 and prows[0][1] == 100000
+         and str(prows[0][2]) == "2026-01-01", prows)
+    _wb71 = _opx71.Workbook(); _ws71 = _wb71.active
+    _ws71.append(["商品名称", "价格体系名", "进价(元)", "售价(元)", "限价(元)", "生效日", "失效日"])
+    _ws71.append(["烟测价格商品A" + stamp71, "一级价", "60.00", "110.00", None, None, None])
+    _ws71.append(["不存在的商品" + stamp71, "渠道价", None, "1.00", None, None, None])
+    _ws71.append(["烟测价格商品A" + stamp71, "二级价", None, "1.00", None, "2026/01/01", None])
+    _buf71 = io.BytesIO(); _wb71.save(_buf71)
+    st, res = upload_kind71(_buf71.getvalue(), tok_admin, "price")
+    errs = (res.get("data") or {}).get("errors") or []
+    step("价格导入整单拒 260023(已存在/商品缺失/日期格式逐行)",
+         st == 200 and res.get("code") == 260023
+         and any("已存在" in str(e.get("message")) for e in errs)
+         and any("商品不存在" in str(e.get("message")) for e in errs)
+         and any("yyyy-MM-dd" in str(e.get("message")) for e in errs), res)
+
+    # 型号导入:合法行(底价/点位两计价,关联商品与独立型号两态)
+    _wb71 = _opx71.Workbook(); _ws71 = _wb71.active
+    _ws71.append(["型号名称", "商品名称", "品牌", "单位", "单价(元)", "进价(元)", "折扣(‰)",
+                  "计价方式", "底价(元)", "点位(‰)"])
+    _ws71.append(["烟测型号A" + stamp71, "烟测价格商品A" + stamp71, "烟测品牌" + stamp71,
+                  "片", "128.00", "80.00", "1000", "底价", "118.00", None])
+    _ws71.append(["烟测型号B" + stamp71, None, "烟测品牌" + stamp71,
+                  "片", "99.00", None, None, "点位", None, "300"])
+    _buf71 = io.BytesIO(); _wb71.save(_buf71)
+    st, res = upload_kind71(_buf71.getvalue(), tok_admin, "model")
+    step("型号导入 2 行成功(关联商品/独立型号两态)", st == 200 and res.get("code") == 0
+         and (res.get("data") or {}).get("imported") == 2, res)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select m.no, m.name, m.price, m.calc_type, m.base_value, m.point_value, g.name
+                from basedata_material_model m
+                left join basedata_goods g on g.id = m.goods_id
+                where m.name like %s order by m.id
+            """, ("烟测型号A" + stamp71 + "%",))
+            mrows = cur.fetchall()
+    finally:
+        conn.close()
+    step("型号行落库(no=M前缀+底价厘+关联商品)", len(mrows) == 1 and mrows[0][0].startswith("M")
+         and mrows[0][3] == 0 and mrows[0][4] == 118000
+         and bool(mrows[0][6]), mrows)
+    _wb71 = _opx71.Workbook(); _ws71 = _wb71.active
+    _ws71.append(["型号名称", "商品名称", "品牌", "单位", "单价(元)", "进价(元)", "折扣(‰)",
+                  "计价方式", "底价(元)", "点位(‰)"])
+    _ws71.append(["烟测型号C" + stamp71, None, None, "片", "10.00", None, None, "零售", None, None])
+    _ws71.append(["烟测型号D" + stamp71, None, None, "片", "10.00", None, None, "点位", None, "500000"])
+    _ws71.append(["烟测型号E" + stamp71, "烟测价格商品A" + stamp71, None, "片", "10.00", None,
+                  None, "底价", None, "100"])
+    _buf71 = io.BytesIO(); _wb71.save(_buf71)
+    st, res = upload_kind71(_buf71.getvalue(), tok_admin, "model")
+    errs = (res.get("data") or {}).get("errors") or []
+    step("型号导入整单拒 260023(方式枚举/点位越界/底价必填)零入库",
+         st == 200 and res.get("code") == 260023
+         and any("「点位」" in str(e.get("message")) for e in errs)
+         and any("1-100000" in str(e.get("message")) for e in errs)
+         and any("必填底价" in str(e.get("message")) for e in errs), res)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select count(*) from basedata_material_model where name like %s",
+                        ("烟测型号C" + stamp71 + "%",))
+            cnt_m = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("型号校验失败零入库", cnt_m == 0, cnt_m)
+    his71 = api_ok("导入台账分型复查", "GET", "/api/basedata/goods/import-history?page=1&size=10",
+                   tok_admin)
+    htypes = [r.get("import_type") for r in (his71 or {}).get("rows", [])][:4]
+    step("台账含 price/model 新类型", "price" in htypes and "model" in htypes, htypes)
+
     print("== 款项(addon-payment V1:三件套)==")
+
+
     stamp4 = time.strftime("%Y%m%d%H%M%S")
     dep_code, con_code = "smokedep" + stamp4[-6:], "smokecon" + stamp4[-6:]
     type_dep = api_ok("建款项类型(顺序1)", "POST", "/api/payment/bill-types", tok_admin,
@@ -3526,12 +3657,20 @@ def main():
     stamp_sp = time.strftime("%H%d%H%M%S") + "sp"
 
     # 依赖自建:品牌×3 + 品类×1(全部 stamp 唯一,跨轮可重复执行)
-    sp_brand_x = api_ok("建品牌X(直属候选)", "POST", "/api/basedata/brands", tok_admin,
-                        {"name": "SP烟测品牌X" + stamp_sp, "pinyin": "spycppx" + stamp_sp[-6:]})
-    sp_brand_y = api_ok("建品牌Y(直属顶替)", "POST", "/api/basedata/brands", tok_admin,
-                        {"name": "SP烟测品牌Y" + stamp_sp, "pinyin": "spycppy" + stamp_sp[-6:]})
-    sp_brand_z = api_ok("建品牌Z(未关联对照)", "POST", "/api/basedata/brands", tok_admin,
-                        {"name": "SP烟测品牌Z" + stamp_sp, "pinyin": "spycppz" + stamp_sp[-6:]})
+    def brand_sp_idempotent(letter):
+        # 并行 smoke 进程同秒撞名防御(第 71 次):存在即复用,不存在才建
+        nm = "SP烟测品牌" + letter + stamp_sp
+        ex = api_ok("查品牌" + letter + "(幂等前置)", "GET",
+                    "/api/basedata/brands?keyword=" + urllib.parse.quote(nm), tok_admin)
+        hit = next((b for b in (ex or []) if b.get("name") == nm), None)
+        if hit:
+            return hit["id"]
+        return api_ok("建品牌" + letter, "POST", "/api/basedata/brands", tok_admin,
+                      {"name": nm, "pinyin": "spycpp" + letter.lower() + stamp_sp[-6:]})
+
+    sp_brand_x = brand_sp_idempotent("X")
+    sp_brand_y = brand_sp_idempotent("Y")
+    sp_brand_z = brand_sp_idempotent("Z")
     sp_cat = api_ok("建品类(条款细化)", "POST", "/api/basedata/categories", tok_admin,
                     {"name": "SP烟测品类" + stamp_sp})
     if None in (sp_brand_x, sp_brand_y, sp_brand_z, sp_cat):

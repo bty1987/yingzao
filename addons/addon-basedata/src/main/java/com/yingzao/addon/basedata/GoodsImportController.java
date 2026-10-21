@@ -76,6 +76,78 @@ public class GoodsImportController {
         }
     }
 
+    /** 价格体系模板下载(V1.3)。 */
+    @GetMapping("/import-price-template")
+    public void priceTemplate(jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        response.setContentType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename=price-import-template.xlsx");
+        response.getOutputStream().write(imports.priceTemplate());
+    }
+
+    /** 价格体系批量导入(V1.3)。 */
+    @PostMapping("/import-price")
+    public ApiResponse<Map<String, Object>> importPrices(@RequestParam("file") MultipartFile file,
+            HttpServletRequest request) throws java.io.IOException {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        if (file == null || file.isEmpty()) {
+            throw new BizException(GoodsImportService.CODE_IMPORT_INVALID, msg("goods.import.empty"));
+        }
+        try {
+            GoodsImportService.ImportReport report =
+                    imports.importPrices(orgId, file.getBytes(), userId == null ? 0L : userId);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("total", report.total());
+            out.put("imported", report.imported());
+            out.put("errors", report.errors());
+            return ApiResponse.ok(out);
+        } catch (GoodsImportService.ImportInvalidException e) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("total", e.report.total());
+            out.put("imported", 0);
+            out.put("errors", e.report.errors());
+            return new ApiResponse<>(GoodsImportService.CODE_IMPORT_INVALID,
+                    msg("goods.import.invalid"), out);
+        }
+    }
+
+    /** 型号模板下载(V1.3)。 */
+    @GetMapping("/import-model-template")
+    public void modelTemplate(jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        response.setContentType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename=model-import-template.xlsx");
+        response.getOutputStream().write(imports.modelTemplate());
+    }
+
+    /** 型号批量导入(V1.3)。 */
+    @PostMapping("/import-model")
+    public ApiResponse<Map<String, Object>> importModels(@RequestParam("file") MultipartFile file,
+            HttpServletRequest request) throws java.io.IOException {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        if (file == null || file.isEmpty()) {
+            throw new BizException(GoodsImportService.CODE_IMPORT_INVALID, msg("goods.import.empty"));
+        }
+        try {
+            GoodsImportService.ImportReport report =
+                    imports.importModels(orgId, file.getBytes(), userId == null ? 0L : userId);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("total", report.total());
+            out.put("imported", report.imported());
+            out.put("errors", report.errors());
+            return ApiResponse.ok(out);
+        } catch (GoodsImportService.ImportInvalidException e) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("total", e.report.total());
+            out.put("imported", 0);
+            out.put("errors", e.report.errors());
+            return new ApiResponse<>(GoodsImportService.CODE_IMPORT_INVALID,
+                    msg("goods.import.invalid"), out);
+        }
+    }
+
     private String msg(String key) {
         return messages.getMessage(key, null, LocaleContextHolder.getLocale());
     }

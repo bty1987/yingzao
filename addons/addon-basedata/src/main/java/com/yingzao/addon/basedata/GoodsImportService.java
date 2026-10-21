@@ -120,7 +120,14 @@ public class GoodsImportService {
             if (!isPackageRow) {
                 check(errors, rowNo, "拼音", r.pinyin != null && r.pinyin.matches("[a-z][a-z0-9]*"),
                         "goods.import.pinyin");
-                check(errors, rowNo, "售价(元)", r.selling != null, "goods.import.number");
+                check(errors, rowNo, "售价(元)", r.selling != null && r.selling >= 0, "goods.import.number");
+            }
+            // 三价非法数字(num() 返 -1)显式报错,不静默置 null(V1.1 漏网顺修)
+            if (r.purchase != null && r.purchase < 0) {
+                check(errors, rowNo, "进价(元)", false, "goods.import.number");
+            }
+            if (r.confine != null && r.confine < 0) {
+                check(errors, rowNo, "限价(元)", false, "goods.import.number");
             }
             check(errors, rowNo, "单位", notBlank(r.unit), "goods.import.required");
 
@@ -435,5 +442,327 @@ public class GoodsImportService {
                 "select count(*) from basedata_goods where org_id = ? and barcode = ?", Integer.class,
                 orgId, barcode);
         return n != null && n > 0;
+    }
+
+    // ==================== V1.3 价格体系导入 ====================
+
+    private static final String[] PRICE_HEADERS = {
+            "商品名称", "价格体系名", "进价(元)", "售价(元)", "限价(元)", "生效日", "失效日"};
+
+    /** 价格体系模板下载(7 列;生效/失效日 yyyy-MM-dd,空=立即/长期)。 */
+    public byte[] priceTemplate() {
+        try (XSSFWorkbook wb = new XSSFWorkbook();
+                ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("价格体系导入");
+            Row head = sheet.createRow(0);
+            for (int i = 0; i < PRICE_HEADERS.length; i++) {
+                head.createCell(i).setCellValue(PRICE_HEADERS[i]);
+                sheet.setColumnWidth(i, 16 * 256);
+            }
+            Row demo = sheet.createRow(1);
+            demo.createCell(0).setCellValue("示例-瓷砖");
+            demo.createCell(1).setCellValue("一级价");
+            demo.createCell(2).setCellValue("80.00");
+            demo.createCell(3).setCellValue("128.00");
+            demo.createCell(4).setCellValue("158.00");
+            demo.createCell(5).setCellValue("2026-01-01");
+            demo.createCell(6).setCellValue("");
+            wb.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("price template build failed", e);
+        }
+    }
+
+    private record PriceRow(String goodsName, String priceName, Long purchase, Long selling,
+            Long confine, String beginDay, String endDay) {
+    }
+
+    private List<PriceRow> parsePrices(byte[] xlsx) {
+        List<PriceRow> out = new ArrayList<>();
+        try (XSSFWorkbook wb = new XSSFWorkbook(new java.io.ByteArrayInputStream(xlsx))) {
+            Sheet sheet = wb.getSheetAt(0);
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null || isPriceBlankRow(row)) {
+                    continue;
+                }
+                out.add(new PriceRow(str(row, 0), str(row, 1), num(row, 2), num(row, 3),
+                        num(row, 4), str(row, 5), str(row, 6)));
+            }
+            return out;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(CODE_IMPORT_INVALID, msg("goods.import.unreadable"));
+        }
+    }
+
+    private boolean isPriceBlankRow(Row row) {
+        for (int c = 0; c < PRICE_HEADERS.length; c++) {
+            String v = str(row, c);
+            if (v != null && !v.isBlank()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 价格体系批量导入(V1.3):商品必须已存在(不级联建);uk(goods_id, name) 已存在报错行
+     * (导入只做新增,变更走编辑);生效/失效日 yyyy-MM-dd;全量校验整单拒。
+     */
+    @Transactional
+    public ImportReport importPrices(long orgId, byte[] xlsx, long operatorId) {
+        List<PriceRow> rows = parsePrices(xlsx);
+        if (rows.isEmpty()) {
+            throw new BizException(CODE_IMPORT_INVALID, msg("goods.import.empty"));
+        }
+        List<Map<String, Object>> errors = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        Map<Integer, Long> goodsIds = new LinkedHashMap<>();
+        Map<Integer, java.time.LocalDate> begins = new LinkedHashMap<>();
+        Map<Integer, java.time.LocalDate> ends = new LinkedHashMap<>();
+        for (int i = 0; i < rows.size(); i++) {
+            int rowNo = i + 2;
+            PriceRow r = rows.get(i);
+            check(errors, rowNo, "商品名称", notBlank(r.goodsName()), "goods.import.required");
+            Long gid = notBlank(r.goodsName()) ? goodsIdByName(orgId, r.goodsName().trim()) : null;
+            if (notBlank(r.goodsName()) && gid == null) {
+                check(errors, rowNo, "商品名称", false, "goods.import.goodsMissing");
+            } else if (gid != null) {
+                goodsIds.put(i, gid);
+            }
+            check(errors, rowNo, "价格体系名", notBlank(r.priceName()), "goods.import.required");
+            check(errors, rowNo, "价格(元)", r.purchase() != null || r.selling() != null
+                    || r.confine() != null, "goods.import.price.needOne");
+            if (r.purchase() != null && r.purchase() < 0) {
+                check(errors, rowNo, "进价(元)", false, "goods.import.number");
+            }
+            if (r.selling() != null && r.selling() < 0) {
+                check(errors, rowNo, "售价(元)", false, "goods.import.number");
+            }
+            if (r.confine() != null && r.confine() < 0) {
+                check(errors, rowNo, "限价(元)", false, "goods.import.number");
+            }
+            for (String[] col : new String[][]{{"生效日", r.beginDay()}, {"失效日", r.endDay()}}) {
+                if (notBlank(col[1])) {
+                    java.time.LocalDate d = parseDay(col[1]);
+                    if (d == null) {
+                        check(errors, rowNo, col[0], false, "goods.import.price.dateFmt");
+                    } else if (col[0].equals("生效日")) {
+                        begins.put(i, d);
+                    } else {
+                        ends.put(i, d);
+                    }
+                }
+            }
+            String key = (r.goodsName() == null ? "" : r.goodsName().trim())
+                    + "|" + (r.priceName() == null ? "" : r.priceName().trim());
+            if (!seen.add(key)) {
+                check(errors, rowNo, "价格体系名", false, "goods.import.dupRow");
+            } else if (gid != null && priceExists(orgId, gid, r.priceName().trim())) {
+                check(errors, rowNo, "价格体系名", false, "goods.import.price.dup");
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new ImportInvalidException(new ImportReport(rows.size(), 0, errors));
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            PriceRow r = rows.get(i);
+            jdbc.update("""
+                    insert into basedata_goods_price
+                        (org_id, goods_id, name, purchase, selling, confine, begin_time, end_time, status)
+                    values (?,?,?,?,?,?,?,?,0)
+                    """, orgId, goodsIds.get(i), r.priceName().trim(), toLi(r.purchase()),
+                    toLi(r.selling()), toLi(r.confine()),
+                    begins.containsKey(i) ? java.sql.Date.valueOf(begins.get(i)) : null,
+                    ends.containsKey(i) ? java.sql.Date.valueOf(ends.get(i)) : null);
+        }
+        recordImportHistory(orgId, "price", rows.size(), 0, null, operatorId);
+        return new ImportReport(rows.size(), rows.size(), errors);
+    }
+
+    /** yyyy-MM-dd;非法返回 null(校验层报错)。 */
+    private java.time.LocalDate parseDay(String text) {
+        String v = text.trim();
+        if (!v.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            return null;
+        }
+        try {
+            return java.time.LocalDate.parse(v);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean priceExists(long orgId, long goodsId, String name) {
+        Integer n = jdbc.queryForObject(
+                "select count(*) from basedata_goods_price where org_id = ? and goods_id = ? and name = ?",
+                Integer.class, orgId, goodsId, name);
+        return n != null && n > 0;
+    }
+
+    // ==================== V1.3 型号导入 ====================
+
+    private static final String[] MODEL_HEADERS = {
+            "型号名称", "商品名称", "品牌", "单位", "单价(元)", "进价(元)", "折扣(‰)", "计价方式",
+            "底价(元)", "点位(‰)"};
+
+    /** 型号模板下载(10 列;计价方式=底价/点位;折扣与点位为千分位整数,1000=原价)。 */
+    public byte[] modelTemplate() {
+        try (XSSFWorkbook wb = new XSSFWorkbook();
+                ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("型号导入");
+            Row head = sheet.createRow(0);
+            for (int i = 0; i < MODEL_HEADERS.length; i++) {
+                head.createCell(i).setCellValue(MODEL_HEADERS[i]);
+                sheet.setColumnWidth(i, 16 * 256);
+            }
+            Row demo = sheet.createRow(1);
+            demo.createCell(0).setCellValue("示例-型号A");
+            demo.createCell(1).setCellValue("示例-瓷砖");
+            demo.createCell(2).setCellValue("马可波罗");
+            demo.createCell(3).setCellValue("片");
+            demo.createCell(4).setCellValue("128.00");
+            demo.createCell(5).setCellValue("80.00");
+            demo.createCell(6).setCellValue("1000");
+            demo.createCell(7).setCellValue("底价");
+            demo.createCell(8).setCellValue("118.00");
+            demo.createCell(9).setCellValue("");
+            wb.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("model template build failed", e);
+        }
+    }
+
+    private record ModelRow(String name, String goodsName, String brand, String unit, Long price,
+            Long purchase, Integer discount, String calcType, Long baseValue, Integer pointValue) {
+    }
+
+    private List<ModelRow> parseModels(byte[] xlsx) {
+        List<ModelRow> out = new ArrayList<>();
+        try (XSSFWorkbook wb = new XSSFWorkbook(new java.io.ByteArrayInputStream(xlsx))) {
+            Sheet sheet = wb.getSheetAt(0);
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null || isModelBlankRow(row)) {
+                    continue;
+                }
+                out.add(new ModelRow(str(row, 0), str(row, 1), str(row, 2), str(row, 3),
+                        num(row, 4), num(row, 5), intVal(row, 6), str(row, 7),
+                        num(row, 8), intVal(row, 9)));
+            }
+            return out;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(CODE_IMPORT_INVALID, msg("goods.import.unreadable"));
+        }
+    }
+
+    private boolean isModelBlankRow(Row row) {
+        for (int c = 0; c < MODEL_HEADERS.length; c++) {
+            String v = str(row, c);
+            if (v != null && !v.isBlank()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** 整数列(折扣/点位,千分位);空返回 null;非法返回 -1(校验层报错)。 */
+    private Integer intVal(Row row, int col) {
+        Cell cell = row.getCell(col);
+        if (cell == null) {
+            return null;
+        }
+        try {
+            if (cell.getCellType() == CellType.NUMERIC) {
+                return (int) Math.round(cell.getNumericCellValue());
+            }
+            String v = cell.toString().trim();
+            return v.isEmpty() ? null : (int) Math.round(Double.parseDouble(v));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 型号批量导入(V1.3):型号名在库内不唯一(同型号可挂不同商品,uk 仅 no),故不做名称查重;
+     * 商品/品牌可空且填则必须已存在;计价方式=底价(必填底价)/点位(必填点位 1-100000);
+     * 折扣千分位 1-100000;no 按 id 生成(M+8位,md5 占位防并发撞号);全量校验整单拒。
+     */
+    @Transactional
+    public ImportReport importModels(long orgId, byte[] xlsx, long operatorId) {
+        List<ModelRow> rows = parseModels(xlsx);
+        if (rows.isEmpty()) {
+            throw new BizException(CODE_IMPORT_INVALID, msg("goods.import.empty"));
+        }
+        List<Map<String, Object>> errors = new ArrayList<>();
+        Map<Integer, Long> goodsIds = new LinkedHashMap<>();
+        Map<Integer, Long> brandIds = new LinkedHashMap<>();
+        for (int i = 0; i < rows.size(); i++) {
+            int rowNo = i + 2;
+            ModelRow r = rows.get(i);
+            check(errors, rowNo, "型号名称", notBlank(r.name()), "goods.import.required");
+            if (notBlank(r.goodsName())) {
+                Long gid = goodsIdByName(orgId, r.goodsName().trim());
+                if (gid == null) {
+                    check(errors, rowNo, "商品名称", false, "goods.import.goodsMissing");
+                } else {
+                    goodsIds.put(i, gid);
+                }
+            }
+            if (notBlank(r.brand())) {
+                Long bid = brandIdByName(orgId, r.brand());
+                if (bid == null) {
+                    check(errors, rowNo, "品牌", false, "goods.import.brand");
+                } else {
+                    brandIds.put(i, bid);
+                }
+            }
+            check(errors, rowNo, "单位", notBlank(r.unit()), "goods.import.required");
+            check(errors, rowNo, "单价(元)", r.price() != null && r.price() > 0, "goods.import.price.positive");
+            if (r.purchase() != null && r.purchase() < 0) {
+                check(errors, rowNo, "进价(元)", false, "goods.import.number");
+            }
+            String calc = r.calcType() == null ? "" : r.calcType().trim();
+            check(errors, rowNo, "计价方式", calc.equals("底价") || calc.equals("点位"),
+                    "goods.import.model.calcType");
+            if (calc.equals("底价")) {
+                check(errors, rowNo, "底价(元)", r.baseValue() != null && r.baseValue() > 0,
+                        "goods.import.model.baseNeed");
+                check(errors, rowNo, "点位(‰)", r.pointValue() == null, "goods.import.model.pointNoise");
+            } else if (calc.equals("点位")) {
+                check(errors, rowNo, "点位(‰)", r.pointValue() != null && r.pointValue() >= 1
+                        && r.pointValue() <= 100000, "goods.import.model.pointRange");
+                check(errors, rowNo, "底价(元)", r.baseValue() == null, "goods.import.model.baseNoise");
+            }
+            if (r.discount() != null && (r.discount() < 1 || r.discount() > 100000)) {
+                check(errors, rowNo, "折扣(‰)", false, "goods.import.model.discountRange");
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new ImportInvalidException(new ImportReport(rows.size(), 0, errors));
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            ModelRow r = rows.get(i);
+            String calc = r.calcType().trim();
+            jdbc.update("""
+                    insert into basedata_material_model
+                        (org_id, no, name, goods_id, brand_id, unit, price, purchase, discount,
+                         calc_type, base_value, point_value, status, created_by)
+                    values (?, concat('M', left(md5(uuid()), 8)), ?,?,?,?,?,?,?,?,?,?,0,?)
+                    """, orgId, r.name().trim(), goodsIds.get(i), brandIds.get(i),
+                    r.unit().trim(), r.price(), toLi(r.purchase()), r.discount(),
+                    calc.equals("点位") ? 1 : 0, toLi(r.baseValue()),
+                    r.pointValue() != null && r.pointValue() >= 1 ? r.pointValue() : null, operatorId);
+            long id = jdbc.queryForObject("select last_insert_id()", Long.class);
+            jdbc.update("update basedata_material_model set no = concat('M', lpad(id, 8, '0')) where id = ?", id);
+        }
+        recordImportHistory(orgId, "model", rows.size(), 0, null, operatorId);
+        return new ImportReport(rows.size(), rows.size(), errors);
     }
 }

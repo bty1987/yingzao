@@ -99,6 +99,12 @@ export const importGoods = (formData) => http.post('/api/basedata/goods/import',
 })
 export const downloadImportTemplate = () =>
   http.get('/api/basedata/goods/import-template', { responseType: 'blob' })
+export const importGoodsKind = (kind, formData) =>
+  http.post(`/api/basedata/goods/import${kind === 'goods' ? '' : '-' + kind}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+export const downloadImportTemplateKind = (kind) =>
+  http.get(`/api/basedata/goods/import${kind === 'goods' ? '' : '-' + kind}-template`, { responseType: 'blob' })
 export const importHistory = (params) => http.get('/api/basedata/goods/import-history', { params })
 export const updateGoods = (id, data) => http.put(`/api/basedata/goods/${id}`, data)
 export const updateGoodsStatus = (id, data) => http.post(`/api/basedata/goods/${id}/status`, data)
