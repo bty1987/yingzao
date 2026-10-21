@@ -6,6 +6,7 @@ import Roles from '../views/Roles.vue'
 import Events from '../views/Events.vue'
 import Plans from '../views/Plans.vue'
 import Users from '../views/Users.vue'
+import Orgs from '../views/Orgs.vue'
 
 // 静态路由:登录 + 主布局 + 内核平台页(审批中心/角色权限/事件总线)。业务路由由插件菜单动态注册(见 registerAddonRoutes)。
 const routes = [
@@ -16,6 +17,7 @@ const routes = [
   { path: '/events', component: Layout, children: [{ path: '', component: Events, meta: { title: '事件总线' } }] },
   { path: '/plans', component: Layout, children: [{ path: '', component: Plans, meta: { title: '计划任务' } }] },
   { path: '/users', component: Layout, children: [{ path: '', component: Users, meta: { title: '用户管理' } }] },
+  { path: '/orgs', component: Layout, children: [{ path: '', component: Orgs, meta: { title: '组织管理' } }]},
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

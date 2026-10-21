@@ -876,7 +876,95 @@ def main():
     htypes = [r.get("import_type") for r in (his71 or {}).get("rows", [])][:4]
     step("台账含 price/model 新类型", "price" in htypes and "model" in htypes, htypes)
 
+    # ========= 组织树(V108,第 72 次;自引用树/懒建根/停用子树级联/登录拒)=========
+    print("\n== 组织树(建层级/同级重名/停用级联/登录拒) ==")
+    import pymysql as _pym71
+    stamp_o = time.strftime("%H%M%S") + "o72"
+    org_region = api_ok("建分区(父组织1)", "POST", "/api/orgs", tok_admin,
+                        {"parentId": 1, "name": "烟测分区" + stamp_o, "levelType": "region"})
+    if org_region is None:
+        return finish()
+    org_dept = api_ok("建部门(父分区)", "POST", "/api/orgs", tok_admin,
+                      {"parentId": org_region, "name": "烟测部门" + stamp_o, "levelType": "department"})
+    api_err("同级重名拒绝 120108", "POST", "/api/orgs", tok_admin,
+            {"parentId": org_region, "name": "烟测部门" + stamp_o, "levelType": "department"}, 120108)
+    tree_r = api_ok("树查询", "GET", "/api/orgs", tok_admin)
+
+    def find_org_node(nodes, nid):
+        for n in nodes or []:
+            if n.get("id") == nid:
+                return n
+            hit = find_org_node(n.get("children"), nid)
+            if hit:
+                return hit
+        return None
+
+    rn = find_org_node(tree_r, org_region)
+    step("树嵌套:分区含部门子节点", bool(rn) and any(
+        c.get("id") == org_dept for c in (rn.get("children") or [])), rn)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                insert into yz_user(org_id, username, password_sha256, display_name, status)
+                values (%s, %s, sha2(%s, 256), %s, 0)
+            """, (org_dept, "u" + stamp_o, "orguser123", "烟测组织用户" + stamp_o))
+        conn.commit()
+    finally:
+        conn.close()
+    login_o = api_ok("分区用户登录成功(停用前)", "POST", "/api/auth/login", None,
+                     {"username": "u" + stamp_o, "password": "orguser123"})
+    step("分区用户回显 token", bool((login_o or {}).get("token")), login_o)
+    api_ok("停用分区(子树级联)", "POST", "/api/orgs/%s/status" % org_region, tok_admin,
+           {"status": 1})
+    _st, _res = call("POST", "/api/auth/login", None,
+                     {"username": "u" + stamp_o, "password": "orguser123"})
+    step("停用后分区用户登录拒绝 120106", _st == 200 and _res.get("code") == 120106, _res)
+    api_err("根组织不可停用 120109", "POST", "/api/orgs/1/status", tok_admin, {"status": 1}, 120109)
+    api_ok("启用分区(只恢复本节点)", "POST", "/api/orgs/%s/status" % org_region, tok_admin,
+           {"status": 0})
+    _st, _res = call("POST", "/api/auth/login", None,
+                     {"username": "u" + stamp_o, "password": "orguser123"})
+    step("启用后仍登录拒绝 120106(部门保持停用)", _st == 200 and _res.get("code") == 120106, _res)
+    _c71 = _pym71.connect(host="192.168.5.21", user="root",
+                           password=os.environ.get("YINGZAO_DB_PASSWORD", "Neusoft!"),
+                           database="yingzao", charset="utf8mb4")
+    try:
+        with _c71.cursor() as _cur71:
+            _cur71.execute("select status from organization where id = %s", (org_dept,))
+            dept_row = _cur71.fetchone()[0]
+    finally:
+        _c71.close()
+    step("部门保持停用(启用不级联)", dept_row == 1, dept_row)
+    api_ok("启用部门(清理)", "POST", "/api/orgs/%s/status" % org_dept, tok_admin, {"status": 0})
+    # 懒建根:历史 org(无行)用户登录即自动补根节点,零迁移
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                insert into yz_user(org_id, username, password_sha256, display_name, status)
+                values (900001, %s, sha2(%s, 256), %s, 0)
+            """, ("u900" + stamp_o, "legacy123", "烟测历史组织用户"))
+        conn.commit()
+    finally:
+        conn.close()
+    login_l = api_ok("历史组织用户登录成功(懒建根)", "POST", "/api/auth/login", None,
+                     {"username": "u900" + stamp_o, "password": "legacy123"})
+    step("历史组织 token 回显", bool((login_l or {}).get("token")), login_l)
+    _c71 = _pym71.connect(host="192.168.5.21", user="root",
+                           password=os.environ.get("YINGZAO_DB_PASSWORD", "Neusoft!"),
+                           database="yingzao", charset="utf8mb4")
+    try:
+        with _c71.cursor() as _cur71:
+            _cur71.execute("select level_type, status from organization where id = 900001")
+            legacy_row = _cur71.fetchone()
+    finally:
+        _c71.close()
+    step("历史组织根节点自动补建(零迁移)", legacy_row[1] == 0, legacy_row)
+    api_err("非管理员组织管理拒绝 122003", "GET", "/api/orgs", tok_b, None, 122003)
+
     print("== 款项(addon-payment V1:三件套)==")
+
 
 
     stamp4 = time.strftime("%Y%m%d%H%M%S")
