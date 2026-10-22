@@ -29,6 +29,7 @@
         <module>addons/addon-supplier</module>
         <module>addons/addon-member</module>
         <module>addons/addon-portal</module>
+        <module>addons/addon-target</module>
         <module>yingzao-app</module>
     </modules>
 

@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.yingzao.addons.api.DecorationApi;
+import com.yingzao.addons.api.PaymentApi;
 
 /**
  * 装修单域只读契约实现(消费方:addon-quotation 建报价挂单校验+展示快照);只读,不持业务写路径。
@@ -16,9 +17,12 @@ import com.yingzao.addons.api.DecorationApi;
 public class DecorationApiImpl implements DecorationApi {
 
     private final JdbcTemplate jdbc;
+    private final PaymentApi payments;
 
-    public DecorationApiImpl(JdbcTemplate jdbc) {
+    public DecorationApiImpl(JdbcTemplate jdbc,
+            @org.springframework.context.annotation.Lazy PaymentApi payments) {
         this.jdbc = jdbc;
+        this.payments = payments;
     }
 
     @Override
@@ -54,6 +58,25 @@ public class DecorationApiImpl implements DecorationApi {
                         ((Number) r.get("status")).intValue(),
                         ((Number) r.get("project_status")).intValue()))
                 .toList();
+    }
+
+    /** 签约实绩月合计(只读聚合;target 消费):当月首签单的签约拆分款应收合计(未作废)。 */
+    @Override
+    public long contractSignedTotalByMonth(long orgId, String yearMonth) {
+        List<Long> ids = jdbc.queryForList(
+                "select id from decoration_order where org_id = ? and status in (3, 4, 7, 8)"
+                        + " and date_format(contract_time, '%Y-%m') = ?",
+                Long.class, orgId, yearMonth);
+        long total = 0;
+        for (Long orderId : ids) {
+            for (PaymentApi.BillSummary b : payments.listBills(orgId, "decoration", "order",
+                    String.valueOf(orderId))) {
+                if (b.direction() == 0 && b.status() != 4) {
+                    total += b.amount();
+                }
+            }
+        }
+        return total;
     }
 
     @Override

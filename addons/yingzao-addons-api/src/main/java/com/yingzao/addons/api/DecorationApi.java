@@ -38,6 +38,14 @@ public interface DecorationApi {
      */
     java.util.List<OrderBrief> listByCustomer(long orgId, long customerId);
 
+    /**
+     * 签约实绩月合计(只读聚合;addon-target 经营目标消费):status ∈ {3 签约, 4 重签,
+     * 7 决算, 8 完工} 且首签月 = yearMonth 的签约拆分款应收合计(重签同单只计一次;
+     * 合同总额不落主单,拆分款即签约额);
+     * 组织内合计,子树聚合由消费方按其数据范围循环。
+     */
+    long contractSignedTotalByMonth(long orgId, String yearMonth);
+
     /** 客户视角装修单摘要(只读投影;零金额零人员)。 */
     record OrderBrief(long orderId, String orderNo, String houseLabel, int status, int projectStatus) {
     }

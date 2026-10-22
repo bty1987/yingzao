@@ -79,6 +79,11 @@
             <artifactId>addon-portal</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.yingzao</groupId>
+            <artifactId>addon-target</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>

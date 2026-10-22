@@ -50,7 +50,7 @@ const isAdmin = JSON.parse(localStorage.getItem('yz_roles') || '[]').includes('a
 
 // 左侧菜单固定业务链顺序:系统 → 流程 → 数据(档案/厂商)→ 获客 → 客户 → 订单履约(报价/装修/施工)→
 // 供应销售(销售/库存)→ 资金(款项/结算);未登记插件自动追加尾部(前向兼容)
-const MENU_ORDER = ['roles', 'approvals', 'basedata', 'supplier', 'market', 'member', 'customerprofile', 'customer',
+const MENU_ORDER = ['roles', 'approvals', 'target', 'basedata', 'supplier', 'market', 'member', 'customerprofile', 'customer',
   'quotation', 'decoration', 'construction', 'sales', 'inventory', 'payment', 'balance']
 
 const menuGroups = computed(() => {

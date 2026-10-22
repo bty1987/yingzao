@@ -1,5 +1,8 @@
 # ---- Java / Maven ----
 target/
+# 业务源码豁免(Maven 构建忽略规则不应用于名为 target 的源码目录)
+!web/src/views/target/
+!addons/addon-target/src/main/resources/db/migration/target/
 *.class
 *.jar
 !.mvn/wrapper/maven-wrapper.jar

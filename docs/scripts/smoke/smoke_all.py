@@ -963,7 +963,117 @@ def main():
     step("历史组织根节点自动补建(零迁移)", legacy_row[1] == 0, legacy_row)
     api_err("非管理员组织管理拒绝 122003", "GET", "/api/orgs", tok_b, None, 122003)
 
+    # ========= 经营目标(addon-target V1,第 73 次;S3 首个消费方:目标挂树节点,达成率=子树实绩÷目标)=========
+    # 跨轮残留清理(ym=当月无时间戳分量,上轮失败未清理会撞 370003)
+    _c73 = None
+    try:
+        import pymysql as _pym73
+        _c73 = _pym73.connect(host="192.168.5.21", user="root",
+                              password=os.environ.get("YINGZAO_DB_PASSWORD", "Neusoft!"),
+                              database="yingzao", charset="utf8mb4")
+        with _c73.cursor() as _cur73:
+            _cur73.execute("delete from target_submission where plan_id in ("
+                           + "select id from target_plan where remark = '烟测月目标')")
+            _cur73.execute("delete from target_plan where remark = '烟测月目标'")
+        _c73.commit()
+    finally:
+        if _c73 is not None:
+            _c73.close()
+
+    print("\n== 经营目标(docs/07 月目标模型 V1:守卫/调整留痕/子树实绩聚合) ==")
+    stamp_t = time.strftime("%H%M%S") + "t73"
+    ym_now = time.strftime("%Y-%m")
+    orgs_t = api_ok("组织树下拉(admin 全树)", "GET", "/api/orgs", tok_admin)
+    step("组织树下发含总部根", bool(orgs_t) and orgs_t[0].get("id") == 1, orgs_t)
+    tgt = api_ok("建目标(节点1/当月/合同线100万)", "POST", "/api/target/plans", tok_admin,
+                 {"orgNode": 1, "yearMonth": ym_now, "amount": 100000000,
+                  "remark": "烟测月目标"})
+    if tgt is None:
+        return finish()
+    api_err("同节点同月同线拒绝 370003", "POST", "/api/target/plans", tok_admin,
+            {"orgNode": 1, "yearMonth": ym_now, "amount": 50000}, 370003)
+    api_err("金额非法拒绝 370004", "POST", "/api/target/plans", tok_admin,
+            {"orgNode": 1, "yearMonth": ym_now, "amount": 0}, 370004)
+    api_err("月份格式拒绝 370005", "POST", "/api/target/plans", tok_admin,
+            {"orgNode": 1, "yearMonth": "2026-1", "amount": 50000}, 370005)
+    api_err("节点不存在拒绝 370006", "POST", "/api/target/plans", tok_admin,
+            {"orgNode": 999999, "yearMonth": ym_now, "amount": 50000}, 370006)
+    tgt_list = api_ok("目标列表(节点名 join+实绩聚合)", "GET",
+                      "/api/target/plans?node=1&ym=" + ym_now, tok_admin)
+    trow = (tgt_list or [{}])[0]
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select coalesce(sum(b.amount), 0) from payment_bill b
+                where b.biz_addon = 'decoration' and b.biz_type = 'order'
+                  and b.direction = 0 and b.status != 4
+                  and b.biz_id in (
+                    select cast(id as char) from decoration_order
+                    where org_id = 1 and status in (3, 4, 7, 8)
+                      and date_format(contract_time, %s) = %s)
+            """, ("%Y-%m", ym_now))
+            expected = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("列表含节点名+子树实绩=DB期望(DecorationApi 聚合)", trow.get("node_name") == "总部"
+         and trow.get("actual") == expected, trow)
+    api_ok("调整目标(100万→120万,留痕)", "PUT", "/api/target/plans/%s" % tgt, tok_admin,
+           {"amount": 120000000, "remark": "月中上调"})
+    recs = api_ok("留痕回读(old→new)", "GET", "/api/target/plans/%s/records" % tgt, tok_admin)
+    step("留痕一行(100万→120万)", bool(recs) and len(recs) == 1
+         and recs[0].get("old_amount") == 100000000 and recs[0].get("new_amount") == 120000000, recs)
+    def expected_actual_71():
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    select coalesce(sum(b.amount), 0) from payment_bill b
+                    where b.biz_addon = 'decoration' and b.biz_type = 'order'
+                      and b.direction = 0 and b.status != 4
+                      and b.biz_id in (
+                        select cast(id as char) from decoration_order
+                        where org_id = 1 and status in (3, 4, 7, 8)
+                          and date_format(contract_time, %s) = %s)
+                """, ("%Y-%m", ym_now))
+                return cur.fetchone()[0]
+        finally:
+            conn.close()
+
+    tgt_ach = None
+    for _ in range(30):
+        tgt_ach = api_ok("达成率轮询", "GET",
+                         "/api/target/achievement?node=1&ym=" + ym_now, tok_admin)
+        expected = expected_actual_71()
+        if (tgt_ach or {}).get("actual") == expected:
+            break
+        time.sleep(1)
+    step("达成率=实绩÷目标(千分位)", (tgt_ach or {}).get("target") == 120000000
+         and tgt_ach.get("actual") == expected, tgt_ach)
+    api_ok("停用目标(分母退场)", "POST", "/api/target/plans/%s/status" % tgt, tok_admin,
+           {"status": 1})
+    tgt_ach2 = api_ok("停用后达成率无目标", "GET",
+                      "/api/target/achievement?node=1&ym=" + ym_now, tok_admin)
+    step("停用后 target=null(实绩仍在)", (tgt_ach2 or {}).get("target") is None
+         and tgt_ach2.get("actual") == expected, tgt_ach2)
+    api_ok("启用恢复", "POST", "/api/target/plans/%s/status" % tgt, tok_admin, {"status": 0})
+    # 分区节点:分母可建,实绩恒 0(V1 诚实口径)
+    org_t = api_ok("V1.3 前置分区节点", "POST", "/api/orgs", tok_admin,
+                   {"parentId": 1, "name": "烟测目标分区" + stamp_t, "levelType": "region"})
+    tgt_p = api_ok("建分区目标(分母就绪)", "POST", "/api/target/plans", tok_admin,
+                   {"orgNode": org_t, "yearMonth": ym_now, "amount": 30000000})
+    ach_p = api_ok("分区达成率(实绩恒0的诚实口径)", "GET",
+                   "/api/target/achievement?node=%s&ym=%s" % (org_t, ym_now), tok_admin)
+    step("分区节点 target 有值+actual=0", (ach_p or {}).get("target") == 30000000
+         and ach_p.get("actual") == 0, ach_p)
+    # observe 态下新增插件的 api 段首轮不在 RBAC 规则快照,未命中即放行——122006 由 enforce 专项覆盖,不在 observe 断言
+    addons_t = api_ok("插件下发含 target(菜单/api 段)", "GET", "/api/addons", tok_admin)
+    t_addon = next((a for a in (addons_t or []) if a.get("id") == "target"), None)
+    step("target 菜单与 api 段下发", bool(t_addon) and t_addon.get("menus")
+         and any(m.get("path") == "/target/plans" for m in t_addon.get("menus")), t_addon)
+
     print("== 款项(addon-payment V1:三件套)==")
+
 
 
 
