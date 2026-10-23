@@ -1106,7 +1106,114 @@ def main():
     finally:
         conn.close()
 
+    # ---- 阶段目标(V1.2,第 76 次;docs/07 月内切阶段:守卫族/实绩日切片/级联删除)----
+    print("\n== 阶段目标(月内切阶段分别立标) ==")
+    stage_ym = time.strftime("%Y-%m")
+    stage_ymd = time.strftime("%Y-%m-")
+    # 复用 73 段建的目标(段首已清理+重建,直接查 id;避免同月同线撞 370003)
+    _c76 = None
+    try:
+        import pymysql as _pym76
+        _c76 = _pym76.connect(host="192.168.5.21", user="root",
+                              password=os.environ.get("YINGZAO_DB_PASSWORD", "Neusoft!"),
+                              database="yingzao", charset="utf8mb4")
+        with _c76.cursor() as _cur76:
+            _cur76.execute("select id from target_plan where remark = '烟测月目标' limit 1")
+            _r76 = _cur76.fetchone()
+        stage_plan = _r76[0] if _r76 else None
+    finally:
+        if _c76 is not None:
+            _c76.close()
+    if stage_plan is None:
+        step("阶段段跳过(73 段目标不在,前置缺失)", False, "stage plan missing")
+        return finish()
+    api_err("阶段起始越月拒绝 370009", "POST", "/api/target/plans/%s/stages" % stage_plan, tok_admin,
+            {"stageKey": "越月", "beginDay": stage_ymd + "01", "endDay": stage_ymd + "01"}, 370009) \
+        if False else None
+    # 直接造越月样本(下月 1 日)
+    import calendar as _cal76
+    _y, _m = int(stage_ym[:4]), int(stage_ym[5:7])
+    _nm = (1, _m + 1) if _m < 12 else (_y + 1, 1)
+    _next_first = "%04d-%02d-01" % (_nm[0], _nm[1])
+    api_err("阶段止日越月拒绝 370009", "POST", "/api/target/plans/%s/stages" % stage_plan, tok_admin,
+            {"stageKey": "越月", "beginDay": stage_ymd + "01", "endDay": _next_first,
+             "amount": 1000}, 370009)
+    st1 = api_ok("建阶段1(月初淡 1-10 日)", "POST", "/api/target/plans/%s/stages" % stage_plan,
+                 tok_admin, {"stageKey": "月上旬", "sortNo": 1,
+                             "beginDay": stage_ymd + "01", "endDay": stage_ymd + "10",
+                             "amount": 50000000})
+    if st1 is None:
+        return finish()
+    api_err("同 plan 同名阶段拒绝 370008", "POST", "/api/target/plans/%s/stages" % stage_plan,
+            tok_admin, {"stageKey": "月上旬", "beginDay": stage_ymd + "11",
+                        "endDay": stage_ymd + "20", "amount": 1000}, 370008)
+    api_err("区间重叠拒绝 370010", "POST", "/api/target/plans/%s/stages" % stage_plan,
+            tok_admin, {"stageKey": "重叠段", "beginDay": stage_ymd + "05",
+                        "endDay": stage_ymd + "20", "amount": 1000}, 370010)
+    st2 = api_ok("建阶段2(月末冲刺 21-末日)", "POST", "/api/target/plans/%s/stages" % stage_plan,
+                 tok_admin, {"stageKey": "月末冲刺", "sortNo": 2,
+                             "beginDay": stage_ymd + "21",
+                             "endDay": stage_ymd + str(_cal76.monthrange(_y, _m)[1]),
+                             "amount": 200000000})
+    st_rows = api_ok("阶段列表(实绩日切片聚合)", "GET",
+                     "/api/target/plans/%s/stages" % stage_plan, tok_admin)
+    sr_by_key = {r.get("stage_key"): r for r in (st_rows or [])}
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select coalesce(sum(b.amount), 0) from payment_bill b
+                where b.biz_addon = 'decoration' and b.biz_type = 'order'
+                  and b.direction = 0 and b.status != 4
+                  and b.biz_id in (
+                    select cast(id as char) from decoration_order
+                    where org_id = 1 and status in (3, 4, 7, 8)
+                      and date(contract_time) >= %s and date(contract_time) <= %s)
+            """, (stage_ym + "-01", stage_ym + "-10"))
+            exp_early = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("阶段1实绩=DB 日切片同口径", (sr_by_key.get("月上旬") or {}).get("actual") == exp_early,
+         sr_by_key)
+    stage_sum = (sr_by_key.get("月上旬") or {}).get("actual", 0) + (sr_by_key.get("月末冲刺") or {}).get("actual", 0)
+    step("阶段切片合计≤月实绩(1-10 与 21-末日 无缝盖当月)", stage_sum <= expected_actual_71(),
+         (stage_sum, expected_actual_71()))
+    api_ok("停用阶段1", "POST", "/api/target/stages/%s/status" % st1, tok_admin, {"status": 1})
+    api_ok("编辑阶段2(目标 2 亿→2.5 亿)", "PUT", "/api/target/stages/%s" % st2, tok_admin,
+           {"stageKey": "月末冲刺", "beginDay": stage_ymd + "21",
+            "endDay": stage_ymd + str(_cal76.monthrange(_y, _m)[1]), "amount": 250000000})
+    api_ok("删除阶段1", "DELETE", "/api/target/stages/%s" % st1, tok_admin)
+    st_rows2 = api_ok("删除复查(仅阶段2)", "GET", "/api/target/plans/%s/stages" % stage_plan, tok_admin)
+    step("阶段列表仅剩月末冲刺", len(st_rows2 or []) == 1
+         and (st_rows2 or [{}])[0].get("stage_key") == "月末冲刺", st_rows2)
+    # 阶段段尾清理(阶段行不清会因 uk(plan,stage_key) 撞下轮 370008)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from target_stage where plan_id = %s", (stage_plan,))
+        conn.commit()
+    finally:
+        conn.close()
+    # 级联删除验证:建一次性父目标删之(不动 73 段的烟测月目标——它被后续轮次复用)
+    _tmp76 = api_ok("级联前置:建一次性父目标(渠道线)", "POST", "/api/target/plans", tok_admin,
+                    {"orgNode": 1, "yearMonth": stage_ym, "amount": 1000000, "line": "channel",
+                     "remark": "烟测级联父目标76"})
+    if _tmp76:
+        api_ok("级联前置:建一次性阶段", "POST", "/api/target/plans/%s/stages" % _tmp76,
+               tok_admin, {"stageKey": "临时阶段", "beginDay": stage_ymd + "01",
+                           "endDay": stage_ymd + "28", "amount": 1000})
+        api_ok("删除一次性父目标(级联清阶段)", "DELETE", "/api/target/plans/%s" % _tmp76, tok_admin)
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("select count(*) from target_stage where plan_id = %s", (_tmp76,))
+                left = cur.fetchone()[0]
+        finally:
+            conn.close()
+        step("父删后阶段零残留", left == 0, left)
+
     print("== 款项(addon-payment V1:三件套)==")
+
 
 
 

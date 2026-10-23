@@ -43,6 +43,7 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" @click="openStages(row)">阶段</el-button>
             <el-button link type="primary" @click="openAdjust(row)">调整</el-button>
             <el-button link @click="openRecords(row)">留痕</el-button>
             <el-button v-if="row.status === 0" link type="warning"
@@ -120,6 +121,60 @@
         <el-table-column prop="created_at" label="时间" width="160" />
       </el-table>
     </el-drawer>
+
+    <!-- 阶段目标抽屉 -->
+    <el-drawer v-model="stagesDrawer" :title="`阶段目标 - ${stagesTarget?.node_name || ''} ${stagesTarget?.ym || ''}`" size="640px">
+      <div style="margin-bottom: 10px">
+        <el-button size="small" type="primary" @click="openStageCreate">加阶段</el-button>
+        <span class="tip" style="margin-left: 8px">月内切阶段分别立标(月初淡、月末冲);区间不可重叠</span>
+      </div>
+      <el-table :data="stageRows" border size="small">
+        <el-table-column prop="stage_key" label="阶段" min-width="90" />
+        <el-table-column label="起止" width="180">
+          <template #default="{ row }">{{ row.begin_day }} ~ {{ row.end_day }}</template>
+        </el-table-column>
+        <el-table-column label="目标" width="100" align="right">
+          <template #default="{ row }">{{ stagesTarget?.line === 'channel' ? row.amount + ' 条' : fmt(row.amount) + ' 元' }}</template>
+        </el-table-column>
+        <el-table-column label="实绩" width="100" align="right">
+          <template #default="{ row }">{{ stagesTarget?.line === 'channel' ? row.actual + ' 条' : fmt(row.actual) + ' 元' }}</template>
+        </el-table-column>
+        <el-table-column label="达成率" width="110">
+          <template #default="{ row }">
+            <el-progress :percentage="row.rate === null ? 0 : Math.min(row.rate / 10, 100)"
+              :format="() => (row.rate === null ? '-' : (row.rate / 10).toFixed(1) + '%')" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="130" fixed="right">
+          <template #default="{ row }">
+            <el-button link size="small" @click="openStageEdit(row)">编辑</el-button>
+            <el-button link size="small" type="danger" @click="onStageDelete(row)">删</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-dialog v-model="stageDialog" :title="stageEditId ? '编辑阶段' : '加阶段'" width="440px" append-to-body>
+        <el-form label-width="90px">
+          <el-form-item label="阶段标识" required>
+            <el-input v-model="stageForm.stageKey" :disabled="!!stageEditId" placeholder="如:月上旬/月末冲刺" />
+          </el-form-item>
+          <el-form-item label="起始日" required>
+            <el-date-picker v-model="stageForm.beginDay" type="date" value-format="YYYY-MM-DD" />
+          </el-form-item>
+          <el-form-item label="截止日" required>
+            <el-date-picker v-model="stageForm.endDay" type="date" value-format="YYYY-MM-DD" />
+          </el-form-item>
+          <el-form-item label="目标额" required>
+            <el-input-number v-model="stageForm.amountYuan" :min="0.01" :precision="2" :step="10000"
+              style="width: 100%" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="stageDialog = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="onStageSave">保存</el-button>
+        </template>
+      </el-dialog>
+    </el-drawer>
   </div>
 </template>
 
@@ -128,7 +183,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   pageTargetPlans, createTargetPlan, adjustTargetPlan, changeTargetPlanStatus,
-  deleteTargetPlan, listTargetRecords, orgTree, fetchAddons,
+  deleteTargetPlan, listTargetRecords, listTargetStages, createTargetStage,
+  updateTargetStage, deleteTargetStage, orgTree, fetchAddons,
 } from '../../api'
 
 const dicts = ref({})
@@ -146,6 +202,12 @@ const adjustRemark = ref('')
 const recordsDrawer = ref(false)
 const recordsTarget = ref(null)
 const recordRows = ref([])
+const stagesDrawer = ref(false)
+const stagesTarget = ref(null)
+const stageRows = ref([])
+const stageDialog = ref(false)
+const stageEditId = ref(null)
+const stageForm = reactive({ stageKey: '', beginDay: null, endDay: null, amountYuan: 1000 })
 
 const flatNodes = computed(() => {
   const out = []
@@ -236,6 +298,59 @@ async function onDelete(row) {
   await deleteTargetPlan(row.id)
   ElMessage.success('已删除')
   load()
+}
+
+function openStages(row) {
+  stagesTarget.value = row
+  stagesDrawer.value = true
+  loadStages()
+}
+
+async function loadStages() {
+  const res = await listTargetStages(stagesTarget.value.id)
+  stageRows.value = res.data || []
+}
+
+function openStageCreate() {
+  stageEditId.value = null
+  Object.assign(stageForm, { stageKey: '', beginDay: null, endDay: null, amountYuan: 1000 })
+  stageDialog.value = true
+}
+
+function openStageEdit(row) {
+  stageEditId.value = row.id
+  Object.assign(stageForm, { stageKey: row.stage_key, beginDay: row.begin_day, endDay: row.end_day,
+    amountYuan: row.amount / 1000 })
+  stageDialog.value = true
+}
+
+async function onStageSave() {
+  if (!stageForm.stageKey.trim()) return ElMessage.warning('请填阶段标识')
+  if (!stageForm.beginDay || !stageForm.endDay) return ElMessage.warning('请选起止日')
+  saving.value = true
+  try {
+    const body = { stageKey: stageForm.stageKey.trim(), beginDay: stageForm.beginDay,
+      endDay: stageForm.endDay, amount: Math.round(stageForm.amountYuan * 1000), remark: null }
+    if (stageEditId.value) {
+      await updateTargetStage(stageEditId.value, body)
+    } else {
+      await createTargetStage(stagesTarget.value.id, body)
+    }
+    ElMessage.success('已保存')
+    stageDialog.value = false
+    loadStages()
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onStageDelete(row) {
+  try {
+    await ElMessageBox.confirm('删除阶段「' + row.stage_key + '」?确认删除?', '删除阶段', { type: 'warning' })
+  } catch { return }
+  await deleteTargetStage(row.id)
+  ElMessage.success('已删除')
+  loadStages()
 }
 
 async function openRecords(row) {

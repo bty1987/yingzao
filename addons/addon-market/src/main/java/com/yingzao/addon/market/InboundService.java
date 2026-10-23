@@ -529,4 +529,14 @@ public class InboundService implements MarketApi {
                 Long.class, orgId, yearMonth);
         return n == null ? 0 : n;
     }
+
+    /** 进线日区间合计(只读聚合;target 阶段目标消费;登记日落于区间)。 */
+    @Override
+    public long inboundTotalBetween(long orgId, String beginDay, String endDay) {
+        Long n = jdbc.queryForObject(
+                "select count(*) from market_inbound where org_id = ?"
+                        + " and date(created_at) >= ? and date(created_at) <= ?",
+                Long.class, orgId, beginDay, endDay);
+        return n == null ? 0 : n;
+    }
 }

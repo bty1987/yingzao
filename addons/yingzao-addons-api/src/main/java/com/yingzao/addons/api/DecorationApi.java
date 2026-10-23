@@ -46,6 +46,12 @@ public interface DecorationApi {
      */
     long contractSignedTotalByMonth(long orgId, String yearMonth);
 
+    /**
+     * 签约实绩日区间合计(只读聚合;addon-target 阶段目标消费):status ∈ {3 签约, 4 重签,
+     * 7 决算, 8 完工} 且首签日 ∈ [beginDay, endDay] 的签约拆分款应收合计。
+     */
+    long contractSignedTotalBetween(long orgId, String beginDay, String endDay);
+
     /** 客户视角装修单摘要(只读投影;零金额零人员)。 */
     record OrderBrief(long orderId, String orderNo, String houseLabel, int status, int projectStatus) {
     }

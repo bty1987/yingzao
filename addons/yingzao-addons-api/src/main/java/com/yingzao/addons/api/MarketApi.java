@@ -41,6 +41,12 @@ public interface MarketApi {
      */
     long inboundTotalByMonth(long orgId, String yearMonth);
 
+    /**
+     * 进线日区间合计(只读聚合;addon-target 阶段目标消费):登记日 ∈ [beginDay, endDay]
+     * 的全部进线数。
+     */
+    long inboundTotalBetween(long orgId, String beginDay, String endDay);
+
     /** 分页容器。 */
     record CasePage(long total, java.util.List<CaseCard> rows) {
     }

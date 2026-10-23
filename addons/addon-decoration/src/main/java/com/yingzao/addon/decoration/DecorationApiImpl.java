@@ -79,6 +79,25 @@ public class DecorationApiImpl implements DecorationApi {
         return total;
     }
 
+    /** 签约实绩日区间合计(只读聚合;target 阶段目标消费;首签日落于区间)。 */
+    @Override
+    public long contractSignedTotalBetween(long orgId, String beginDay, String endDay) {
+        List<Long> ids = jdbc.queryForList(
+                "select id from decoration_order where org_id = ? and status in (3, 4, 7, 8)"
+                        + " and date(contract_time) >= ? and date(contract_time) <= ?",
+                Long.class, orgId, beginDay, endDay);
+        long total = 0;
+        for (Long orderId : ids) {
+            for (PaymentApi.BillSummary b : payments.listBills(orgId, "decoration", "order",
+                    String.valueOf(orderId))) {
+                if (b.direction() == 0 && b.status() != 4) {
+                    total += b.amount();
+                }
+            }
+        }
+        return total;
+    }
+
     @Override
     public Optional<CustomerRef> queryOrderCustomer(long orgId, long orderId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
