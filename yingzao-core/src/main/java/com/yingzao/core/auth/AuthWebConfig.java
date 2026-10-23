@@ -34,25 +34,34 @@ public class AuthWebConfig implements WebMvcConfigurer {
     private final ObjectMapper objectMapper;
     private final RbacService rbac;
     private final RoleService roleService;
+    private final com.yingzao.core.org.OrgScopeService orgScopes;
 
     public AuthWebConfig(TokenStore tokenStore, MessageSource messages, ObjectMapper objectMapper,
-            RbacService rbac, RoleService roleService) {
+            RbacService rbac, RoleService roleService,
+            com.yingzao.core.org.OrgScopeService orgScopes) {
         this.tokenStore = tokenStore;
         this.messages = messages;
         this.objectMapper = objectMapper;
         this.rbac = rbac;
         this.roleService = roleService;
+        this.orgScopes = orgScopes;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new AuthInterceptor()).addPathPatterns("/api/**");
+        registry.addInterceptor(new AuthInterceptor(orgScopes)).addPathPatterns("/api/**");
         // RBAC v2 端点鉴权:登录态之后同链(order 默认按注册序,Auth 在前)
         registry.addInterceptor(new RbacInterceptor(rbac, roleService, messages, objectMapper))
                 .addPathPatterns("/api/**");
     }
 
     class AuthInterceptor implements HandlerInterceptor {
+
+        private final com.yingzao.core.org.OrgScopeService orgScopes;
+
+        AuthInterceptor(com.yingzao.core.org.OrgScopeService orgScopes) {
+            this.orgScopes = orgScopes;
+        }
 
         @Override
         public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
@@ -71,6 +80,10 @@ public class AuthWebConfig implements WebMvcConfigurer {
                 return false;
             }
             request.setAttribute("yz.orgId", t.orgId());
+            // 数据范围基座(docs/08 S2):登录节点可见组织 id 集(自身+启用子树),Caffeine 缓存
+            if (t.principal() == null || TokenStore.PRINCIPAL_USER.equals(t.principal())) {
+                request.setAttribute("yz.orgScope", orgScopes.scopeOrgIds(t.orgId()));
+            }
             if (TokenStore.PRINCIPAL_CUSTOMER.equals(t.principal())) {
                 // C 端主体:不写 yz.userId(RBAC 按 principal=customer 单独归类,防越权面)
                 request.setAttribute("yz.principal", TokenStore.PRINCIPAL_CUSTOMER);
