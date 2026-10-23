@@ -103,12 +103,28 @@
   <img src="docs/screenshots/web/plans.png" width="49%" alt="计划任务 · 死信可见可重跑" title="计划任务 · 死信可见可重跑">
 </p>
 
-**移动端**(uni-app 一码三出:小程序 + APP + H5)
+**员工端**(uni-app 一码三出:小程序 + APP + H5)
 
 <p>
   <img src="docs/screenshots/app/01-login.png" width="30%" alt="登录 · 朱印方章" title="登录 · 朱印方章">
   <img src="docs/screenshots/app/02-index.png" width="30%" alt="工作台" title="工作台">
+  <img src="docs/screenshots/app/06-leads-create.png" width="30%" alt="客源登记" title="客源登记">
+</p>
+<p>
+  <img src="docs/screenshots/app/03-chances.png" width="30%" alt="我的机会" title="我的机会">
   <img src="docs/screenshots/app/04-approvals.png" width="30%" alt="我的审批" title="我的审批">
+  <img src="docs/screenshots/app/05-leave.png" width="30%" alt="请假示例(多级审批)" title="请假示例(多级审批)">
+</p>
+<p>
+  <img src="docs/screenshots/app/07-notifications.png" width="30%" alt="通知中心" title="通知中心">
+  <img src="docs/screenshots/app/08-mine.png" width="30%" alt="我的" title="我的">
+</p>
+
+**客户端门户**(web-mp,H5 已上线:案例匿名浏览 / 进度 / 积分 / 验证码登录)
+
+<p>
+  <img src="docs/screenshots/webmp-cases.png" width="30%" alt="客户端 · 案例库(匿名)" title="客户端 · 案例库(匿名)">
+  <img src="docs/screenshots/webmp-login.png" width="30%" alt="客户端 · 验证码登录" title="客户端 · 验证码登录">
 </p>
 
 > 更多截图见 [docs/screenshots/](docs/screenshots)(客源/款项/审批中心/机会/请假等)。
@@ -273,6 +289,9 @@ cd web-mp && npm install && npm run dev:h5
 |---|---|
 | [docs/01-剔除保留清单.md](docs/01-剔除保留清单.md) | 需求规格书:老系统 41 模块逐一过堂,判归内核/行业/商业/删除 |
 | [docs/02-插件框架RFC.md](docs/02-插件框架RFC.md) | 插件机制六点设计 + spike 结论(含三个工程坑) |
+| [docs/06-高管驾驶舱与指标体系设计参考.md](docs/06-高管驾驶舱与指标体系设计参考.md) | 方林驾驶舱专题反哺归档:六维指标口径/报表框架设计输入/图表规范/聚合表模式 |
+| [docs/07-经营看板与战报激励体系设计参考.md](docs/07-经营看板与战报激励体系设计参考.md) | fl-yy 反哺归档:经营目标三模型/战报PK激励域盘点/数据范围控制/outbox 等工程模式 |
+| [docs/scripts/ads-reference/](docs/scripts/ads-reference) | 行业聚合表 SQL 参考(工单达成/渠道漏斗/应收账龄/项目毛利/库存周转/到货准时) |
 | [docs/prd/](docs/prd) | 各 addon 的 PRD(业务闭环),含模板 |
 | [docs/rules/](docs/rules) | 各 addon 的实现口径(状态机/金额口径/字典枚举) |
 | [AGENTS.md](AGENTS.md) | AI 协作开发指南(架构军规/文档金字塔/工作流) |
