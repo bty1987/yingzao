@@ -35,6 +35,12 @@ public interface MarketApi {
                     String coverImage, long figureId, String figureName) {
     }
 
+    /**
+     * 进线月合计(只读聚合;addon-target 渠道业绩线消费):该组织当月全部进线数
+     * (漏斗顶段;组织内合计,子树聚合由消费方按其数据范围循环)。
+     */
+    long inboundTotalByMonth(long orgId, String yearMonth);
+
     /** 分页容器。 */
     record CasePage(long total, java.util.List<CaseCard> rows) {
     }

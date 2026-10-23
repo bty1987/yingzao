@@ -10,6 +10,7 @@ addon:
   dicts:
     targetLine:
       - { key: 'contract', label: 签约额 }
+      - { key: 'channel', label: 渠道进线数 }
     targetStatus:
       - { key: '0', label: 启用 }
       - { key: '1', label: 停用 }

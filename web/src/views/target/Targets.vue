@@ -21,11 +21,11 @@
         <el-table-column label="业绩线" width="100">
           <template #default="{ row }">{{ dicts.targetLine?.[row.line] || row.line }}</template>
         </el-table-column>
-        <el-table-column label="目标(元)" width="120" align="right">
-          <template #default="{ row }">{{ fmt(row.amount) }}</template>
+        <el-table-column label="目标" width="130" align="right">
+          <template #default="{ row }">{{ row.line === 'channel' ? row.amount + ' 条' : fmt(row.amount) + ' 元' }}</template>
         </el-table-column>
-        <el-table-column label="实绩(元)" width="120" align="right">
-          <template #default="{ row }">{{ fmt(row.actual) }}</template>
+        <el-table-column label="实绩" width="130" align="right">
+          <template #default="{ row }">{{ row.line === 'channel' ? row.actual + ' 条' : fmt(row.actual) + ' 元' }}</template>
         </el-table-column>
         <el-table-column label="达成率" width="200">
           <template #default="{ row }">
@@ -61,6 +61,12 @@
           <el-select v-model="createForm.orgNode" filterable style="width: 100%"
             placeholder="选择组织树节点(公司/分区/部门)">
             <el-option v-for="n in flatNodes" :key="n.id" :label="n.name" :value="n.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="业绩线" required>
+          <el-select v-model="createForm.line" style="width: 100%">
+            <el-option label="签约额(元)" value="contract" />
+            <el-option label="渠道进线数(条)" value="channel" />
           </el-select>
         </el-form-item>
         <el-form-item label="目标月" required>
@@ -132,7 +138,7 @@ const saving = ref(false)
 const tree = ref([])
 
 const createDialog = ref(false)
-const createForm = reactive({ orgNode: null, ym: null, amountYuan: 10000, remark: '' })
+const createForm = reactive({ orgNode: null, ym: null, amountYuan: 10000, remark: '', line: 'contract' })
 const adjustDialog = ref(false)
 const adjustTarget = ref(null)
 const adjustAmountYuan = ref(0)
@@ -176,7 +182,7 @@ async function load() {
 
 function openCreate() {
   if (tree.value.length === 0) loadTree()
-  Object.assign(createForm, { orgNode: null, ym: null, amountYuan: 10000, remark: '' })
+  Object.assign(createForm, { orgNode: null, ym: null, amountYuan: 10000, remark: '', line: 'contract' })
   createDialog.value = true
 }
 
@@ -186,7 +192,8 @@ async function onCreate() {
   saving.value = true
   try {
     await createTargetPlan({ orgNode: createForm.orgNode, yearMonth: createForm.ym,
-      amount: Math.round(createForm.amountYuan * 1000), remark: createForm.remark || null })
+      amount: Math.round(createForm.amountYuan * 1000), remark: createForm.remark || null,
+      line: createForm.line })
     ElMessage.success('目标已创建')
     createDialog.value = false
     load()

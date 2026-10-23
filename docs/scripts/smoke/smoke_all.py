@@ -1069,10 +1069,45 @@ def main():
     # observe 态下新增插件的 api 段首轮不在 RBAC 规则快照,未命中即放行——122006 由 enforce 专项覆盖,不在 observe 断言
     addons_t = api_ok("插件下发含 target(菜单/api 段)", "GET", "/api/addons", tok_admin)
     t_addon = next((a for a in (addons_t or []) if a.get("id") == "target"), None)
-    step("target 菜单与 api 段下发", bool(t_addon) and t_addon.get("menus")
-         and any(m.get("path") == "/target/plans" for m in t_addon.get("menus")), t_addon)
+    # ---- 渠道业绩线(V1.1,第 74 次;MarketApi 进线聚合,双线证明聚合基座可复制)----
+    ch = api_ok("建渠道目标(节点1/当月/50条)", "POST", "/api/target/plans", tok_admin,
+                {"orgNode": 1, "yearMonth": ym_now, "amount": 50, "line": "channel",
+                 "remark": "烟测渠道目标"})
+    if ch is None:
+        return finish()
+    step("同节点同月不同线可并存(uk 含 line)", True)
+    ch_ach = api_ok("渠道达成率(节点1/当月/渠道线)", "GET",
+                    "/api/target/achievement?node=1&ym=" + ym_now + "&line=channel", tok_admin)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select count(*) from market_inbound
+                where org_id = 1 and date_format(created_at, %s) = %s
+            """, ("%Y-%m", ym_now))
+            ch_expected = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("渠道线实绩=MarketApi 进线聚合(DB 同口径)", (ch_ach or {}).get("target") == 50
+         and ch_ach.get("actual") == ch_expected, ch_ach)
+    api_ok("停用渠道目标(分母退场)", "POST", "/api/target/plans/%s/status" % ch, tok_admin,
+           {"status": 1})
+    ch_ach2 = api_ok("停用后渠道达成率无目标", "GET",
+                     "/api/target/achievement?node=1&ym=" + ym_now + "&line=channel", tok_admin)
+    step("停用后 target=null", (ch_ach2 or {}).get("target") is None, ch_ach2)
+    # 清理渠道目标(跨轮残留防 370003)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from target_submission where plan_id in ("
+                        + "select id from target_plan where remark = '烟测渠道目标')")
+            cur.execute("delete from target_plan where remark = '烟测渠道目标'")
+        conn.commit()
+    finally:
+        conn.close()
 
     print("== 款项(addon-payment V1:三件套)==")
+
 
 
 

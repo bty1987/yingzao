@@ -519,4 +519,14 @@ public class InboundService implements MarketApi {
         }
         return text.length() > 500 ? text.substring(0, 500) : text;
     }
+
+    /** 进线月合计(只读聚合;target 渠道业绩线消费;漏斗顶段=全部进线)。 */
+    @Override
+    public long inboundTotalByMonth(long orgId, String yearMonth) {
+        Long n = jdbc.queryForObject(
+                "select count(*) from market_inbound where org_id = ?"
+                        + " and date_format(created_at, '%Y-%m') = ?",
+                Long.class, orgId, yearMonth);
+        return n == null ? 0 : n;
+    }
 }
