@@ -24,7 +24,7 @@ import jakarta.servlet.http.HttpServletRequest;
 public class RequisitionController {
 
     public record CreateRequest(Long orderId, Integer type, List<RequisitionService.ItemCmd> items,
-            String comment, String fetchTime) {
+            String comment, String fetchTime, Long assigneeId) {
     }
 
     public record ReturnRequest(List<RequisitionService.ReturnLineCmd> lines) {
@@ -51,7 +51,8 @@ public class RequisitionController {
         Long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(requisitions.create(orgId, body == null ? null : body.orderId(),
                 body == null ? null : body.type(), body == null ? null : body.items(),
-                body == null ? null : body.comment(), body == null ? null : body.fetchTime(), userId));
+                body == null ? null : body.comment(), body == null ? null : body.fetchTime(),
+                body == null ? null : body.assigneeId(), userId));
     }
 
     @GetMapping("/{id}")

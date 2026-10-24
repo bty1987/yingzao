@@ -2560,6 +2560,47 @@ def main():
     api_ok("B7清理:撤销关闸后领料", "POST", "/api/inventory/requisitions/%s/cancel" % _rq_off,
            tok_admin)
 
+    # ---- A2 领料审核线(V1.1,第 82 次;docs/11 A2:带 assigneeId=走内核轻量审批)----
+    print("\n== A2 领料审核线 ==")
+    rq_a2 = api_ok("A2 带审批人建单(status=7)", "POST", "/api/inventory/requisitions", tok_admin,
+                   {"orderId": order_g, "type": 0,
+                    "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 1000}],
+                    "comment": "A2 审核领料", "assigneeId": uid_c})
+    if rq_a2 is None:
+        return finish()
+    rq_a2d = api_ok("A2 单详情(审核中)", "GET", "/api/inventory/requisitions/%s" % rq_a2, tok_admin)
+    step("A2 status=7+审批单在挂", (rq_a2d or {}).get("status") == 7
+         and bool((rq_a2d or {}).get("approval_id")), rq_a2d)
+    st, res = call("POST", "/api/inventory/requisitions/%s/preout" % rq_a2, tok_admin)
+    step("A2 审核中预出拒 310002", st == 200 and res.get("code") == 310002, res)
+    todo_a2 = api_ok("A2 审批人待办", "GET", "/api/approvals?role=todo", tok_c)
+    a2_appr = next((a.get("id") for a in (todo_a2 or [])
+                    if str((a.get("biz_id") or "")) == str(rq_a2)
+                    and a.get("biz_type") == "requisition"), None)
+    step("A2 待办在册", bool(a2_appr), todo_a2)
+    api_ok("A2 审批通过", "POST", "/api/approvals/%s/approve" % a2_appr, tok_c, {"comment": "A2 同意"})
+    for _ in range(10):
+        time.sleep(1)
+        rq_a2d = api_ok("A2 通过后详情", "GET", "/api/inventory/requisitions/%s" % rq_a2, tok_admin)
+        if (rq_a2d or {}).get("status") == 0:
+            break
+    step("A2 通过回 0 初始(可出库)", (rq_a2d or {}).get("status") == 0, rq_a2d)
+    rq_a2b = api_ok("A2 第二单(带审批,驳回链)", "POST", "/api/inventory/requisitions", tok_admin,
+                    {"orderId": order_g, "type": 0,
+                     "items": [{"goodsId": goods_inv1, "warehouseId": wh_main, "num": 2000}],
+                     "comment": "A2 驳回链", "assigneeId": uid_c})
+    todo_a2b = api_ok("A2 第二单待办", "GET", "/api/approvals?role=todo", tok_c)
+    a2_apprb = next((a.get("id") for a in (todo_a2b or [])
+                     if str((a.get("biz_id") or "")) == str(rq_a2b)), None)
+    api_ok("A2 第二单驳回", "POST", "/api/approvals/%s/reject" % a2_apprb, tok_c, {"comment": "A2 拒"})
+    for _ in range(10):
+        time.sleep(1)
+        rq_a2bd = api_ok("A2 驳回后详情", "GET", "/api/inventory/requisitions/%s" % rq_a2b, tok_admin)
+        if (rq_a2bd or {}).get("status") == 4:
+            break
+    step("A2 驳回置 4 已拒绝", (rq_a2bd or {}).get("status") == 4, rq_a2bd)
+    api_ok("A2 清理:通过单撤销", "POST", "/api/inventory/requisitions/%s/cancel" % rq_a2, tok_admin)
+
     # ---- 增减差量线 V2(B 类联动/用户关注;靶单 order_h:签约 3 + quota_h 锁定)----
     # 前置:默认报价锁定+审核完成(attstatus 0→1→2→3)+设默认
     api_ok("AR前置:quota_h 提交审核", "POST", "/api/quotation/quotations/%s/submit" % quota_h, tok_admin)
@@ -4060,13 +4101,22 @@ def main():
     step("报名进线 case_name 快照保留(历史可读)", bool(elead3)
          and elead3.get("case_name") == "烟测园样板间" + stamp_mkt, elead3)
 
-    # market 段总线对账 + 单号流水
+    # market 段总线对账 + 单号流水(重试终态窗口,口径对齐 decoration/member/supplier 段)
     mkt_pending = db_exec("""
         select count(*) from yz_event_task
         where event_type like concat('Inbound', '%%') and status not in (1, 3)
     """)
+    for _ in range(6):
+        if mkt_pending and mkt_pending[0][0] == 0:
+            break
+        time.sleep(5)
+        mkt_pending = db_exec("""
+            select count(*) from yz_event_task
+            where event_type like concat('Inbound', '%%') and status not in (1, 3)
+        """)
     mi_no = db_exec("select inbound_no from market_inbound where id = %s", (ib_id,))
-    step("总线对账:进线事件零滞留", mkt_pending and mkt_pending[0][0] == 0, mkt_pending)
+    step("总线对账:进线事件零滞留(重试终态窗口,口径对齐 decoration/member/supplier 段)",
+         mkt_pending and mkt_pending[0][0] == 0, mkt_pending)
     step("进线单号 MI 流水在册", bool(mi_no) and str(mi_no[0][0]).startswith("MI"), mi_no)
 
     # ========= 厂商主数据(addon-supplier V1,第 41 次扩展)=========

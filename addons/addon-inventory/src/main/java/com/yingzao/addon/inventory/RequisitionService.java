@@ -48,6 +48,11 @@ public class RequisitionService {
     public static final int ST_CANCELLED = 3;
     public static final int ST_REFUSED = 4;
     public static final int ST_ARRIVED = 6;
+    /** 审核中(V1.1,A2):建单带 assigneeId 即走内核轻量审批;通过回 0 初始,驳回置 4。 */
+    public static final int ST_AUDITING = 7;
+
+    public static final String BIZ_ADDON = "inventory";
+    public static final String BIZ_TYPE_REQUISITION = "requisition";
 
     public record ItemCmd(Long goodsId, Long colorId, Long formatId, Long warehouseId, Long num) {
     }
@@ -64,11 +69,12 @@ public class RequisitionService {
     private final GoodsApi goods;
     private final QuotationApi quotations;
     private final MaterialQuotaApi materialQuota;
+    private final com.yingzao.core.approval.ApprovalService approvals;
 
     public RequisitionService(JdbcTemplate jdbc, MessageSource messages, StockService stocks,
             ManifestService manifests, ConstructionAccessoryApi accessoryQuotas,
             DecorationApi decorations, GoodsApi goods, QuotationApi quotations,
-            MaterialQuotaApi materialQuota) {
+            MaterialQuotaApi materialQuota, com.yingzao.core.approval.ApprovalService approvals) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.stocks = stocks;
@@ -78,11 +84,12 @@ public class RequisitionService {
         this.goods = goods;
         this.quotations = quotations;
         this.materialQuota = materialQuota;
+        this.approvals = approvals;
     }
 
     @Transactional
     public long create(long orgId, Long orderId, Integer type, List<ItemCmd> items, String comment,
-            String fetchTimeText, long operatorId) {
+            String fetchTimeText, Long assigneeId, long operatorId) {
         require(orderId != null && type != null && (type == TYPE_COMMON || type == TYPE_POSTSALE),
                 CODE_PARAM, "inventory.param.invalid");
         require(items != null && !items.isEmpty(), ManifestService.CODE_EMPTY_ITEMS,
@@ -114,8 +121,8 @@ public class RequisitionService {
                     status, total, comment, fetch_time, created_by, created_by_name)
                 values (?,?,?,?,?,?,?,?,?,?,?,?)
                 """, orgId, nextCode(orgId), orderId, order.orderNo(), order.houseLabel(), type,
-                ST_INIT, total, blankToNull(comment), parseTime(fetchTimeText), operatorId,
-                displayName(operatorId));
+                assigneeId != null ? ST_AUDITING : ST_INIT, total, blankToNull(comment),
+                parseTime(fetchTimeText), operatorId, displayName(operatorId));
         long requisitionId = jdbc.queryForObject("select last_insert_id()", Long.class);
         String code = jdbc.queryForObject("select code from inventory_requisition where id = ?",
                 String.class, requisitionId);
@@ -138,7 +145,45 @@ public class RequisitionService {
             accessoryQuotas.consume(new ConstructionAccessoryApi.ConsumeCmd(orgId, orderId,
                     requisitionId, code, toContractItems(rows), total, operatorId));
         }
+        if (assigneeId != null) {
+            // 审核线 V1.1(A2):同事务挂内核轻量审批(业务单与审批单原子;额度消耗也在同事务,
+            // 驳回时经 onApprovalFinished 对称 refund)
+            String title = msgArgs("inventory.requisition.approvalTitle", code,
+                    String.format("%.2f", total / 1000.0));
+            long approvalId = approvals.submit(new com.yingzao.core.approval.ApprovalService.SubmitCmd(
+                    orgId, operatorId, title, BIZ_ADDON, BIZ_TYPE_REQUISITION,
+                    String.valueOf(requisitionId), assigneeId));
+            jdbc.update("update inventory_requisition set approval_id = ? where id = ?",
+                    approvalId, requisitionId);
+        }
         return requisitionId;
+    }
+
+    /** 审批办结回写(A2,TransferApprovalConsumer 同构):通过→7 回 0 初始(可预出/出库);
+     *  驳回/撤回→4 + 普通单对称 refund 额度(审批期已 consume)。带 approval_id 守卫。 */
+    @Transactional
+    public void onApprovalFinished(long orgId, long requisitionId, long approvalId,
+            boolean approved, long operatorId) {
+        Map<String, Object> row = load(orgId, requisitionId);
+        require(((Number) row.get("status")).intValue() == ST_AUDITING, CODE_BAD_STATE,
+                "inventory.state.illegal");
+        Object bound = row.get("approval_id");
+        require(bound != null && ((Number) bound).longValue() == approvalId, CODE_BAD_STATE,
+                "inventory.state.illegal");
+        int type = ((Number) row.get("type")).intValue();
+        long orderId = ((Number) row.get("order_id")).longValue();
+        if (approved) {
+            jdbc.update("update inventory_requisition set status = ? where id = ? and status = ?",
+                    ST_INIT, requisitionId, ST_AUDITING);
+            return;
+        }
+        jdbc.update("update inventory_requisition set status = ?, close_at = now() where id = ? and status = ?",
+                ST_REFUSED, requisitionId, ST_AUDITING);
+        if (type == TYPE_COMMON) {
+            accessoryQuotas.refund(new ConstructionAccessoryApi.RefundCmd(orgId, orderId,
+                    requisitionId, (String) row.get("code"), itemsFromDb(requisitionId),
+                    ((Number) row.get("total")).longValue(), operatorId));
+        }
     }
 
     /** 预出:0→1。 */
@@ -302,7 +347,7 @@ public class RequisitionService {
         allArgs.add((Math.max(pageNo, 1) - 1) * safeSize);
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select id, code, order_id, order_no, house_label, type, status, total, comment,
-                       created_by_name, outbound_at, arrive_at, created_at
+                       created_by_name, outbound_at, arrive_at, approval_id, created_at
                 from inventory_requisition""" + where + " order by id desc limit ? offset ?",
                 allArgs.toArray());
         Map<String, Object> result = new LinkedHashMap<>();
@@ -388,7 +433,7 @@ public class RequisitionService {
 
     private Map<String, Object> load(long orgId, long requisitionId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select id, code, order_id, order_no, type, status, total
+                select id, code, order_id, order_no, type, status, total, approval_id
                 from inventory_requisition where id = ? and org_id = ?
                 """, requisitionId, orgId);
         require(!rows.isEmpty(), CODE_NOT_FOUND, "inventory.notfound");
@@ -398,7 +443,8 @@ public class RequisitionService {
     private Map<String, Object> loadDetail(long orgId, long requisitionId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select id, code, order_id, order_no, house_label, type, status, total, comment,
-                       fetch_time, created_by_name, outbound_at, arrive_at, close_at, created_at
+                       fetch_time, created_by_name, outbound_at, arrive_at, close_at, approval_id,
+                       created_at
                 from inventory_requisition where id = ? and org_id = ?
                 """, requisitionId, orgId);
         require(!rows.isEmpty(), CODE_NOT_FOUND, "inventory.notfound");
@@ -518,5 +564,9 @@ public class RequisitionService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    String msgArgs(String key, Object... args) {
+        return messages.getMessage(key, args, org.springframework.context.i18n.LocaleContextHolder.getLocale());
     }
 }

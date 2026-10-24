@@ -1,7 +1,7 @@
 addon:
   id: inventory
   name: 库存管理
-  version: 0.3.0
+  version: 0.4.0
   error-code-segment: 310000
   menus:
     - path: /inventory/manifests
@@ -44,6 +44,7 @@ addon:
       - { key: '2', label: 已出库 }
       - { key: '3', label: 已撤销 }
       - { key: '4', label: 已拒绝 }
+      - { key: '7', label: 审核中 }
       - { key: '6', label: 已到货 }
     requisitionType:
       - { key: '0', label: 普通 }
