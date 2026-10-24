@@ -82,4 +82,10 @@ public class PaymentApiImpl implements PaymentApi {
         return bills.submitRefund(cmd.orgId(), cmd.billId(), cmd.applicantId(), cmd.assigneeId(),
                 cmd.reason());
     }
+
+    /** 部分退款统一入口(docs/11 A1;增减线净退款消费)。 */
+    @Override
+    public long submitRefundPartial(com.yingzao.addons.api.PaymentApi.PartialRefundCmd cmd) {
+        return bills.submitRefundPartial(cmd);
+    }
 }

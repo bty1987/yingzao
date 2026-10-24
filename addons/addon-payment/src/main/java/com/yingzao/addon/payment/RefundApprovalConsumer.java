@@ -98,10 +98,18 @@ public class RefundApprovalConsumer implements YzEventConsumer {
         long refundBillId = ((Number) refund.get("id")).longValue();
         Long originBillId = jdbc.queryForObject(
                 "select origin_bill_id from payment_bill where id = ?", Long.class, refundBillId);
-        int originUpdated = jdbc.update("""
-                update payment_bill set status = ? where id = ? and status in (?, ?)
-                """, BillService.STATUS_REFUNDED, originBillId,
-                BillService.STATUS_COLLECTED, BillService.STATUS_CONFIRMED);
+        long refundAmount = ((Number) refund.get("amount")).longValue();
+        long originAmount = jdbc.queryForObject(
+                "select amount from payment_bill where id = ?", Long.class, originBillId);
+        boolean fullRefund = refundAmount >= originAmount;
+        int originUpdated = 1;
+        if (fullRefund) {
+            // 整单退:原单置终态(docs/11 A1 前现行为);部分退原单状态不动,净额由聚合体现
+            originUpdated = jdbc.update("""
+                    update payment_bill set status = ? where id = ? and status in (?, ?)
+                    """, BillService.STATUS_REFUNDED, originBillId,
+                    BillService.STATUS_COLLECTED, BillService.STATUS_CONFIRMED);
+        }
         if (originUpdated == 0) {
             log.error("refund bill {} approved but origin bill {} not in collected/confirmed, kept untouched",
                     refundBillId, originBillId);

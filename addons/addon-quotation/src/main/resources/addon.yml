@@ -1,7 +1,7 @@
 addon:
   id: quotation
   name: 报价管理
-  version: 0.3.0
+  version: 0.4.0
   error-code-segment: 230000
   menus:
     - path: /quotation/quotations

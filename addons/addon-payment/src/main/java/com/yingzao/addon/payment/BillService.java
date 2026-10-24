@@ -194,12 +194,28 @@ public class BillService {
 
     @Transactional
     public long submitRefund(long orgId, long originBillId, long applicantId, Long assigneeId, String reason) {
-        require(assigneeId != null, CODE_INVALID_PARAM, "payment.param.invalid");
+        return submitRefundPartial(new com.yingzao.addons.api.PaymentApi.PartialRefundCmd(
+                orgId, originBillId, null, applicantId, assigneeId, reason));
+    }
+
+    /**
+     * 统一退款提交(docs/11 A1):amount 空=整单退(现行为,审批通过原单置终态);
+     * amount 非 null=部分退——校验 0<amount≤原单额,退款单记指定额,原单状态不动
+     * (净额由聚合查询体现,增减线净退款场景:已收差量款退一部分)。
+     */
+    public long submitRefundPartial(com.yingzao.addons.api.PaymentApi.PartialRefundCmd cmd) {
+        long orgId = cmd.orgId();
+        long originBillId = cmd.billId();
+        Long amount = cmd.amount();
+        require(cmd.assigneeId() != null, CODE_INVALID_PARAM, "payment.param.invalid");
         // FOR UPDATE 串行化同一原款项的并发退款提交
         BillRow origin = loadForUpdate(orgId, originBillId);
         require(origin.direction() == DIRECTION_INCOME
                 && (origin.status() == STATUS_COLLECTED || origin.status() == STATUS_CONFIRMED),
                 CODE_BILL_BAD_STATE, "payment.bill.badstate");
+        if (amount != null) {
+            require(amount > 0 && amount <= origin.amount(), CODE_INVALID_PARAM, "payment.refund.amount");
+        }
         Integer pending = jdbc.queryForObject("""
                 select count(*) from payment_bill where origin_bill_id = ? and direction = ? and status = ?
                 """, Integer.class, originBillId, DIRECTION_REFUND, STATUS_UNPAID);
@@ -211,13 +227,15 @@ public class BillService {
                     direction, origin_bill_id, origin_status_snapshot, amount, sort, remark, created_by)
                 values (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, orgId, origin.bizAddon(), origin.bizType(), origin.bizId(), origin.typeCode(),
-                origin.typeName(), DIRECTION_REFUND, originBillId, origin.status(), origin.amount(), 0,
-                blankToNull(reason), applicantId);
+                origin.typeName(), DIRECTION_REFUND, originBillId, origin.status(),
+                amount == null ? origin.amount() : amount, 0,
+                blankToNull(cmd.reason()), cmd.applicantId());
         long refundBillId = jdbc.queryForObject("select last_insert_id()", Long.class);
         String title = messages.getMessage("payment.refund.approval.title",
-                new Object[] { origin.typeName(), yuan(origin.amount()) }, LocaleContextHolder.getLocale());
-        long approvalId = approvals.submit(new ApprovalService.SubmitCmd(orgId, applicantId, title,
-                BIZ_ADDON, BIZ_TYPE, String.valueOf(refundBillId), assigneeId));
+                new Object[] { origin.typeName(), yuan(amount == null ? origin.amount() : amount) },
+                LocaleContextHolder.getLocale());
+        long approvalId = approvals.submit(new ApprovalService.SubmitCmd(orgId, cmd.applicantId(), title,
+                BIZ_ADDON, BIZ_TYPE, String.valueOf(refundBillId), cmd.assigneeId()));
         jdbc.update("update payment_bill set refund_approval_id = ? where id = ?", approvalId, refundBillId);
         return refundBillId;
     }

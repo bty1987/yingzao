@@ -30,7 +30,7 @@ public class PaymentBillController {
     public record CollectRequest(List<BillService.ChannelLine> channels) {
     }
 
-    public record RefundRequest(Long assigneeId, String reason) {
+    public record RefundRequest(Long assigneeId, String reason, Long amount) {
     }
 
     private final BillService bills;
@@ -84,8 +84,11 @@ public class PaymentBillController {
             HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");
         Long userId = (Long) request.getAttribute("yz.userId");
-        return ApiResponse.ok(bills.submitRefund(orgId, id, userId,
-                body.assigneeId(), body.reason()));
+        return ApiResponse.ok(bills.submitRefundPartial(
+                new com.yingzao.addons.api.PaymentApi.PartialRefundCmd(orgId, id,
+                        body == null ? null : body.amount(), userId,
+                        body == null ? null : body.assigneeId(),
+                        body == null ? null : body.reason())));
     }
 
     @PostMapping("/bills/{id}/cancel")

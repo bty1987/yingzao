@@ -43,6 +43,14 @@ public interface PaymentApi {
     record RefundCmd(long orgId, long billId, long applicantId, long assigneeId, String reason) {
     }
 
+    /** 部分退款命令(厘):amount 可空=整单退(等价 RefundCmd);增减线净退款等场景——
+     *  原单状态不动(仅整单退置终态),净额由聚合查询体现。 */
+    record PartialRefundCmd(long orgId, long billId, Long amount, long applicantId, Long assigneeId, String reason) {
+    }
+
+    /** 部分退款:统一入口,amount 空=整单退;否则按指定额建退款单(不超原单额)。 */
+    long submitRefundPartial(PartialRefundCmd cmd);
+
     /** 款项单摘要(业务插件视角;status 口径见 addon-payment 字典)。 */
     record BillSummary(long billId, String typeCode, String typeName, int direction,
                        long amount, int sort, int status) {

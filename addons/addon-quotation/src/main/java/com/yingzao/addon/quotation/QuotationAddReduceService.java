@@ -202,9 +202,19 @@ public class QuotationAddReduceService {
         long totalAdd = ((Number) fresh.get("total_add")).longValue();
         long totalSub = ((Number) fresh.get("total_sub")).longValue();
         require(totalAdd - totalSub != 0, CODE_ZERO_TOTAL, "ar.zeroTotal");
-        require(totalAdd - totalSub > 0, CODE_ZERO_TOTAL, "ar.negativeTotal");
-
+        long netAmount = totalAdd - totalSub;
         long quotationId = ((Number) fresh.get("quotation_id")).longValue();
+        if (netAmount < 0) {
+            // 净退款(V2.1,docs/11 A1):不生成应收款;对同装修单已收/已确认的差量款按 |净额|
+            // 发起部分退款(payment.submitRefundPartial);无可退已收款→remark 追加人工标记(轨迹可见)。
+            submitNetRefund(orgId, orderId, arId, -netAmount, operatorId, (String) fresh.get("remark"));
+            jdbc.update("update quotation_add_reduce set status = ?, total_add = ?, total_sub = ? where id = ?",
+                    STATUS_SUBMITTED, totalAdd, totalSub, arId);
+            eventBus.publish(new QuotationAddReduceSubmittedEvent(arId, orgId, orderId, null,
+                    totalAdd, totalSub, blankToNull((String) fresh.get("remark"))),
+                    "ar-submitted-" + arId);
+            return arId;
+        }
         // ar_diff 类型懒预置(照 AdvanceService 科目懒预置惯例;组织自建类型,协议键全局约定)
         Integer typeExists = jdbc.queryForObject(
                 "select count(*) from payment_bill_type where org_id = ? and code = ?",
@@ -371,5 +381,38 @@ public class QuotationAddReduceService {
         if (!cond) {
             throw new BizException(code, msg(key));
         }
+    }
+
+    /** 净退款落地(docs/11 A1):遍历同装修单已提交差量单的款项单(bizId=arId),找已收/已确认者部分退;
+     *  无→remark 追加人工标记。 */
+    private void submitNetRefund(long orgId, long orderId, long arId, long refundAmount,
+            long operatorId, String remark) {
+        Long collectedBillId = null;
+        for (Long siblingArId : jdbc.queryForList("""
+                select id from quotation_add_reduce
+                where org_id = ? and order_id = ? and dp_id is not null and id != ?
+                order by id desc
+                """, Long.class, orgId, orderId, arId)) {
+            for (PaymentApi.BillSummary bill : payments.listBills(orgId, BIZ_ADDON, BIZ_TYPE,
+                    String.valueOf(siblingArId))) {
+                if (bill.direction() == 0 && (bill.status() == 1 || bill.status() == 2)) {
+                    collectedBillId = bill.billId();
+                    break;
+                }
+            }
+            if (collectedBillId != null) {
+                break;
+            }
+        }
+        if (collectedBillId == null) {
+            jdbc.update("""
+                    update quotation_add_reduce set remark = concat(coalesce(remark, ''),
+                        '[净退款 ', ?, ' 元无可退已收差量款,待人工处理]')
+                    where id = ?
+                    """, String.valueOf(refundAmount / 1000), arId);
+            return;
+        }
+        payments.submitRefundPartial(new PaymentApi.PartialRefundCmd(orgId, collectedBillId,
+                refundAmount, operatorId, operatorId, "增减净退款 ar#" + arId));
     }
 }

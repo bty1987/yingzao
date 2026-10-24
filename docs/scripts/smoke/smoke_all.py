@@ -1219,6 +1219,7 @@ def main():
 
 
 
+
     stamp4 = time.strftime("%Y%m%d%H%M%S")
     dep_code, con_code = "smokedep" + stamp4[-6:], "smokecon" + stamp4[-6:]
     type_dep = api_ok("建款项类型(顺序1)", "POST", "/api/payment/bill-types", tok_admin,
@@ -3735,6 +3736,82 @@ def main():
     dr_left = [b for b in (dr_det.get("bills") or []) if b.get("direction") == 0
                and b.get("status") == 0]
     step("废单状态4+未收款项全联动作废", dr_det.get("status") == 4 and len(dr_left) == 0, dr_det)
+
+    # ---- A1 部分退款+净退款链(第 81 次;docs/11 A1:净负差量单→部分退已收差量款)----
+    print("\n== A1 部分退款与增减净退款 ==")
+    import time as _t81
+    a1_stamp = _t81.strftime("%H%M%S") + "a1"
+    a1_types = api_ok("A1 类型查", "GET", "/api/payment/bill-types?includeDisabled=true", tok_admin)
+    if "ar_diff" not in [t.get("code") for t in (a1_types or [])]:
+        api_ok("A1 前置:建差量款类型", "POST", "/api/payment/bill-types", tok_admin,
+               {"code": "ar_diff", "name": "增减差量款", "sort": 90})
+    # payment 侧:部分退(独立 biz,不污染业务链)
+    a1_biz = "a1test" + a1_stamp
+    a1_bill = api_ok("A1 建应收款单(10 万)", "POST", "/api/payment/bills", tok_admin,
+                     {"bizAddon": a1_biz, "bizType": "t", "bizId": "1", "typeCode": "ar_diff",
+                      "amount": 100000000, "remark": "A1 部分退测试"})
+    if a1_bill is None:
+        return finish()
+    api_ok("A1 收款(10 万)", "POST", "/api/payment/bills/%s/collect" % a1_bill, tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 100000000}]})
+    a1_ref = api_ok("A1 部分退款提交(3 万)", "POST", "/api/payment/bills/%s/refund" % a1_bill, tok_admin,
+                    {"assigneeId": uid_c, "reason": "A1 部分退", "amount": 30000000})
+    if a1_ref is None:
+        return finish()
+    a1_refdet = api_ok("A1 退款单回读", "GET", "/api/payment/bills/%s" % a1_ref, tok_admin)
+    step("A1 退款单记指定额(3 万)", (a1_refdet or {}).get("amount") == 30000000, a1_refdet)
+    a1_appr = (a1_refdet or {}).get("refund_approval_id")
+    api_ok("A1 审批通过(example_c)", "POST", "/api/approvals/%s/approve" % a1_appr, tok_c,
+           {"comment": "A1 同意"})
+    a1_orig = None
+    for _ in range(10):
+        _t81.sleep(1)
+        a1_orig = api_ok("A1 原单回读", "GET", "/api/payment/bills/%s" % a1_bill, tok_admin)
+        if (a1_orig or {}).get("status") in (1, 3):
+            break
+    step("A1 部分退后原单不置终态(仍 1 已收)", (a1_orig or {}).get("status") == 1, a1_orig)
+
+    # quotation 侧:净负差量单提交→自动对已收差量款部分退(独立装修单,复用 AR 段靶单 order_h)
+    a1_pos = api_ok("A1 建正差量草稿(+5 万)", "POST", "/api/quotation/ar", tok_admin,
+                    {"orderId": order_h, "remark": "A1 正差量" + a1_stamp,
+                     "items": [{"itemType": 0, "goodsName": "A1增项", "num": 1000, "unitPrice": 50000}]})
+    if a1_pos is None:
+        return finish()
+    api_ok("A1 提交正差量(生成应收)", "POST", "/api/quotation/ar/%s/submit" % a1_pos, tok_admin)
+    a1_posdet = api_ok("A1 正差量回读", "GET", "/api/quotation/ar/%s" % a1_pos, tok_admin)
+    a1_dp = (a1_posdet or {}).get("dp_id")
+    if a1_dp:
+        api_ok("A1 收正差量款(5 万)", "POST", "/api/payment/bills/%s/collect" % a1_dp, tok_admin,
+               {"channels": [{"channelCode": "cash", "amount": 50000}]})
+        _t81.sleep(2)
+    a1_neg = api_ok("A1 建净负草稿(-2 万)", "POST", "/api/quotation/ar", tok_admin,
+                    {"orderId": order_h, "remark": "A1 净退" + a1_stamp,
+                     "items": [{"itemType": 1, "goodsName": "A1减项", "num": -1000, "unitPrice": 20000}]})
+    if a1_neg is None:
+        return finish()
+    st, res = call("POST", "/api/quotation/ar/%s/submit" % a1_neg, tok_admin)
+    step("A1 净负提交成功(不再拒)", st == 200 and res.get("code") == 0, res)
+    _t81.sleep(3)
+    a1_negdet = api_ok("A1 净负单回读", "GET", "/api/quotation/ar/%s" % a1_neg, tok_admin)
+    step("A1 净负单 status=1 且无应收款", (a1_negdet or {}).get("status") == 1
+         and not (a1_negdet or {}).get("dp_id"), a1_negdet)
+    import pymysql as _pym81
+    _c81 = _pym81.connect(host="192.168.5.21", user="root",
+                          password=os.environ.get("YINGZAO_DB_PASSWORD", "Neusoft!"),
+                          database="yingzao", charset="utf8mb4")
+    try:
+        with _c81.cursor() as _cur81:
+            _cur81.execute("""
+                select count(*) from payment_bill
+                where biz_addon = 'quotation' and biz_type = 'ar_diff'
+                  and direction = 1 and amount = 20000 and status in (0, 1)
+                  and origin_bill_id = %s
+            """, (a1_dp,))
+            a1_refrows = _cur81.fetchone()[0]
+    finally:
+        _c81.close()
+    step("A1 净退款单自动创建(部分退 2 万挂已收差量款)", (a1_refrows or 0) >= 1, a1_refrows)
+
 
     # ========= 营销获客(addon-market 第 27 次扩展)=========
     print("\n== 营销获客(addon-market:投放物+进线承接+归因漏斗+案例库) ==")
