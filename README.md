@@ -124,6 +124,11 @@
 
 <p>
   <img src="docs/screenshots/webmp-cases.png" width="30%" alt="客户端 · 案例库(匿名)" title="客户端 · 案例库(匿名)">
+  <img src="docs/screenshots/webmp-progress.png" width="30%" alt="客户端 · 我的装修(登录墙)" title="客户端 · 我的装修(登录墙)">
+  <img src="docs/screenshots/webmp-points.png" width="30%" alt="客户端 · 我的积分" title="客户端 · 我的积分">
+</p>
+<p>
+  <img src="docs/screenshots/webmp-mine.png" width="30%" alt="客户端 · 我的(登录态)" title="客户端 · 我的(登录态)">
   <img src="docs/screenshots/webmp-login.png" width="30%" alt="客户端 · 验证码登录" title="客户端 · 验证码登录">
 </p>
 
@@ -292,6 +297,8 @@ cd web-mp && npm install && npm run dev:h5
 | [docs/10-插件开发指南.md](docs/10-插件开发指南.md) | **第三方开发者从零到上架**:军规速览/抄作业路径表/验收清单(addon-example 示范工程配套) |
 | [docs/06-高管驾驶舱与指标体系设计参考.md](docs/06-高管驾驶舱与指标体系设计参考.md) | 方林驾驶舱专题反哺归档:六维指标口径/报表框架设计输入/图表规范/聚合表模式 |
 | [docs/07-经营看板与战报激励体系设计参考.md](docs/07-经营看板与战报激励体系设计参考.md) | fl-yy 反哺归档:经营目标三模型/战报PK激励域盘点/数据范围控制/outbox 等工程模式 |
+| [docs/08-AI出图平台工程实践反哺.md](docs/08-AI出图平台工程实践反哺.md) | 方林智绘(FL-ZH)反哺归档:REQ需求制度/队列车道治理/AI质检链/SaaS商业化内核 |
+| [docs/09-DecoCore经验反哺参考.md](docs/09-DecoCore经验反哺参考.md) | DecoCore 反哺归档:仅工程经验/设计模式/踩坑教训(不含业务口径) |
 | [docs/scripts/ads-reference/](docs/scripts/ads-reference) | 行业聚合表 SQL 参考(工单达成/渠道漏斗/应收账龄/项目毛利/库存周转/到货准时) |
 | [docs/prd/](docs/prd) | 各 addon 的 PRD(业务闭环),含模板 |
 | [docs/rules/](docs/rules) | 各 addon 的实现口径(状态机/金额口径/字典枚举) |
