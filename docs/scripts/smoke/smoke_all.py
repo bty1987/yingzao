@@ -1286,6 +1286,71 @@ def main():
            {"channels": [{"channelCode": "scan", "amount": 2000000}]})
     api_ok("合同款确认", "POST", "/api/payment/bills/%s/confirm" % bill_con, tok_admin)
 
+    # ---- A3 批量收款 N:1(V802,第 83 次;docs/11 A3:一笔到账收 N 单,每笔一张子收据共享 batch_no) ----
+    print("\n== A3 批量收款 N:1 ==")
+    b1 = api_ok("A3 建批收单1(1000元)", "POST", "/api/payment/bills", tok_admin,
+                dict(biz3, bizId="BA" + stamp4, typeCode=dep_code, amount=1000000))
+    if b1 is None:
+        return finish()
+    b2 = api_ok("A3 建批收单2(1500元)", "POST", "/api/payment/bills", tok_admin,
+                dict(biz3, bizId="BB" + stamp4, typeCode=dep_code, amount=1500000))
+    if b2 is None:
+        return finish()
+    b3 = api_ok("A3 建批收单3(1500元)", "POST", "/api/payment/bills", tok_admin,
+                dict(biz3, bizId="BC" + stamp4, typeCode=dep_code, amount=1500000))
+    if b3 is None:
+        return finish()
+    api_err("A3 混已收单整批拒 270003", "POST", "/api/payment/bills/batch-collect", tok_admin,
+            {"billIds": [b1, bill_dep], "channels": [{"channelCode": "bank", "amount": 3000000}]}, 270003)
+    api_err("A3 渠道合计≠Σ应收整批拒 270007", "POST", "/api/payment/bills/batch-collect", tok_admin,
+            {"billIds": [b1, b2, b3],
+             "channels": [{"channelCode": "bank", "amount": 4000001}]}, 270007)
+    api_err("A3 重复 billId 拒 270001", "POST", "/api/payment/bills/batch-collect", tok_admin,
+            {"billIds": [b1, b1], "channels": [{"channelCode": "bank", "amount": 1000000}]}, 270001)
+    batch = api_ok("A3 批收成功(bank 2500+cash 1500 收三单)", "POST", "/api/payment/bills/batch-collect",
+                   tok_admin, {"billIds": [b1, b2, b3],
+                               "channels": [{"channelCode": "bank", "amount": 2500000},
+                                            {"channelCode": "cash", "amount": 1500000}]})
+    batch_no = (batch or {}).get("batchNo")
+    rcpts = (batch or {}).get("receipts") or []
+    ok = bool(batch_no) and str(batch_no).startswith("B") and len(rcpts) == 3 \
+        and {r.get("billId") for r in rcpts} == {b1, b2, b3}
+    step("A3 batchNo B 前缀+三张子收据在册", ok, batch)
+    rows = None
+    import pymysql as _pym_a3
+    _conn_a3 = _pym_a3.connect(host="192.168.5.21", user="root", password="Neusoft!",
+                               database="yingzao", charset="utf8mb4")
+    try:
+        with _conn_a3.cursor() as _cur_a3:
+            _cur_a3.execute("""
+                select r.bill_id, c.channel_code, c.amount from payment_receipt r
+                join payment_receipt_channel c on c.receipt_id = r.id
+                where r.batch_no = %s order by r.bill_id, c.id
+            """, (batch_no,))
+            rows = _cur_a3.fetchall()
+    finally:
+        _conn_a3.close()
+    by_bill = {}
+    for bid, cc, amt in (rows or []):
+        by_bill.setdefault(bid, []).append((cc, amt))
+    ok = by_bill.get(b1) == [("bank", 1000000)] and by_bill.get(b2) == [("bank", 1500000)] \
+        and by_bill.get(b3) == [("cash", 1500000)]
+    step("A3 渠道贪心拆分(单张自洽 Σ渠道==该笔应收)", ok, by_bill)
+    agg = {}
+    for bid, cc, amt in (rows or []):
+        agg[cc] = agg.get(cc, 0) + amt
+    step("A3 整批渠道构成可聚合还原(bank 2500+cash 1500)",
+         agg == {"bank": 2500000, "cash": 1500000}, agg)
+    api_ok("A3 批收单1 财务确认(子收据回执链不变)", "POST", "/api/payment/bills/%s/confirm" % b1, tok_admin)
+    api_err("A3 批后单笔重复收拒 270003", "POST", "/api/payment/bills/%s/collect" % b2, tok_admin,
+            {"channels": [{"channelCode": "cash", "amount": 1500000}]}, 270003)
+    ev_bat = api_ok("A3 批收事件三单齐投", "GET",
+                    "/api/events?eventType=PaymentCollectedEvent&status=1&page=1&size=50", tok_admin)
+    bat_keys = [r.get("event_key") for r in ((ev_bat or {}).get("rows") or [])]
+    ok = ("bill:%s:collected" % b1) in bat_keys and ("bill:%s:collected" % b2) in bat_keys \
+        and ("bill:%s:collected" % b3) in bat_keys
+    step("A3 逐笔 Collected 事件在册(既有消费者零改动)", ok, bat_keys[:6])
+
     print("== 事件总线三件套(消费确认+重试+死信)==")
     api_err("非管理员查事件拒绝 123001", "GET", "/api/events", tok_b, None, 123001)
     ev_col = api_ok("收款事件已消费确认", "GET",

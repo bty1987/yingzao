@@ -1,5 +1,6 @@
 package com.yingzao.addon.payment;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -166,6 +167,108 @@ public class BillService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("receiptId", receiptId);
         result.put("receiptNo", "R" + String.format("%08d", receiptId));
+        return result;
+    }
+
+    // ---- 批量收款 N:1(V802,docs/11 A3;一张到账收 N 单) ----
+
+    /**
+     * 一笔到账收 N 单:每笔一张子收据(1:1 与回执/confirm 链不变)同批共享 batch_no,
+     * 渠道行按序贪心拆分(单张自洽 Σ渠道==该笔应收,整批渠道构成可聚合还原)。
+     * 先验后写(老批收先 save 收据后校验的反模式不迁):逐笔守卫+顺序门控+Σ应收==Σ渠道
+     * 全部通过才落库,任一笔非法整批拒(零写入)。逐笔发 PaymentCollectedEvent
+     * (既有消费者按单回写零改动);confirm 仍走单笔两步复核(V1 口径不变)。
+     */
+    @Transactional
+    public Map<String, Object> collectBatch(long orgId, List<Long> billIds, List<ChannelLine> channels,
+            long operatorId) {
+        require(billIds != null && !billIds.isEmpty(), CODE_INVALID_PARAM, "payment.param.invalid");
+        require(channels != null && !channels.isEmpty(), CODE_INVALID_PARAM, "payment.param.invalid");
+        // 全额收款一次到位:同一单混两笔无意义
+        require(billIds.stream().distinct().count() == billIds.size(), CODE_INVALID_PARAM, "payment.param.invalid");
+        long channelSum = 0;
+        for (ChannelLine line : channels) {
+            require(line.channelCode() != null && CHANNELS.contains(line.channelCode()),
+                    CODE_CHANNEL_INVALID, "payment.bill.channelInvalid");
+            require(line.amount() > 0, CODE_CHANNEL_AMOUNT, "payment.bill.channelAmount");
+            channelSum += line.amount();
+        }
+        // 先验阶段:逐笔守卫 + 顺序门控(任一被堵整批拒,零写入)
+        List<BillRow> bills = new ArrayList<>();
+        long amountSum = 0;
+        for (Long billId : billIds) {
+            require(billId != null, CODE_INVALID_PARAM, "payment.param.invalid");
+            BillRow bill = load(orgId, billId);
+            if (!(bill.direction() == DIRECTION_INCOME && bill.status() == STATUS_UNPAID)) {
+                // 明细带单号:require 的第三参是 i18n 键,拼接键不存在会 NoSuchMessageException(转 110000)
+                throw new BizException(CODE_BILL_BAD_STATE, msg("payment.bill.badstate") + ":" + billId);
+            }
+            if (bill.sort() > 1) {
+                Integer blocked = jdbc.queryForObject("""
+                        select count(*) from payment_bill
+                        where org_id = ? and biz_addon = ? and biz_type = ? and biz_id = ?
+                          and direction = 0 and sort < ? and status not in (1, 2)
+                        """, Integer.class, orgId, bill.bizAddon(), bill.bizType(), bill.bizId(), bill.sort());
+                if (blocked != null && blocked > 0) {
+                    throw new BizException(CODE_PREV_NOT_COLLECTED,
+                            msg("payment.bill.prevNotCollected") + ":" + billId);
+                }
+            }
+            bills.add(bill);
+            amountSum += bill.amount();
+        }
+        if (amountSum != channelSum) {
+            throw new BizException(CODE_CHANNEL_SUM, msg("payment.bill.channelSum"));
+        }
+        String batchNo = "B" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        String collectorName = displayName(operatorId);
+        List<Map<String, Object>> receipts = new ArrayList<>();
+        int cursor = 0;
+        long remain = channels.get(0).amount();
+        for (BillRow bill : bills) {
+            // 占位插入后按 id 回填规范编号(collect 同款;批收据共享 batch_no)
+            jdbc.update("""
+                    insert into payment_receipt(org_id, receipt_no, bill_id, batch_no, direction, amount,
+                        collector_id, collector_name, collect_time)
+                    values (?, concat('R', left(md5(uuid()), 8)), ?, ?, ?, ?, ?, ?, now())
+                    """, orgId, bill.id(), batchNo, DIRECTION_INCOME, bill.amount(), operatorId, collectorName);
+            long receiptId = jdbc.queryForObject("select last_insert_id()", Long.class);
+            jdbc.update("update payment_receipt set receipt_no = concat('R', lpad(id, 8, '0')) where id = ?",
+                    receiptId);
+            // 渠道贪心拆分:进循环先补货(跳过已耗尽渠道行),拆不出零额行
+            long need = bill.amount();
+            while (need > 0) {
+                if (remain == 0) {
+                    cursor++;
+                    remain = channels.get(cursor).amount();
+                    continue;
+                }
+                long take = Math.min(remain, need);
+                jdbc.update(
+                        "insert into payment_receipt_channel(org_id, receipt_id, channel_code, amount) values (?,?,?,?)",
+                        orgId, receiptId, channels.get(cursor).channelCode(), take);
+                need -= take;
+                remain -= take;
+            }
+            int updated = jdbc.update(
+                    "update payment_bill set status = ? where id = ? and status = ?",
+                    STATUS_COLLECTED, bill.id(), STATUS_UNPAID);
+            if (updated == 0) {
+                // 并发双收款窗口:条件更新只成功一次
+                throw new BizException(CODE_BILL_BAD_STATE, msg("payment.bill.badstate") + ":" + bill.id());
+            }
+            eventBus.publish(new PaymentCollectedEvent(bill.id(), orgId, bill.bizAddon(), bill.bizType(),
+                    bill.bizId(), bill.typeCode(), bill.amount(), receiptId, operatorId),
+                    "bill:" + bill.id() + ":collected");
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("billId", bill.id());
+            one.put("receiptId", receiptId);
+            one.put("receiptNo", "R" + String.format("%08d", receiptId));
+            receipts.add(one);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("batchNo", batchNo);
+        result.put("receipts", receipts);
         return result;
     }
 

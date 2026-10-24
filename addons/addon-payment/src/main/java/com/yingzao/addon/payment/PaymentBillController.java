@@ -30,6 +30,9 @@ public class PaymentBillController {
     public record CollectRequest(List<BillService.ChannelLine> channels) {
     }
 
+    public record BatchCollectRequest(List<Long> billIds, List<BillService.ChannelLine> channels) {
+    }
+
     public record RefundRequest(Long assigneeId, String reason, Long amount) {
     }
 
@@ -69,6 +72,15 @@ public class PaymentBillController {
         long orgId = (Long) request.getAttribute("yz.orgId");
         Long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(bills.collect(orgId, id, body.channels(), userId));
+    }
+
+    /** 批量收款 N:1(V802):一笔到账收 N 单,每笔一张子收据共享 batch_no,先验后写整批拒。 */
+    @PostMapping("/bills/batch-collect")
+    public ApiResponse<Map<String, Object>> batchCollect(@RequestBody BatchCollectRequest body,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(bills.collectBatch(orgId, body.billIds(), body.channels(), userId));
     }
 
     @PostMapping("/bills/{id}/confirm")
