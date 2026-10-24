@@ -1,7 +1,7 @@
 addon:
   id: target
   name: 经营目标
-  version: 0.1.0
+  version: 0.2.0
   error-code-segment: 370000
   menus:
     - path: /target/plans

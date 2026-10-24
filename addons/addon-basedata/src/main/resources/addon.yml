@@ -1,7 +1,7 @@
 addon:
   id: basedata
   name: 基础数据
-  version: 0.1.0
+  version: 0.3.0
   error-code-segment: 260000
   menus:
     - path: /basedata/goods
