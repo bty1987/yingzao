@@ -51,6 +51,7 @@
 | 8 | TYPE_AR | 辅退 | 入 | `addManifestForAR`(MSI:710) | AR(**复用 AS 计数器 33**,MSI:749) | 无 |
 | 9 | TYPE_PM | 套合 | 出零件+入套餐 | `addManifestForPM`(MSI:862,由 GSSI mergePackage 调) | PM/37 | 无 |
 | 10 | TYPE_PS | 套拆 | 出套餐+入零件 | `addManifestForPS`(MSI:814,由 GSSI splitPackage 调) | PS/38 | 无 |
+- 【营造实现定案回写(第 85 次,A5)】**套合/套拆 packageOp(9/10 型,零迁移)**:商品须套餐 type=1 且已配置成员(经 GoodsApi 契约 310035/310036,老 260041 单码两态收双码);成员行**色规继承套餐行色规**(营造套餐成员无色规配置——老 GoodsPackage 成员绑定色规的配置维度随套餐配置 V2);数量=套餐数×成员量÷1000 千分位精确(HALF_UP);落单即确认+source_type=package(sourceId=套餐商品 id)+StockManifestCreatedEvent;端点 /manifests/package-split|package-merge;**老成员固定色规行与套餐库存行的映射在本域收敛为"同仓同色规一次过账"**,不足任一成员整单拒(310022 条件更新闸,事务回滚零写入);PRD 见 docs/prd/addon-inventory.md §派生单。
 | 11 | TYPE_CP | 盘盈 | 入 | `addManifestForCP`(MSI:910,由 GSSI plus 调) | CP/41 | 无 |
 | 12 | TYPE_CL | 盘亏 | 出 | `addManifestForCL`(MSI:950,由 GSSI lose 调) | CL/42 | 无 |
 
@@ -340,7 +341,7 @@ CR=addManifestForCR 只扣原 CG 货单项 surplus+出库,**全程不触碰 purc
 6. **外辅「厂商即用户」通用化**:厂商账号模型归 addon-supplier,外辅单厂商视角走协同端点?
 7. **辅料领用额度双闸去留**:工程辅料总额/per-gid 限额是行业通用还是方林管控特性?定材定额校验(noods)保留几层?
 8. **盘点与模板**:盘点(checklist 孤表)是否要在 V1 补全闭环(若要,按 CP/CL 事件做)?出库单模板(生产 0 行)确认不迁?
-9. **12 类货单类型字典收敛**:9-12(套合/套拆/盘盈/盘亏)依赖商品套餐与盘点场景,是否随 V1 全量迁还是先 1-8?
+9. 【已定案 2026-10-25】12 类全量已迁:1-8(V1)/11-12 盘盈亏(adjust)/9-10 套合套拆(第 85 次 A5);
 10. **手工建单范围**:createManifestTypes=[1,3] 仅进货/出货开放手工,维持?
 11. **审核线**:辅料领用 status 7(审核)在普通单无守卫的乱象下,真实业务是否需要审核环节?若要,接内核轻量审批;
 12. **负库存策略**:原子守卫已防超扣,但是否允许极端场景负库存(老系统负数单可击穿)?维持禁止?

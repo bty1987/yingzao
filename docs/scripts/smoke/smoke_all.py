@@ -2682,6 +2682,78 @@ def main():
     api_err("撤销单再出库拒绝 310002", "POST", "/api/inventory/requisitions/%s/outbound" % rq1,
             tok_admin, None, 310002)
 
+    # ========= A5 套合/套拆(9/10 型货单,第 85 次;docs/11 A5:老 mergePackage/splitPackage 语义)=========
+    # 套拆 10 型=出套餐+入成员(num×成员量),套合 9 型=出成员+入套餐;落单即确认;拆合守恒。
+    print("\n== A5 套合/套拆 ==")
+    pkg_a5 = api_ok("A5 建套餐商品(type=1)", "POST", "/api/basedata/goods", tok_admin,
+                    {"name": "A5烟测套餐" + stamp_inv, "categoryId": cat_child, "unit": "套", "type": 1})
+    m1_a5 = api_ok("A5 建成员1(漆桶)", "POST", "/api/basedata/goods", tok_admin,
+                   {"name": "A5成员漆" + stamp_inv, "categoryId": cat_child, "unit": "桶", "selling": 45000})
+    m2_a5 = api_ok("A5 建成员2(刷)", "POST", "/api/basedata/goods", tok_admin,
+                   {"name": "A5成员刷" + stamp_inv, "categoryId": cat_child, "unit": "把", "selling": 12000})
+    if pkg_a5 is None or m1_a5 is None or m2_a5 is None:
+        return finish()
+    api_ok("A5 加成员1(每套2桶)", "POST", "/api/basedata/goods/%s/packages" % pkg_a5, tok_admin,
+           {"memberGoodsId": m1_a5, "num": 2000})
+    api_ok("A5 加成员2(每套1把)", "POST", "/api/basedata/goods/%s/packages" % pkg_a5, tok_admin,
+           {"memberGoodsId": m2_a5, "num": 1000})
+    pkg_empty = api_ok("A5 建空套餐(守卫靶)", "POST", "/api/basedata/goods", tok_admin,
+                       {"name": "A5空套餐" + stamp_inv, "categoryId": cat_child, "unit": "套", "type": 1})
+    api_err("A5 非套餐拆拒绝 310035", "POST", "/api/inventory/manifests/package-split", tok_admin,
+            {"packageGoodsId": goods_inv1, "warehouseId": wh_main, "num": 1000}, 310035)
+    api_err("A5 无成员套餐拆拒绝 310036", "POST", "/api/inventory/manifests/package-split", tok_admin,
+            {"packageGoodsId": pkg_empty, "warehouseId": wh_main, "num": 1000}, 310036)
+    api_err("A5 零数量拒绝 310031", "POST", "/api/inventory/manifests/package-split", tok_admin,
+            {"packageGoodsId": pkg_a5, "warehouseId": wh_main, "num": 0}, 310031)
+    api_ok("A5 进货铺底(套餐5/漆10/刷5)", "POST", "/api/inventory/manifests", tok_admin,
+           {"type": 1, "items": [
+               {"goodsId": pkg_a5, "num": 5000, "warehouseIn": wh_main},
+               {"goodsId": m1_a5, "num": 10000, "warehouseIn": wh_main},
+               {"goodsId": m2_a5, "num": 5000, "warehouseIn": wh_main}]})
+    ps_id = api_ok("A5 套拆 2 套(PS 单,出套餐入成员)", "POST",
+                   "/api/inventory/manifests/package-split", tok_admin,
+                   {"packageGoodsId": pkg_a5, "warehouseId": wh_main, "num": 2000})
+    if ps_id is None:
+        return finish()
+    ps_det = api_ok("A5 套拆单详情", "GET", "/api/inventory/manifests/%s" % ps_id, tok_admin)
+    ps_ok = bool(ps_det) and str(ps_det.get("code", "")).startswith("PS")
+    if ps_ok:
+        ps_nums = sorted(it.get("num") for it in (ps_det.get("items") or []))
+        ps_ok = (ps_det.get("type") == 10 and ps_det.get("status") == 1
+                 and ps_det.get("source_type") == "package" and len(ps_nums) == 3
+                 and ps_nums == [2000, 2000, 4000])
+    step("A5 PS 单:前缀/type10/确认态/source=package/三行量(套餐2000+漆4000+刷2000)", ps_ok, ps_det)
+    stocks_a5 = api_ok("A5 拆后库存复查", "GET", "/api/inventory/stocks?page=1&size=100", tok_admin)
+    a5_rows = {x.get("goods_id"): x.get("num") for x in (stocks_a5 or {}).get("rows", [])
+               if x.get("goods_id") in (pkg_a5, m1_a5, m2_a5)}
+    step("A5 拆后库存:套餐3/漆14/刷7(5-2,10+4,5+2)",
+         a5_rows.get(pkg_a5) == 3000 and a5_rows.get(m1_a5) == 14000 and a5_rows.get(m2_a5) == 7000,
+         a5_rows)
+    pm_id = api_ok("A5 套合 1 套(PM 单,出成员入套餐)", "POST",
+                   "/api/inventory/manifests/package-merge", tok_admin,
+                   {"packageGoodsId": pkg_a5, "warehouseId": wh_main, "num": 1000})
+    if pm_id is None:
+        return finish()
+    pm_det = api_ok("A5 套合单详情", "GET", "/api/inventory/manifests/%s" % pm_id, tok_admin)
+    step("A5 PM 单:前缀/type9/确认态", bool(pm_det) and str(pm_det.get("code", "")).startswith("PM")
+         and pm_det.get("type") == 9 and pm_det.get("status") == 1, pm_det)
+    stocks_a52 = api_ok("A5 合后库存复查", "GET", "/api/inventory/stocks?page=1&size=100", tok_admin)
+    a5_rows2 = {x.get("goods_id"): x.get("num") for x in (stocks_a52 or {}).get("rows", [])
+                if x.get("goods_id") in (pkg_a5, m1_a5, m2_a5)}
+    step("A5 合后库存:套餐4/漆12/刷6(3+1,14-2,7-1)",
+         a5_rows2.get(pkg_a5) == 4000 and a5_rows2.get(m1_a5) == 12000 and a5_rows2.get(m2_a5) == 6000,
+         a5_rows2)
+    api_err("A5 套合成员不足拒绝 310022(刷仅够6套)", "POST",
+            "/api/inventory/manifests/package-merge", tok_admin,
+            {"packageGoodsId": pkg_a5, "warehouseId": wh_main, "num": 7000}, 310022)
+    ps_page = api_ok("A5 货单列表按类型过滤(type=10)", "GET",
+                     "/api/inventory/manifests?type=10&page=1&size=10", tok_admin)
+    step("A5 列表过滤命中套拆单", any(r.get("id") == ps_id for r in (ps_page or {}).get("rows", [])),
+         ps_page)
+    ev_a5 = api_ok("A5 库存事件在册(套拆)", "GET",
+                   "/api/events?eventType=StockManifestCreatedEvent&status=1&page=1&size=5", tok_admin)
+    step("A5 StockManifestCreated 消费行存在", bool(ev_a5) and ev_a5.get("total", 0) >= 1, ev_a5)
+
     # ---- B 类#7:领料定材校验(定材包成员=定额来源;组织开关默认关)----
     pkg_b7 = api_ok("B7建定材包(surplus=0)", "POST", "/api/basedata/packages", tok_admin,
                     {"name": "定材包B7" + stamp_inv, "surplus": 0})

@@ -40,6 +40,10 @@ public class ManifestController {
             String remark) {
     }
 
+    public record PackageOpRequest(Long packageGoodsId, Long colorId, Long formatId,
+            Long warehouseId, Long num) {
+    }
+
     private final ManifestService manifests;
 
     public ManifestController(ManifestService manifests) {
@@ -112,5 +116,25 @@ public class ManifestController {
         Long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(manifests.adjust(orgId, body == null ? null : body.type(),
                 body == null ? null : body.items(), body == null ? null : body.remark(), userId));
+    }
+
+    /** 套拆(10 型):出套餐+入成员,数量=套餐数×成员量;落单即确认。 */
+    @PostMapping("/package-split")
+    public ApiResponse<Long> packageSplit(@RequestBody PackageOpRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(manifests.packageOp(orgId, ManifestService.TYPE_PS,
+                body == null ? null : new ManifestService.PackageOpCmd(body.packageGoodsId(),
+                        body.colorId(), body.formatId(), body.warehouseId(), body.num()), userId));
+    }
+
+    /** 套合(9 型):出成员+入套餐;落单即确认。 */
+    @PostMapping("/package-merge")
+    public ApiResponse<Long> packageMerge(@RequestBody PackageOpRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(manifests.packageOp(orgId, ManifestService.TYPE_PM,
+                body == null ? null : new ManifestService.PackageOpCmd(body.packageGoodsId(),
+                        body.colorId(), body.formatId(), body.warehouseId(), body.num()), userId));
     }
 }

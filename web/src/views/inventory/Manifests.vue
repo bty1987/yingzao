@@ -14,6 +14,7 @@
       <el-button @click="reversalDialog = true">冲销(进退/出返)</el-button>
       <el-button @click="transferDialog = true">调拨申请</el-button>
       <el-button @click="adjustDialog = true">盘盈/盘亏</el-button>
+      <el-button @click="openPackage">套拆/套合</el-button>
       <span class="tip">单据即库存:建单即时过账;手工建单仅进货/出货,冲销 = 反向类型新单</span>
     </div>
 
@@ -248,6 +249,40 @@
       </template>
     </el-dialog>
 
+    <!-- 套拆/套合 -->
+    <el-dialog v-model="packageDialog" :title="packageForm.type === 10 ? '套拆(出套餐+入成员)' : '套合(出成员+入套餐)'"
+      width="520px">
+      <el-form label-width="90px">
+        <el-form-item label="动作">
+          <el-radio-group v-model="packageForm.type">
+            <el-radio :value="10">套拆</el-radio>
+            <el-radio :value="9">套合</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="套餐商品" required>
+          <el-select v-model="packageForm.packageGoodsId" filterable remote :remote-method="searchPackageGoods"
+            :loading="pkgLoading" placeholder="搜索套餐商品" style="width: 100%">
+            <el-option v-for="g in pkgOptions" :key="g.id" :label="g.name" :value="g.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="仓库" required>
+          <el-select v-model="packageForm.warehouseId" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="套餐数量" required>
+          <el-input-number v-model="packageForm.units" :min="0.001" :precision="3" :step="1" />
+          <span class="tip" style="margin-left: 8px">套;成员按配置量×套餐数自动生成行</span>
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="packageForm.remark" /></el-form-item>
+      </el-form>
+      <div class="tip">成员色规继承套餐所选色规(本页未选色规=无色规行);拆合守恒,库存随单即时增减。</div>
+      <template #footer>
+        <el-button @click="packageDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="onPackage">执行</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 详情抽屉 -->
     <el-drawer v-model="detailDrawer" :title="'单据 ' + (detail && detail.code || '')" size="640px">
       <template v-if="detail">
@@ -298,6 +333,7 @@ import { ElMessage } from 'element-plus'
 import {
   pageManifests, fetchManifest, createManifest, confirmManifest, removeManifestItem,
   createReversal, submitTransfer, createAdjustment,
+  packageSplit, packageMerge,
   listWarehouses, pageGoods, listGoodsSkuAttrs, listOrgUsers
 } from '../../api'
 import { addons } from '../../store/addons'
@@ -326,6 +362,10 @@ const transferDialog = ref(false)
 const transferForm = reactive({ lines: [], assigneeId: null, remark: '' })
 const adjustDialog = ref(false)
 const adjustForm = reactive({ type: 11, items: [], remark: '' })
+const packageDialog = ref(false)
+const packageForm = reactive({ type: 10, packageGoodsId: null, warehouseId: null, units: 1, remark: '' })
+const pkgOptions = ref([])
+const pkgLoading = ref(false)
 const detailDrawer = ref(false)
 const detail = ref(null)
 
@@ -471,6 +511,50 @@ async function onAdjust() {
     load()
   } catch (e) {
     ElMessage.error(e.message || '登记失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+function openPackage() {
+  packageForm.type = 10
+  packageForm.packageGoodsId = null
+  packageForm.warehouseId = warehouses.value.length === 1 ? warehouses.value[0].id : null
+  packageForm.units = 1
+  packageForm.remark = ''
+  pkgOptions.value = []
+  packageDialog.value = true
+}
+
+async function searchPackageGoods(keyword) {
+  pkgLoading.value = true
+  try {
+    const res = await pageGoods({ keyword: keyword || '', type: 1, status: 0, page: 1, size: 20 })
+    pkgOptions.value = (res.data && res.data.rows) || []
+  } finally {
+    pkgLoading.value = false
+  }
+}
+
+async function onPackage() {
+  if (!packageForm.packageGoodsId || !packageForm.warehouseId) {
+    return ElMessage.warning('请补全套餐商品与仓库')
+  }
+  saving.value = true
+  try {
+    const body = { packageGoodsId: packageForm.packageGoodsId, warehouseId: packageForm.warehouseId,
+      num: Math.round(packageForm.units * 1000), colorId: null, formatId: null }
+    if (packageForm.type === 10) {
+      await packageSplit(body)
+      ElMessage.success('套拆完成(出套餐+入成员)')
+    } else {
+      await packageMerge(body)
+      ElMessage.success('套合完成(出成员+入套餐)')
+    }
+    packageDialog.value = false
+    load()
+  } catch (e) {
+    ElMessage.error(e.message || '执行失败')
   } finally {
     saving.value = false
   }

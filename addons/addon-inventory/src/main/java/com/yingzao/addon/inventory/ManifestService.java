@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.yingzao.addons.api.GoodsApi;
 import com.yingzao.addons.api.event.StockManifestCreatedEvent;
 import com.yingzao.addons.api.event.StockManifestItemRemovedEvent;
 import com.yingzao.core.approval.ApprovalService;
@@ -34,8 +35,11 @@ public class ManifestService {
     public static final int CODE_EMPTY_ITEMS = 310030;
     public static final int CODE_SOURCE_SURPLUS = 310033;
     public static final int CODE_TRANSFER_SAME_WH = 310034;
+    // ---- 套合/套拆(A5;310035-310036) ----
+    public static final int CODE_GOODS_NOT_PACKAGE = 310035;
+    public static final int CODE_PACKAGE_NO_MEMBERS = 310036;
 
-    // ---- 类型字典(1-12;9/10 套合套拆 V1.1) ----
+    // ---- 类型字典(1-12;9/10 套合套拆 V1.5) ----
     public static final int TYPE_CG = 1;
     public static final int TYPE_CR = 2;
     public static final int TYPE_XG = 3;
@@ -44,6 +48,8 @@ public class ManifestService {
     public static final int TYPE_PU = 6;
     public static final int TYPE_AS = 7;
     public static final int TYPE_AR = 8;
+    public static final int TYPE_PM = 9;
+    public static final int TYPE_PS = 10;
     public static final int TYPE_CP = 11;
     public static final int TYPE_CL = 12;
 
@@ -57,10 +63,13 @@ public class ManifestService {
     public static final String SOURCE_STOCK_MANIFEST = "stockManifest";
     public static final String SOURCE_REQUISITION = "requisition";
     public static final String SOURCE_PURCHASE = "purchase";
+    public static final String SOURCE_PACKAGE = "package";
 
-    private static final Map<Integer, String> PREFIX = Map.of(
-            TYPE_CG, "CG", TYPE_CR, "CR", TYPE_XG, "XG", TYPE_XB, "XB", TYPE_DB, "DB",
-            TYPE_PU, "PU", TYPE_AS, "AS", TYPE_AR, "AR", TYPE_CP, "CP", TYPE_CL, "CL");
+    private static final Map<Integer, String> PREFIX = Map.ofEntries(
+            Map.entry(TYPE_CG, "CG"), Map.entry(TYPE_CR, "CR"), Map.entry(TYPE_XG, "XG"),
+            Map.entry(TYPE_XB, "XB"), Map.entry(TYPE_DB, "DB"), Map.entry(TYPE_PU, "PU"),
+            Map.entry(TYPE_AS, "AS"), Map.entry(TYPE_AR, "AR"), Map.entry(TYPE_PM, "PM"),
+            Map.entry(TYPE_PS, "PS"), Map.entry(TYPE_CP, "CP"), Map.entry(TYPE_CL, "CL"));
 
     public record ItemCmd(Long goodsId, Long colorId, Long formatId, Long num, Long price,
                           Long warehouseIn, Long warehouseOut, Long salesItemId) {
@@ -81,14 +90,16 @@ public class ManifestService {
     private final YzEventBus eventBus;
     private final StockService stocks;
     private final ApprovalService approvals;
+    private final GoodsApi goods;
 
     public ManifestService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
-            StockService stocks, ApprovalService approvals) {
+            StockService stocks, ApprovalService approvals, GoodsApi goods) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.eventBus = eventBus;
         this.stocks = stocks;
         this.approvals = approvals;
+        this.goods = goods;
     }
 
     // ---- 手工建单(进货/出货) ----
@@ -365,6 +376,74 @@ public class ManifestService {
                     type == TYPE_CP ? cmd.warehouseId() : null,
                     type == TYPE_CL ? cmd.warehouseId() : null,
                     cmd.num(), 0L, null, null, null));
+        }
+        publishCreated(orgId, manifestId, type, null, eventItems, operatorId);
+        return manifestId;
+    }
+
+    // ---- 套合/套拆(A5:9 型出零件入套餐/10 型出套餐入零件;老 mergePackage/splitPackage 语义) ----
+
+    public record PackageOpCmd(Long packageGoodsId, Long colorId, Long formatId, Long warehouseId,
+            Long num) {
+    }
+
+    /**
+     * 套餐拆合(落单即确认,零迁移):套拆 10 型=出套餐+入成员(num×成员量),套合 9 型=出成员+入套餐。
+     * 商品必须是套餐(type=1,经 GoodsApi 契约)且已配置成员;成员色规继承套餐行色规
+     * (营造套餐成员无色规配置——老系统成员绑定色规的配置维度随套餐配置 V2);
+     * 成员量千分位×套餐数÷1000 精确乘算(HALF_UP)。sourceType=package(sourceId=套餐商品 id)。
+     */
+    @Transactional
+    public long packageOp(long orgId, int type, PackageOpCmd cmd, long operatorId) {
+        require(type == TYPE_PM || type == TYPE_PS, CODE_PARAM, "inventory.param.invalid");
+        require(cmd != null && cmd.packageGoodsId() != null && cmd.warehouseId() != null
+                && cmd.num() != null, CODE_PARAM, "inventory.param.invalid");
+        require(cmd.num() > 0, StockService.CODE_NUM_POSITIVE, "inventory.num.positive");
+        stocks.requireWarehouse(orgId, cmd.warehouseId());
+        GoodsApi.GoodsSummary pkg = goods.queryGoods(orgId, cmd.packageGoodsId())
+                .orElseThrow(() -> new BizException(StockService.CODE_GOODS_NOT_FOUND,
+                        msg("inventory.goods.notFound")));
+        require(pkg.type() == 1, CODE_GOODS_NOT_PACKAGE, "inventory.package.notPackage");
+        List<GoodsApi.PackageItem> members = goods.listPackageItems(orgId, cmd.packageGoodsId());
+        require(!members.isEmpty(), CODE_PACKAGE_NO_MEMBERS, "inventory.package.noMembers");
+        long colorId = nvl(cmd.colorId());
+        long formatId = nvl(cmd.formatId());
+        StockService.Snapshot pkgSnap = stocks.snapshot(orgId, cmd.packageGoodsId(), colorId, formatId);
+        long manifestId = insertManifest(orgId, type, STATUS_CONFIRMED, null, SOURCE_PACKAGE,
+                cmd.packageGoodsId(), operatorId, null);
+        jdbc.update("update inventory_manifest set confirmed_at = now() where id = ?", manifestId);
+        boolean split = type == TYPE_PS;
+        List<StockManifestCreatedEvent.Item> eventItems = new ArrayList<>();
+        int sort = 0;
+        // 套餐行:拆=出 / 合=入
+        long pkgItemId = insertItem(orgId, manifestId, pkgSnap, split ? null : cmd.warehouseId(),
+                split ? cmd.warehouseId() : null, cmd.num(), 0, null, null, null, null, null, sort++);
+        if (split) {
+            stocks.out(orgId, pkgSnap.goodsId(), colorId, formatId, cmd.warehouseId(), cmd.num());
+        } else {
+            stocks.in(orgId, pkgSnap.goodsId(), colorId, formatId, cmd.warehouseId(), cmd.num());
+        }
+        eventItems.add(new StockManifestCreatedEvent.Item(pkgItemId, pkgSnap.goodsId(), colorId,
+                formatId, split ? null : cmd.warehouseId(), split ? cmd.warehouseId() : null,
+                cmd.num(), 0L, null, null, null));
+        // 成员行:拆=入 / 合=出(色规继承套餐行;数量=套餐数×成员量/1000 千分位精确)
+        for (GoodsApi.PackageItem member : members) {
+            long memberNum = java.math.BigDecimal.valueOf(cmd.num())
+                    .multiply(java.math.BigDecimal.valueOf(member.num()))
+                    .divide(java.math.BigDecimal.valueOf(1000), 0, java.math.RoundingMode.HALF_UP)
+                    .longValue();
+            StockService.Snapshot memberSnap = stocks.snapshot(orgId, member.goodsId(), colorId, formatId);
+            long memberItemId = insertItem(orgId, manifestId, memberSnap,
+                    split ? cmd.warehouseId() : null, split ? null : cmd.warehouseId(),
+                    memberNum, 0, null, null, null, null, null, sort++);
+            if (split) {
+                stocks.in(orgId, member.goodsId(), colorId, formatId, cmd.warehouseId(), memberNum);
+            } else {
+                stocks.out(orgId, member.goodsId(), colorId, formatId, cmd.warehouseId(), memberNum);
+            }
+            eventItems.add(new StockManifestCreatedEvent.Item(memberItemId, memberSnap.goodsId(),
+                    colorId, formatId, split ? cmd.warehouseId() : null,
+                    split ? null : cmd.warehouseId(), memberNum, 0L, null, null, null));
         }
         publishCreated(orgId, manifestId, type, null, eventItems, operatorId);
         return manifestId;

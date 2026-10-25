@@ -1,7 +1,7 @@
 addon:
   id: inventory
   name: 库存管理
-  version: 0.4.0
+  version: 0.5.0
   error-code-segment: 310000
   menus:
     - path: /inventory/manifests

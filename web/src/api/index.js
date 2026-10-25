@@ -317,6 +317,9 @@ export const removeManifestItem = (id, itemId) =>
 export const createReversal = (data) => http.post('/api/inventory/manifests/reversals', data)
 export const submitTransfer = (data) => http.post('/api/inventory/manifests/transfers', data)
 export const createAdjustment = (data) => http.post('/api/inventory/manifests/adjustments', data)
+// 套拆/套合(A5):9 型出零件入套餐/10 型出套餐入零件,数量=套餐数×成员量
+export const packageSplit = (data) => http.post('/api/inventory/manifests/package-split', data)
+export const packageMerge = (data) => http.post('/api/inventory/manifests/package-merge', data)
 export const pageRequisitions = (params) => http.get('/api/inventory/requisitions', { params })
 export const fetchRequisition = (id) => http.get(`/api/inventory/requisitions/${id}`)
 export const createRequisition = (data) => http.post('/api/inventory/requisitions', data)
