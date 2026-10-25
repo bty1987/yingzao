@@ -63,6 +63,12 @@ public class QuotationService {
     public static final int CODE_VERSION_DISABLED = 230019;
     public static final int CODE_RATE_INVALID = 230020;
     public static final int CODE_DISCOUNT_INVALID = 230021;
+    // ---- 报价项库/保价重算(A4;230160-230164) ----
+    public static final int CODE_CATALOG_NOT_FOUND = 230160;
+    public static final int CODE_CATALOG_DUP = 230161;
+    public static final int CODE_CATALOG_DISABLED = 230162;
+    public static final int CODE_CATALOG_PRICE_INVALID = 230163;
+    public static final int CODE_REPRICE_TIME_INVALID = 230164;
 
     // ---- 定稿线(老 QuotationPO status;裸写入口不迁) ----
     public static final int STATUS_EDITING = 0;
@@ -209,6 +215,190 @@ public class QuotationService {
         return rows.get(0);
     }
 
+    // ---- 报价项库(A4:组织级单价主数据;建项插首条价格快照,调价 append-only) ----
+
+    public Map<String, Object> pageCatalog(long orgId, String keyword, Integer status, Integer subtype,
+            int pageNo, int size) {
+        int safePage = Math.max(pageNo, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        StringBuilder where = new StringBuilder(" where i.org_id = ?");
+        List<Object> args = new ArrayList<>();
+        args.add(orgId);
+        if (keyword != null && !keyword.isBlank()) {
+            where.append(" and i.name like ?");
+            args.add("%" + keyword.trim() + "%");
+        }
+        if (status != null) {
+            where.append(" and i.status = ?");
+            args.add(status);
+        }
+        if (subtype != null) {
+            where.append(" and i.subtype = ?");
+            args.add(subtype);
+        }
+        Long total = jdbc.queryForObject(
+                "select count(*) from quotation_item i" + where, Long.class, args.toArray());
+        List<Object> allArgs = new ArrayList<>(args);
+        allArgs.add(safeSize);
+        allArgs.add((safePage - 1) * safeSize);
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select i.id, i.name, i.unit, i.subtype, i.price, i.status, i.remark, i.created_at"
+                        + " from quotation_item i" + where + " order by i.id desc limit ? offset ?",
+                allArgs.toArray());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", total == null ? 0 : total);
+        result.put("rows", rows);
+        return result;
+    }
+
+    /** 报价项库模糊检索(明细行挂接的下拉数据源;仅启用项——停用拒新挂接)。 */
+    public List<Map<String, Object>> searchCatalog(long orgId, String keyword, int limit) {
+        String like = "%" + (keyword == null ? "" : keyword.trim()) + "%";
+        int safeLimit = Math.min(Math.max(limit, 1), 50);
+        return jdbc.queryForList(
+                "select id, name, unit, subtype, price from quotation_item"
+                        + " where org_id = ? and status = 0 and name like ? order by id desc limit ?",
+                orgId, like, safeLimit);
+    }
+
+    public record CatalogCmd(String name, String unit, Integer subtype, Long price, String remark) {
+    }
+
+    @Transactional
+    public long createCatalog(long orgId, CatalogCmd cmd, long operatorId) {
+        require(cmd != null && cmd.name() != null && !cmd.name().isBlank(), CODE_INVALID_PARAM,
+                "quotation.catalog.nameRequired");
+        long price = requireCatalogPrice(cmd.price());
+        int subtype = cmd.subtype() == null ? SUBTYPE_PROJECT : cmd.subtype();
+        require(subtype == SUBTYPE_PROJECT || subtype == SUBTYPE_MATERIAL, CODE_INVALID_PARAM,
+                "quotation.param.invalid");
+        String name = cmd.name().trim();
+        Integer dup = jdbc.queryForObject(
+                "select count(*) from quotation_item where org_id = ? and name = ?", Integer.class, orgId, name);
+        require(dup == null || dup == 0, CODE_CATALOG_DUP, "quotation.catalog.dup");
+        jdbc.update("""
+                insert into quotation_item(org_id, name, unit, subtype, price, status, remark, created_by)
+                values (?,?,?,?,?,0,?,?)
+                """, orgId, name, blankToNull(cmd.unit()), subtype, price, blankToNull(cmd.remark()), operatorId);
+        long itemId = jdbc.queryForObject("select last_insert_id()", Long.class);
+        // 建项即插首条快照(老 addQuotationPrice 初始快照 2015-01-01 hack 不迁——生效时点=建档时刻)
+        insertCatalogPrice(orgId, itemId, price, operatorId);
+        return itemId;
+    }
+
+    @Transactional
+    public void updateCatalog(long orgId, long itemId, CatalogCmd cmd, long operatorId) {
+        require(cmd != null && cmd.name() != null && !cmd.name().isBlank(), CODE_INVALID_PARAM,
+                "quotation.catalog.nameRequired");
+        loadCatalog(orgId, itemId);
+        int subtype = cmd.subtype() == null ? SUBTYPE_PROJECT : cmd.subtype();
+        require(subtype == SUBTYPE_PROJECT || subtype == SUBTYPE_MATERIAL, CODE_INVALID_PARAM,
+                "quotation.param.invalid");
+        String name = cmd.name().trim();
+        Integer dup = jdbc.queryForObject(
+                "select count(*) from quotation_item where org_id = ? and name = ? and id <> ?",
+                Integer.class, orgId, name, itemId);
+        require(dup == null || dup == 0, CODE_CATALOG_DUP, "quotation.catalog.dup");
+        jdbc.update("update quotation_item set name = ?, unit = ?, subtype = ?, remark = ? where id = ? and org_id = ?",
+                name, blankToNull(cmd.unit()), subtype, blankToNull(cmd.remark()), itemId, orgId);
+        // 价格不在本端点改:调价=插新快照,走 /catalog/{id}/price(老 updateQuotationItem 直改当前价
+        // 与快照脱钩的口径在此收敛——价格唯一写点)
+    }
+
+    /** 调价=价格唯一写点:插新快照+同步当前价;同价幂等零写入(防重复点击刷快照)。 */
+    @Transactional
+    public void updateCatalogPrice(long orgId, long itemId, Long price, long operatorId) {
+        long value = requireCatalogPrice(price);
+        Map<String, Object> item = loadCatalog(orgId, itemId);
+        long current = ((Number) item.get("price")).longValue();
+        if (current == value) {
+            return;
+        }
+        jdbc.update("update quotation_item set price = ? where id = ? and org_id = ?", value, itemId, orgId);
+        insertCatalogPrice(orgId, itemId, value, operatorId);
+    }
+
+    @Transactional
+    public void updateCatalogStatus(long orgId, long itemId, Integer status, long operatorId) {
+        require(status != null && (status == 0 || status == 1), CODE_INVALID_PARAM, "quotation.param.invalid");
+        loadCatalog(orgId, itemId);
+        jdbc.update("update quotation_item set status = ? where id = ? and org_id = ?", status, itemId, orgId);
+    }
+
+    /** 价格历史时间线(append-only,审计口径)。 */
+    public List<Map<String, Object>> listCatalogPrices(long orgId, long itemId) {
+        loadCatalog(orgId, itemId);
+        return jdbc.queryForList("""
+                select p.id, p.price, p.created_at, u.display_name as operator_name
+                from quotation_item_price p left join yz_user u on u.id = p.operator_id
+                where p.item_id = ? order by p.id desc limit 100
+                """, itemId);
+    }
+
+    /**
+     * 保价重算(老 updateQuotationForPrice 语义):按时间点取各挂接项的最后一条价格快照回填明细行单价
+     * 并重算聚合。仅编辑态可重算;自由行(catalog_item_id null)与该时点无快照的行跳过(老 continue 同语义);
+     * time 缺省 = now(重算到最新价);返回实际回填行数。老三价回填收敛单 price 列。
+     */
+    @Transactional
+    public int reprice(long orgId, long quotationId, String time, long operatorId) {
+        java.sql.Timestamp point = java.sql.Timestamp.from(java.time.Instant.now());
+        if (time != null && !time.isBlank()) {
+            java.time.LocalDateTime parsed;
+            try {
+                parsed = java.time.LocalDateTime.parse(time.trim(),
+                        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            } catch (java.time.format.DateTimeParseException e) {
+                throw new BizException(CODE_REPRICE_TIME_INVALID, msg("quotation.reprice.timeInvalid"));
+            }
+            require(parsed.getYear() >= 2000 && !parsed.isAfter(java.time.LocalDateTime.now()),
+                    CODE_REPRICE_TIME_INVALID, "quotation.reprice.timeInvalid");
+            point = java.sql.Timestamp.valueOf(parsed);
+        }
+        QuotationRow q = load(orgId, quotationId);
+        requireEditable(q);
+        List<Map<String, Object>> items = jdbc.queryForList("""
+                select id, catalog_item_id from quotation_function_item
+                where quotation_id = ? and catalog_item_id is not null
+                """, quotationId);
+        int updated = 0;
+        for (Map<String, Object> item : items) {
+            long catalogItemId = ((Number) item.get("catalog_item_id")).longValue();
+            List<Long> prices = jdbc.queryForList("""
+                    select p.price from quotation_item_price p
+                    where p.item_id = ? and p.created_at <= ? order by p.created_at desc, p.id desc limit 1
+                    """, Long.class, catalogItemId, point);
+            if (prices.isEmpty()) {
+                continue;
+            }
+            updated += jdbc.update("update quotation_function_item set price = ? where id = ?",
+                    prices.get(0), item.get("id"));
+        }
+        recalc(orgId, quotationId);
+        track(orgId, quotationId, "reprice", null, null, null, null, operatorId,
+                "重算 " + updated + " 行 @ " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(point));
+        return updated;
+    }
+
+    private Map<String, Object> loadCatalog(long orgId, long itemId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select id, name, price, status from quotation_item where id = ? and org_id = ?", itemId, orgId);
+        if (rows.isEmpty()) {
+            throw new BizException(CODE_CATALOG_NOT_FOUND, msg("quotation.catalog.notFound"));
+        }
+        return rows.get(0);
+    }
+
+    private void insertCatalogPrice(long orgId, long itemId, long price, long operatorId) {
+        jdbc.update("insert into quotation_item_price(org_id, item_id, price, operator_id) values (?,?,?,?)",
+                orgId, itemId, price, operatorId);
+    }
+
+    private long requireCatalogPrice(Long price) {
+        require(price != null && price >= 0, CODE_CATALOG_PRICE_INVALID, "quotation.catalog.priceInvalid");
+        return price;
+    }
+
     // ---- 建报价(挂单校验+上限+版本费率快照+自动费率项) ----
 
     public record CreateCmd(long orderId, String name, Long versionId, String remark) {
@@ -331,8 +521,9 @@ public class QuotationService {
         recalc(orgId, quotationId);
     }
 
+    /** catalogItemId = 报价项库挂接(仅创建时建立,update 不换挂——换挂=删行重加);挂接时 price 缺省带库价。 */
     public record ItemCmd(String name, Integer type, Integer subtype, String unit, Long num, Long price,
-            Integer sort, String remark) {
+            Integer sort, String remark, Long catalogItemId) {
     }
 
     @Transactional
@@ -343,16 +534,26 @@ public class QuotationService {
         requireEditable(q);
         int type = cmd.type() == null ? ITEM_TYPE_NORMAL : cmd.type();
         require(MANUAL_ITEM_TYPES.contains(type), CODE_INVALID_PARAM, "quotation.param.invalid");
-        requireItemAmounts(cmd);
         int subtype = cmd.subtype() == null ? SUBTYPE_PROJECT : cmd.subtype();
         require(subtype == SUBTYPE_PROJECT || subtype == SUBTYPE_MATERIAL,
                 CODE_INVALID_PARAM, "quotation.param.invalid");
+        Long price = cmd.price();
+        if (cmd.catalogItemId() != null) {
+            Map<String, Object> catalog = loadCatalog(orgId, cmd.catalogItemId());
+            require(((Number) catalog.get("status")).intValue() == 0, CODE_CATALOG_DISABLED,
+                    "quotation.catalog.disabled");
+            if (price == null) {
+                price = ((Number) catalog.get("price")).longValue();
+            }
+        }
+        requireItemAmounts(cmd.num(), price);
         jdbc.update("""
                 insert into quotation_function_item(org_id, quotation_id, area_id, name, type, subtype,
-                    unit, num, price, sort, remark)
-                values (?,?,?,?,?,?,?,?,?,?,?)
-                """, orgId, quotationId, areaId, cmd.name().trim(), type, subtype, blankToNull(cmd.unit()),
-                cmd.num(), cmd.price(), cmd.sort() == null ? 0 : cmd.sort(), blankToNull(cmd.remark()));
+                    catalog_item_id, unit, num, price, sort, remark)
+                values (?,?,?,?,?,?,?,?,?,?,?,?)
+                """, orgId, quotationId, areaId, cmd.name().trim(), type, subtype, cmd.catalogItemId(),
+                blankToNull(cmd.unit()), cmd.num(), price, cmd.sort() == null ? 0 : cmd.sort(),
+                blankToNull(cmd.remark()));
         recalc(orgId, quotationId);
         return jdbc.queryForObject("select last_insert_id()", Long.class);
     }
@@ -367,7 +568,7 @@ public class QuotationService {
         if (AUTO_ITEM_TYPES.contains(((Number) item.get("type")).intValue())) {
             throw new BizException(CODE_AUTO_PRICED, msg("quotation.item.autoPriced"));
         }
-        requireItemAmounts(cmd);
+        requireItemAmounts(cmd.num(), cmd.price());
         int subtype = cmd.subtype() == null ? SUBTYPE_PROJECT : cmd.subtype();
         require(subtype == SUBTYPE_PROJECT || subtype == SUBTYPE_MATERIAL,
                 CODE_INVALID_PARAM, "quotation.param.invalid");
@@ -397,9 +598,9 @@ public class QuotationService {
     }
 
     /** 明细数量/单家乡校验:num 千分位恒正,price 厘非负。 */
-    private void requireItemAmounts(ItemCmd cmd) {
-        require(cmd.num() != null && cmd.num() > 0, CODE_INVALID_PARAM, "quotation.item.numInvalid");
-        require(cmd.price() != null && cmd.price() >= 0, CODE_INVALID_PARAM, "quotation.item.priceInvalid");
+    private void requireItemAmounts(Long num, Long price) {
+        require(num != null && num > 0, CODE_INVALID_PARAM, "quotation.item.numInvalid");
+        require(price != null && price >= 0, CODE_INVALID_PARAM, "quotation.item.priceInvalid");
     }
 
     // ---- 报价级费率/折扣覆盖(仅编辑态;改后聚合) ----
@@ -633,7 +834,7 @@ public class QuotationService {
                 where quotation_id = ? order by sort, id
                 """, quotationId);
         List<Map<String, Object>> items = jdbc.queryForList("""
-                select id, area_id, name, type, subtype, unit, num, price, sort, remark
+                select id, area_id, name, type, subtype, catalog_item_id, unit, num, price, sort, remark
                 from quotation_function_item where quotation_id = ? order by sort, id
                 """, quotationId);
         Map<String, List<Map<String, Object>>> byArea = new LinkedHashMap<>();

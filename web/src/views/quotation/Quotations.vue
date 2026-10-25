@@ -197,6 +197,14 @@
     <!-- 加/改功能项 -->
     <el-dialog v-model="itemDialog" :title="itemForm.id ? '编辑功能项' : '加功能项'" width="520px" append-to-body>
       <el-form :model="itemForm" label-width="90px">
+        <el-form-item v-if="!itemForm.id" label="报价项库">
+          <el-select v-model="itemForm.catalogItemId" filterable remote clearable
+            :remote-method="searchCatalog" :loading="catalogLoading" placeholder="从报价项库选择(可空=自由行)"
+            style="width: 100%" @change="onCatalogPick">
+            <el-option v-for="c in catalogOptions" :key="c.id"
+              :label="c.name + ' · ¥' + (c.price / 1000).toFixed(3)" :value="c.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="项目名" required>
           <el-input v-model="itemForm.name" placeholder="如 墙面乳胶漆" />
         </el-form-item>
@@ -214,6 +222,7 @@
         <el-form-item label="单价" required>
           <el-input-number v-model="itemForm.priceYuan" :min="0" :precision="3" :step="100" />
           <span class="tip">元</span>
+          <span v-if="itemForm.catalogItemId" class="tip">挂接库项:重算时单价将刷回库项快照价</span>
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="itemForm.remark" />
@@ -222,6 +231,23 @@
       <template #footer>
         <el-button @click="itemDialog = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="onSaveItem">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 保价重算 -->
+    <el-dialog v-model="repriceDialog" title="保价重算" width="460px" append-to-body>
+      <el-form label-width="90px">
+        <el-form-item label="重算时点">
+          <el-date-picker v-model="repriceTime" type="datetime" format="YYYY-MM-DD HH:mm:ss"
+            time-format="HH:mm:ss" placeholder="缺省=当前(取最新价)" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <div class="tip">
+        按时点取各挂接项「报价项库」的最后一条价格快照回填明细并重算聚合;自由行与该时点无快照的行不动。
+      </div>
+      <template #footer>
+        <el-button @click="repriceDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="onReprice">执行重算</el-button>
       </template>
     </el-dialog>
 
@@ -272,6 +298,8 @@
           <el-button v-if="detail.status === 0 && detail.attstatus < 2" size="small"
             @click="openPricing">费率/折扣</el-button>
           <el-button v-if="detail.status === 0 && detail.attstatus < 2" size="small" @click="openAreaForm">加功能区</el-button>
+          <el-button v-if="detail.status === 0 && detail.attstatus < 2" size="small" type="warning"
+            @click="openReprice">重算价格</el-button>
         </div>
 
         <div class="section">
@@ -314,7 +342,12 @@
               @click="openItemForm(area)">加项</el-button>
           </div>
           <el-table :data="area.items" border size="small">
-            <el-table-column prop="name" label="项目" min-width="140" show-overflow-tooltip />
+            <el-table-column label="项目" min-width="140" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.name }}
+                <el-tag v-if="row.catalog_item_id" size="small" effect="plain" class="cat-tag">库</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="子类" width="70">
               <template #default="{ row }">{{ dictLabel('itemSubtype', row.subtype) }}</template>
             </el-table-column>
@@ -372,7 +405,8 @@ import {
   addQuotationItem, updateQuotationItem, deleteQuotationItem,
   listQuotationVersions, createQuotationVersion, updateQuotationVersion, updateQuotationVersionStatus,
   pageDecorations, pageAddReduce, openAddReduce, deleteAddReduce, submitAddReduce,
-  cancelSubmitAddReduce, confirmAddReduce
+  cancelSubmitAddReduce, confirmAddReduce,
+  searchQuotationCatalog, repriceQuotation
 } from '../../api'
 import { addons } from '../../store/addons'
 
@@ -404,7 +438,12 @@ const form = ref({ orderId: null, name: '', versionId: null, remark: '' })
 const versionForm = ref({})
 const pricingForm = ref({})
 const areaForm = ref({ name: '', type: 1 })
-const itemForm = ref({ areaId: null, id: null, name: '', subtype: 0, unit: '', numView: 1, priceYuan: 0, remark: '' })
+const itemForm = ref({ areaId: null, id: null, name: '', subtype: 0, unit: '', numView: 1, priceYuan: 0,
+  remark: '', catalogItemId: null })
+const catalogOptions = ref([])
+const catalogLoading = ref(false)
+const repriceDialog = ref(false)
+const repriceTime = ref(null)
 
 const editable = computed(() => detail.value && detail.value.status === 0 && detail.value.attstatus < 2)
 
@@ -674,11 +713,59 @@ async function onDeleteArea(area) {
 function openItemForm(area, item) {
   itemForm.value = item ? {
     areaId: item.area_id, id: item.id, name: item.name, subtype: item.subtype, unit: item.unit || '',
-    numView: Number(item.num || 1000) / 1000, priceYuan: Number(item.price || 0) / 1000, remark: item.remark || ''
+    numView: Number(item.num || 1000) / 1000, priceYuan: Number(item.price || 0) / 1000, remark: item.remark || '',
+    catalogItemId: item.catalog_item_id || null
   } : {
-    areaId: area.id, id: null, name: '', subtype: 0, unit: '', numView: 1, priceYuan: 0, remark: ''
+    areaId: area.id, id: null, name: '', subtype: 0, unit: '', numView: 1, priceYuan: 0, remark: '',
+    catalogItemId: null
   }
+  catalogOptions.value = []
   itemDialog.value = true
+}
+
+async function searchCatalog(keyword) {
+  catalogLoading.value = true
+  try {
+    const res = await searchQuotationCatalog({ keyword: keyword || '', limit: 20 })
+    catalogOptions.value = res.data || []
+  } finally {
+    catalogLoading.value = false
+  }
+}
+
+function onCatalogPick(id) {
+  const hit = catalogOptions.value.find((c) => c.id === id)
+  if (!hit) return
+  itemForm.value.name = hit.name
+  itemForm.value.subtype = hit.subtype
+  itemForm.value.unit = hit.unit || ''
+  itemForm.value.priceYuan = Number(hit.price || 0) / 1000
+}
+
+function openReprice() {
+  repriceTime.value = null
+  repriceDialog.value = true
+}
+
+async function onReprice() {
+  saving.value = true
+  try {
+    const t = repriceTime.value ? formatTime(repriceTime.value) : null
+    const res = await repriceQuotation(detail.value.id, { time: t })
+    ElMessage.success('重算完成,回填 ' + (res.data || 0) + ' 行')
+    repriceDialog.value = false
+    await refreshDetail()
+  } catch (e) {
+    ElMessage.error(e.message || '重算失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+function formatTime(d) {
+  const p = (n) => String(n).padStart(2, '0')
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' '
+    + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
 }
 
 async function onSaveItem() {
@@ -687,7 +774,7 @@ async function onSaveItem() {
   saving.value = true
   const payload = { name: f.name, subtype: f.subtype, unit: f.unit || null,
     num: Math.round(f.numView * 1000), price: Math.round(f.priceYuan * 1000),
-    remark: f.remark || null }
+    remark: f.remark || null, catalogItemId: f.id ? undefined : (f.catalogItemId || null) }
   try {
     if (f.id) {
       await updateQuotationItem(detail.value.id, f.id, payload)
@@ -736,4 +823,5 @@ onMounted(() => {
 .kv { line-height: 1.9; font-size: 13px; }
 .track { font-size: 12px; }
 .track-time { color: var(--yz-ink-50, #8a887f); margin-right: 8px; }
+.cat-tag { margin-left: 4px; }
 </style>

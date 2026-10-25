@@ -1,12 +1,15 @@
 addon:
   id: quotation
   name: 报价管理
-  version: 0.4.0
+  version: 0.5.0
   error-code-segment: 230000
   menus:
     - path: /quotation/quotations
       title: 报价管理
       icon: edit
+    - path: /quotation/catalog
+      title: 报价项库
+      icon: goods
   dicts:
     arStatus:
       - { key: '0', label: 草稿 }
@@ -41,6 +44,9 @@ addon:
     versionStatus:
       - { key: '0', label: 停用 }
       - { key: '1', label: 启用 }
+    catalogStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
     trackAction:
       - { key: 'create', label: 建报价 }
       - { key: 'lock', label: 定稿锁定 }
@@ -50,6 +56,7 @@ addon:
       - { key: 'finish', label: 审核完成 }
       - { key: 'setDefault', label: 设为默认 }
       - { key: 'areaSave', label: 明细变更 }
+      - { key: 'reprice', label: 保价重算 }
   api:
     - prefix: /api/quotation
       require: /quotation/quotations

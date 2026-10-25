@@ -67,6 +67,7 @@
 - **创建报价自动生成**:"生成项目"功能区(TYPE_MANAGEMENT,排序 9999)+ 搬运/管理两个自动项(+税项,若版本启税);"综合项目"功能区由公司配置 QUOTATION_CMPREH_CONFIG 开关控制【方林嫌疑:公司开关→组织级配置】;
 - **🔴 分表化石**:功能区项实体按 `quotationFunctionAreaIndex`(systemConfig)选 QuotationFunctionAreaItemPO0–4(五张物理表,factoryToClazz 动态选类)——大数据量分表思想的散装实现。营造 **v1 单表+org_id 索引**,分表归 V3 性能专项;
 - 价格快照:每个功能项可关联报价项(quotationItem),价格历史进 quotation_price,**保价重算 = 按时间点取最后快照回填**(updateQuotationForPrice);
+- 【营造实现定案回写(第 84 次,A4)】**报价项库 quotation_item + 价格快照 quotation_item_price + 明细挂接 quotation_function_item.catalog_item_id(V404)**:老 data.quotationItem 主数据回归 addon-quotation 本域(uk org+name,同名单价=维护事故);**调价=价格唯一写点**(插新快照+同步当前价,同价幂等零写入;老 addQuotationPrice 初始快照 2015-01-01 hack 与 updateQuotationPrice 可改历史价的审计坑不迁,历史 append-only);重算端点按时间点取各挂接项最后快照回填并重聚合,**自由行/无快照行跳过(老 continue 同语义)**,仅编辑态可重算;老三价(add/unit/subPrice)收敛单 price 列;返回回填行数+track reprice 留痕;PRD 见 docs/prd/addon-quotation.md §7;
 - 复制报价(clone/replica/copy)带 **KEEPRICE 位掩码**:0 取最新 / 1 保时间 / 2 保价格 / 3 全保;跨代克隆(Quotetion)是历史包袱;
 - 报价数量上限:systemConfig `quotationlimit`(按 company,默认 3)【方林嫌疑:公司配置→营造组织级 addon 配置】;
 - 版本联动:新报价取"公司+装修单类型"的默认版本;整装单在 `PROTATION_KEEPRICE_DAYS_INT`(默认 365 天)内沿用整装产品版本,超期用预售产品版本【方林嫌疑:365/版本选择规则是公司商务政策】;
@@ -121,7 +122,7 @@
 | 功能区/功能项明细 + 自动生成项目 | 单表(v1 不分表) | V1 |
 | 报价版本(费率默认值/启税) | addon-quotation 配置域 | V1 |
 | 报价数量上限/保价天数/综合项开关 | addon.yml 配置项(组织级) | V1 |
-| 价格快照时间线 + 保价重算 | quotation_price 表 | V2 |
+| 价格快照时间线 + 保价重算 | quotation_item/quotation_item_price(V404) | ✅ 0.5.0(第 84 次 A4) |
 | 金额口径 | **厘(×1000 定点整数,全局定案),禁 1e6/万分比黑盒**,系数字段语义文档化 | V1 红线(✅第35次核对回写) |
 | 定额三来源全量重算 | addon-quotation 定额子域 | V2 |
 | 增减项(→款项生成) | addon-quotation,发 QuotationAddReduceSubmittedEvent,款项归 addon-payment | V2 |
@@ -134,7 +135,7 @@
 ## 11. 待业务方确认清单
 
 1. 【已定案 2026-10-12】金额单位=厘(×1000 定点整数,第 19 次交付已按厘落地,勿再议分/元);历史数据迁移口径:1e6 列迁移时按列量纲重推(material.md 勘误同源);
-2. 报价数量上限(默认 3)与保价窗口(默认 365 天)的行业默认值;
+2. 报价数量上限(默认 3)与保价窗口(默认 365 天)的行业默认值;【第 84 次注:keep_price_days 列已建(quotation_config,默认 365),其老语义=复制报价时 updateTime 回拨窗口,营造复制报价未建——该窗口随复制报价功能消费,重算不复用】;
 3. 审核线(提交→审核→完成)是否 V1 保留,还是接入自研轻量工作流(与客源两级审批同题);
 4. 成本/利润字段(consPrice/comsPrice/unachePrice)确认不进开源核心、归经营分析插件?
 5. 增减项 paytype 的 COM/ARO 语义与漏项(LEAKAGE)流程是否公司特有(建议:不迁);

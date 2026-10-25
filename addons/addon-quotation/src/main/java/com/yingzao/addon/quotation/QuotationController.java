@@ -43,7 +43,16 @@ public class QuotationController {
     }
 
     public record ItemRequest(String name, Integer type, Integer subtype, String unit, Long num, Long price,
-            Integer sort, String remark) {
+            Integer sort, String remark, Long catalogItemId) {
+    }
+
+    public record CatalogRequest(String name, String unit, Integer subtype, Long price, String remark) {
+    }
+
+    public record CatalogPriceRequest(Long price) {
+    }
+
+    public record RepriceRequest(String time) {
     }
 
     private final QuotationService quotations;
@@ -84,6 +93,65 @@ public class QuotationController {
         Long userId = (Long) request.getAttribute("yz.userId");
         quotations.updateVersionStatus(orgId, id, body == null ? null : body.status(), userId);
         return ApiResponse.ok();
+    }
+
+    // ---- 报价项库(A4 保价重算的单价主数据) ----
+
+    @GetMapping("/catalog")
+    public ApiResponse<Map<String, Object>> pageCatalog(@RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer status, @RequestParam(required = false) Integer subtype,
+            @RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(quotations.pageCatalog(orgId, keyword, status, subtype, page, size));
+    }
+
+    @GetMapping("/catalog/search")
+    public ApiResponse<Object> searchCatalog(@RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "20") int limit, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(quotations.searchCatalog(orgId, keyword, limit));
+    }
+
+    @PostMapping("/catalog")
+    public ApiResponse<Long> createCatalog(@RequestBody CatalogRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(quotations.createCatalog(orgId, toCatalogCmd(body), userId));
+    }
+
+    @PutMapping("/catalog/{id}")
+    public ApiResponse<Void> updateCatalog(@PathVariable long id, @RequestBody CatalogRequest body,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        quotations.updateCatalog(orgId, id, toCatalogCmd(body), userId);
+        return ApiResponse.ok();
+    }
+
+    /** 调价=价格唯一写点:插新快照+同步当前价(编辑档案端点不改价)。 */
+    @PostMapping("/catalog/{id}/price")
+    public ApiResponse<Void> updateCatalogPrice(@PathVariable long id, @RequestBody CatalogPriceRequest body,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        quotations.updateCatalogPrice(orgId, id, body == null ? null : body.price(), userId);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/catalog/{id}/status")
+    public ApiResponse<Void> updateCatalogStatus(@PathVariable long id, @RequestBody StatusRequest body,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        quotations.updateCatalogStatus(orgId, id, body == null ? null : body.status(), userId);
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/catalog/{id}/prices")
+    public ApiResponse<Object> listCatalogPrices(@PathVariable long id, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(quotations.listCatalogPrices(orgId, id));
     }
 
     // ---- 报价单 ----
@@ -217,6 +285,15 @@ public class QuotationController {
         return ApiResponse.ok();
     }
 
+    /** 保价重算:按时间点取挂接项最后快照回填明细并重算聚合;time 缺省=now。 */
+    @PostMapping("/quotations/{id}/reprice")
+    public ApiResponse<Integer> reprice(@PathVariable long id, @RequestBody(required = false) RepriceRequest body,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(quotations.reprice(orgId, id, body == null ? null : body.time(), userId));
+    }
+
     @PostMapping("/quotations/{id}/areas/{areaId}/items")
     public ApiResponse<Long> addItem(@PathVariable long id, @PathVariable long areaId,
             @RequestBody ItemRequest body, HttpServletRequest request) {
@@ -224,7 +301,7 @@ public class QuotationController {
         Long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(quotations.addItem(orgId, id, areaId, body == null ? null
                 : new QuotationService.ItemCmd(body.name(), body.type(), body.subtype(), body.unit(),
-                        body.num(), body.price(), body.sort(), body.remark()), userId));
+                        body.num(), body.price(), body.sort(), body.remark(), body.catalogItemId()), userId));
     }
 
     @PutMapping("/quotations/{id}/items/{itemId}")
@@ -234,7 +311,7 @@ public class QuotationController {
         Long userId = (Long) request.getAttribute("yz.userId");
         quotations.updateItem(orgId, id, itemId, body == null ? null
                 : new QuotationService.ItemCmd(body.name(), body.type(), body.subtype(), body.unit(),
-                        body.num(), body.price(), body.sort(), body.remark()), userId);
+                        body.num(), body.price(), body.sort(), body.remark(), body.catalogItemId()), userId);
         return ApiResponse.ok();
     }
 
@@ -254,5 +331,13 @@ public class QuotationController {
         return new QuotationService.VersionCmd(body.name(), body.busitype(), body.manageRate(),
                 body.manageDiscount(), body.carryRate(), body.carryDiscount(), body.taxRate(),
                 body.taxDiscount(), body.remark());
+    }
+
+    private static QuotationService.CatalogCmd toCatalogCmd(CatalogRequest body) {
+        if (body == null) {
+            return null;
+        }
+        return new QuotationService.CatalogCmd(body.name(), body.unit(), body.subtype(), body.price(),
+                body.remark());
     }
 }

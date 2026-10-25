@@ -229,6 +229,15 @@ export const addQuotationItem = (id, areaId, data) =>
 export const updateQuotationItem = (id, itemId, data) =>
   http.put(`/api/quotation/quotations/${id}/items/${itemId}`, data)
 export const deleteQuotationItem = (id, itemId) => http.delete(`/api/quotation/quotations/${id}/items/${itemId}`)
+// 报价项库 + 保价重算(A4):单价主数据/价格快照时间线/按时间点回填明细
+export const pageQuotationCatalog = (params) => http.get('/api/quotation/catalog', { params })
+export const searchQuotationCatalog = (params) => http.get('/api/quotation/catalog/search', { params })
+export const createQuotationCatalog = (data) => http.post('/api/quotation/catalog', data)
+export const updateQuotationCatalog = (id, data) => http.put(`/api/quotation/catalog/${id}`, data)
+export const priceQuotationCatalog = (id, data) => http.post(`/api/quotation/catalog/${id}/price`, data)
+export const statusQuotationCatalog = (id, data) => http.post(`/api/quotation/catalog/${id}/status`, data)
+export const listQuotationCatalogPrices = (id) => http.get(`/api/quotation/catalog/${id}/prices`)
+export const repriceQuotation = (id, data) => http.post(`/api/quotation/quotations/${id}/reprice`, data)
 
 // 施工管理(addon-construction):放线三段/节点推进/团队留痕/验收/节点模板/档案
 export const pageConstructions = (params) => http.get('/api/construction/orders', { params })

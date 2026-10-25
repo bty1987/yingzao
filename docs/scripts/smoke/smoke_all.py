@@ -1694,6 +1694,114 @@ def main():
             "/api/quotation/quotations/%s/areas/%s/items" % (quota_a, q_area), tok_admin,
             {"name": "锁后项", "num": 1000, "price": 100}, 230003)
 
+    # ========= A4 报价项库+保价重算(V404,第 84 次;docs/11 A4:单价主数据+价格快照时间线+按时间点回填)=========
+    # 老语义回写:quotationItem 单价库+quotationPrice 时间线+updateQuotationForPrice 按时间点回填
+    # (rules/quotation.md §4);营造收敛=调价唯一写点(append-only 快照)+明细可选挂接+自由行跳过。
+    print("\n== A4 报价项库+保价重算 ==")
+    stamp84 = time.strftime("%H%M%S")
+    cat1 = api_ok("A4 建报价项1(刷漆 25元/m²,建档即首条快照)", "POST", "/api/quotation/catalog", tok_admin,
+                  {"name": "烟测刷漆项" + stamp84, "unit": "m²", "subtype": 0, "price": 25000})
+    if cat1 is None:
+        return finish()
+    api_err("A4 同名报价项拒绝 230161", "POST", "/api/quotation/catalog", tok_admin,
+            {"name": "烟测刷漆项" + stamp84, "price": 25000}, 230161)
+    api_err("A4 负价拒绝 230163", "POST", "/api/quotation/catalog", tok_admin,
+            {"name": "烟测负价项" + stamp84, "price": -1}, 230163)
+    cat2 = api_ok("A4 建报价项2(瓦工 35元)", "POST", "/api/quotation/catalog", tok_admin,
+                  {"name": "烟测瓦工项" + stamp84, "unit": "m²", "subtype": 0, "price": 35000})
+    if cat2 is None:
+        return finish()
+    srch84 = api_ok("A4 库检索(关键字)", "GET", "/api/quotation/catalog/search?keyword="
+                    + urllib.parse.quote("烟测刷漆项" + stamp84), tok_admin)
+    step("A4 检索命中项1且单价 25000",
+         any(c.get("id") == cat1 and c.get("price") == 25000 for c in (srch84 or [])), srch84)
+    api_ok("A4 调价项1→30元(写新快照)", "POST", "/api/quotation/catalog/%s/price" % cat1, tok_admin,
+           {"price": 30000})
+    api_ok("A4 同价调价幂等(零新快照)", "POST", "/api/quotation/catalog/%s/price" % cat1, tok_admin,
+           {"price": 30000})
+    prices84 = api_ok("A4 价格历史(append-only)", "GET", "/api/quotation/catalog/%s/prices" % cat1, tok_admin)
+    step("A4 快照两条(30 最新/25 最早)+同价幂等零增长",
+         len(prices84 or []) == 2 and prices84[0].get("price") == 30000
+         and prices84[1].get("price") == 25000, prices84)
+    api_err("A4 不存在项调价拒绝 230160", "POST", "/api/quotation/catalog/999999999/price", tok_admin,
+            {"price": 100}, 230160)
+    api_ok("A4 停用项2", "POST", "/api/quotation/catalog/%s/status" % cat2, tok_admin, {"status": 1})
+
+    # A4 专用装修单(独立客户/楼盘防在途查重扰主链;无定金零资金;段尾废单)
+    v84 = api_ok("A4 建楼盘", "POST", "/api/customerprofile/villages", tok_admin,
+                 {"name": "烟测重算楼盘" + stamp84, "cityId": city_id, "properId": proper_id,
+                  "developer": "冒烟开发商", "x": 123400000, "y": 41800000, "mileage": 12000})
+    if v84 is None:
+        return finish()
+    h84 = api_ok("A4 建房屋", "POST", "/api/customerprofile/houses", tok_admin,
+                 {"villageId": v84, "number": "1栋1单元101-" + stamp84})
+    if h84 is None:
+        return finish()
+    c84 = api_ok("A4 建客户", "POST", "/api/customerprofile/customers", tok_admin,
+                 {"name": "烟测重算客户" + stamp84, "phone": "138%08d" % (int(stamp84) % 100000000)})
+    if c84 is None:
+        return finish()
+    order_q = api_ok("A4 登记装修单Q(无定金)", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": c84, "houseId": h84, "type": 0,
+                      "designerId": uid_b, "salesmanId": uid_c})
+    if order_q is None:
+        return finish()
+    quota_q = api_ok("A4 建报价Q(版本费率快照)", "POST", "/api/quotation/quotations", tok_admin,
+                     {"orderId": order_q, "name": "重算方案", "versionId": q_ver})
+    if quota_q is None:
+        return finish()
+    qa84 = api_ok("A4 加功能区", "POST", "/api/quotation/quotations/%s/areas" % quota_q, tok_admin,
+                  {"name": "重算区", "type": 1})
+    item_q1 = api_ok("A4 加挂接行(price 缺省带库价 30000)", "POST",
+                     "/api/quotation/quotations/%s/areas/%s/items" % (quota_q, qa84), tok_admin,
+                     {"name": "烟测刷漆项" + stamp84, "num": 1000, "price": None,
+                      "catalogItemId": cat1})
+    if item_q1 is None:
+        return finish()
+    api_ok("A4 加自由行(无挂接)", "POST",
+           "/api/quotation/quotations/%s/areas/%s/items" % (quota_q, qa84), tok_admin,
+           {"name": "自由行项", "num": 1000, "price": 5000})
+    api_err("A4 挂接停用项拒绝 230162", "POST",
+            "/api/quotation/quotations/%s/areas/%s/items" % (quota_q, qa84), tok_admin,
+            {"name": "停用挂接", "num": 1000, "price": 100, "catalogItemId": cat2}, 230162)
+    det_q84 = api_ok("A4 报价详情回读", "GET", "/api/quotation/quotations/%s" % quota_q, tok_admin)
+    rows84 = [it for a in (det_q84 or {}).get("areas", []) for it in (a.get("items") or [])]
+    hook84 = next((it for it in rows84 if it.get("catalog_item_id") == cat1), None)
+    free84 = next((it for it in rows84 if not it.get("catalog_item_id")), None)
+    step("A4 挂接行带库价 30000+自由行在册",
+         hook84 is not None and hook84.get("price") == 30000 and free84 is not None, rows84)
+    api_ok("A4 调价项1→40元(重算靶价)", "POST", "/api/quotation/catalog/%s/price" % cat1, tok_admin,
+           {"price": 40000})
+    zero84 = api_ok("A4 历史时点重算(2020,无快照)", "POST",
+                    "/api/quotation/quotations/%s/reprice" % quota_q, tok_admin,
+                    {"time": "2020-01-01 00:00:00"})
+    step("A4 无快照行跳过(回填 0 行)", zero84 == 0, zero84)
+    n84 = api_ok("A4 缺省重算(取最新价)", "POST",
+                 "/api/quotation/quotations/%s/reprice" % quota_q, tok_admin, {})
+    step("A4 回填行数=1(自由行不动)", n84 == 1, n84)
+    det_q85 = api_ok("A4 重算后详情回读", "GET", "/api/quotation/quotations/%s" % quota_q, tok_admin)
+    rows85 = [it for a in (det_q85 or {}).get("areas", []) for it in (a.get("items") or [])]
+    hook85 = next((it for it in rows85 if it.get("catalog_item_id") == cat1), None)
+    # undis = 挂接行 1m²×40 元 + 自由行 1×5 元 = 45 元 = 45000 厘;默认折扣 10000 不折
+    step("A4 挂接行刷到 40000+聚合 undis=45000(服务端重算)",
+         hook85 is not None and hook85.get("price") == 40000
+         and det_q85.get("undis_price") == 45000, det_q85)
+    step("A4 reprice 轨迹在册", any(t.get("action") == "reprice"
+         for t in (det_q85 or {}).get("tracks", [])), det_q85)
+    api_err("A4 非法时点拒绝 230164", "POST", "/api/quotation/quotations/%s/reprice" % quota_q, tok_admin,
+            {"time": "not-a-time"}, 230164)
+    api_err("A4 未来时点拒绝 230164", "POST", "/api/quotation/quotations/%s/reprice" % quota_q, tok_admin,
+            {"time": "2099-01-01 00:00:00"}, 230164)
+    api_ok("A4 报价Q锁定", "POST", "/api/quotation/quotations/%s/lock" % quota_q, tok_admin)
+    api_err("A4 锁定后重算拒绝 230003", "POST", "/api/quotation/quotations/%s/reprice" % quota_q,
+            tok_admin, None, 230003)
+    api_ok("A4 段尾收尾:装修单Q废单(防在途查重扰后续段)", "POST",
+           "/api/decoration/orders/%s/obsolete" % order_q, tok_admin)
+    api_ok("A4 段尾收尾:报价项1停用", "POST", "/api/quotation/catalog/%s/status" % cat1,
+           tok_admin, {"status": 1})
+    api_ok("A4 段尾收尾:报价项2停用(前已停,幂等)", "POST", "/api/quotation/catalog/%s/status" % cat2,
+           tok_admin, {"status": 1})
+
     api_ok("预签 1→2", "POST", "/api/decoration/orders/%s/presign" % order_a, tok_admin)
 
     # 确认线(0 → 21大改 → 2;不可跳步不可倒退)

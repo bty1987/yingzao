@@ -27,6 +27,7 @@
 5. 切默认:`setDefault` → 同单唯一默认,默认报价变更对外可见价格以查询期汇总为准(不回写装修单,v1 不双写);
 6. 增减(V2):对已确认价格线做差量单(增/减/漏项枚举位),`submit` → 生成差量聚合(正补负退)→ 发 `QuotationAddReduceSubmittedEvent`,addon-payment 承接款项 → 付款后 status=2 → 确认 3; **→ 详细设计已出:[addon-quotation-addreduce.md](addon-quotation-addreduce.md)(2026-10-16,含状态机/守卫/端点/冒烟验收,按推荐口径可进写码)**;
 7. 保价重算(V2):按时间点取价格快照回填明细(价格快照 quotation_price 表)。
+   【实现定案 2026-10-25,第 84 次 A4】报价项库 quotation_item(组织级单价主数据)+ 价格快照 quotation_item_price(append-only,调价=唯一价格写点+同价幂等)+ 明细挂接 catalog_item_id(可空自由行);重算=按时间点取最后快照回填挂接行并重聚合,仅编辑态可操作,V404/错误码 230160-230164;老三价收敛单 price 列;验收口径见第 84 次运行报告。
 
 ## 闭环校验
 
