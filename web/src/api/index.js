@@ -184,6 +184,12 @@ export const obsoleteDecoration = (id) => http.post(`/api/decoration/orders/${id
 export const terminateDecoration = (id, data) => http.post(`/api/decoration/orders/${id}/terminate`, data)
 export const accountDecoration = (id) => http.post(`/api/decoration/orders/${id}/account`)
 export const accountCheckDecoration = (id) => http.get(`/api/decoration/orders/${id}/account-check`)
+// 三口径表(A6):半包配比/整装满减/包干增项——合同价与主材/服务费指标推导
+export const makeMidpackCaliber = (id, data) => http.post(`/api/decoration/orders/${id}/calibers/midpack`, data)
+export const makeHolonomyCaliber = (id, data) => http.post(`/api/decoration/orders/${id}/calibers/holonomy`, data)
+export const makeInclusiveCaliber = (id, data) => http.post(`/api/decoration/orders/${id}/calibers/inclusive`, data)
+export const confirmCaliber = (id, kind) => http.post(`/api/decoration/orders/${id}/calibers/confirm`, { kind })
+export const listCalibers = (id) => http.get(`/api/decoration/orders/${id}/calibers`)
 export const fetchDecorationConfig = () => http.get('/api/decoration/config')
 export const updateDecorationConfig = (data) => http.put('/api/decoration/config', data)
 export const finishDecoration = (id) => http.post(`/api/decoration/orders/${id}/finish`)

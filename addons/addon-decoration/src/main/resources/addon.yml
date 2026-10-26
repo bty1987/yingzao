@@ -1,7 +1,7 @@
 addon:
   id: decoration
   name: 装修单
-  version: 0.2.0
+  version: 0.3.0
   error-code-segment: 250000
   menus:
     - path: /decoration/orders

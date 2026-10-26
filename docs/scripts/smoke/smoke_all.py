@@ -2754,6 +2754,87 @@ def main():
                    "/api/events?eventType=StockManifestCreatedEvent&status=1&page=1&size=5", tok_admin)
     step("A5 StockManifestCreated 消费行存在", bool(ev_a5) and ev_a5.get("total", 0) >= 1, ev_a5)
 
+    # ========= A6 三口径表(第 86 次;docs/11 A6:半包配比/整装满减/包干增项三分支)=========
+    # 统一门禁(合同线 {0,1,2,4}+默认报价锁定)+三算法(ppm 配比/折上折余数不打折/MET 三分支)。
+    print("\n== A6 三口径表 ==")
+    stamp86 = time.strftime("%H%M%S")
+    ver_a6 = api_ok("A6 建口径版本(管理费 10% 不折不启税)", "POST", "/api/quotation/versions", tok_admin,
+                    {"name": "A6口径版本" + stamp86, "busitype": 0, "manageRate": 1000,
+                     "manageDiscount": 10000, "carryRate": 0, "taxRate": 0})
+    v_a6 = api_ok("A6 建楼盘", "POST", "/api/customerprofile/villages", tok_admin,
+                  {"name": "A6口径楼盘" + stamp86, "cityId": city_id, "properId": proper_id,
+                   "developer": "冒烟开发商", "x": 123400000, "y": 41800000, "mileage": 12000})
+    h_a6 = api_ok("A6 建房屋", "POST", "/api/customerprofile/houses", tok_admin,
+                  {"villageId": v_a6, "number": "2栋1单元101-" + stamp86})
+    c_a6 = api_ok("A6 建客户", "POST", "/api/customerprofile/customers", tok_admin,
+                  {"name": "A6口径客户" + stamp86, "phone": "136%08d" % (int(stamp86) % 100000000)})
+    order_a6 = api_ok("A6 登记装修单(半包,无定金)", "POST", "/api/decoration/orders", tok_admin,
+                      {"customerId": c_a6, "houseId": h_a6, "type": 0,
+                       "designerId": uid_b, "salesmanId": uid_c})
+    if order_a6 is None:
+        return finish()
+    api_err("A6 无默认报价建口径拒绝 250030", "POST",
+            "/api/decoration/orders/%s/calibers/midpack" % order_a6, tok_admin,
+            {"materialRate": 200000}, 250030)
+    q_a6 = api_ok("A6 建报价(1项 10m²x50元)", "POST", "/api/quotation/quotations", tok_admin,
+                  {"orderId": order_a6, "name": "口径方案", "versionId": ver_a6})
+    if q_a6 is None:
+        return finish()
+    qa6_area = api_ok("A6 加功能区", "POST", "/api/quotation/quotations/%s/areas" % q_a6, tok_admin,
+                      {"name": "口径区", "type": 1})
+    api_ok("A6 加功能项(10000x50000)", "POST",
+           "/api/quotation/quotations/%s/areas/%s/items" % (q_a6, qa6_area), tok_admin,
+           {"name": "口径项", "num": 10000, "price": 50000})
+    api_ok("A6 整单8折(费率覆盖)", "POST", "/api/quotation/quotations/%s/pricing" % q_a6, tok_admin,
+           {"discount": 8000})
+    # undis=500000 dis=400000 manage=40000 carry=0 tax=0 total=440000(全厘)
+    api_ok("A6 报价锁定", "POST", "/api/quotation/quotations/%s/lock" % q_a6, tok_admin)
+    api_ok("A6 设默认报价", "POST", "/api/quotation/quotations/%s/default" % q_a6, tok_admin)
+    mp = api_ok("A6 建半包口径(主材20%/服务10%)", "POST",
+                "/api/decoration/orders/%s/calibers/midpack" % order_a6, tok_admin,
+                {"materialRate": 200000, "serviceRate": 100000})
+    mp_ok = bool(mp) and mp.get("project_base") == 940000 and mp.get("material_price") == 188000 \
+        and mp.get("service_price") == 18800 and mp.get("total_price") == 1146800
+    step("A6 半包推导:基础940000(含管理费)/主材188000(20%)/服务18800(10%)/总额1146800", mp_ok, mp)
+    mp2 = api_ok("A6 半包重算(配比0手填主材50000)", "POST",
+                 "/api/decoration/orders/%s/calibers/midpack" % order_a6, tok_admin,
+                 {"materialRate": 0, "materialPrice": 50000, "serviceRate": 100000})
+    step("A6 手填主材 50000/服务 5000", bool(mp2) and mp2.get("material_price") == 50000
+         and mp2.get("service_price") == 5000 and mp2.get("material_origin") == 50000, mp2)
+    hl = api_ok("A6 建整装口径(基数10万折0.9管理跟随/主材15%/服务10%)", "POST",
+                "/api/decoration/orders/%s/calibers/holonomy" % order_a6, tok_admin,
+                {"discountBase": 100000, "discount": 9000, "manageFollow": 1,
+                 "maching": 150000, "serviceRate": 100000})
+    hl_ok = bool(hl) and hl.get("project_price") == 810000 and hl.get("manage_price") == 36000 \
+        and hl.get("material_price") == 141000 and hl.get("service_price") == 14100 \
+        and hl.get("total_price") == 1001100
+    step("A6 整装推导:折后工程810000(90万x0.9余数不打折)/管理36000(跟随)/主材141000/服务14100/总额1001100", hl_ok, hl)
+    inc = api_ok("A6 建包干口径(常规+300元/MET负25000,UPMET)", "POST",
+                 "/api/decoration/orders/%s/calibers/inclusive" % order_a6, tok_admin,
+                 {"commonUndis": 30000, "metDis": -20000, "metManage": -5000, "metFlag": 1})
+    step("A6 包干推导(MET负,UPMET不计):总额470000", bool(inc) and inc.get("total_price") == 470000, inc)
+    inc2 = api_ok("A6 包干重算(MET正20000,DOWNMET不计)", "POST",
+                  "/api/decoration/orders/%s/calibers/inclusive" % order_a6, tok_admin,
+                  {"commonUndis": 30000, "metDis": 20000, "metFlag": 2})
+    step("A6 包干推导(MET正,DOWNMET不计):总额470000", bool(inc2) and inc2.get("total_price") == 470000, inc2)
+    inc3 = api_ok("A6 包干重算(MET正20000,COMMET无条件)", "POST",
+                  "/api/decoration/orders/%s/calibers/inclusive" % order_a6, tok_admin,
+                  {"commonUndis": 30000, "metDis": 20000, "metFlag": 3})
+    step("A6 包干推导(COMMET计):总额490000", bool(inc3) and inc3.get("total_price") == 490000, inc3)
+    api_ok("A6 确认包干口径(冻结)", "POST", "/api/decoration/orders/%s/calibers/confirm" % order_a6,
+           tok_admin, {"kind": "inclusive"})
+    api_err("A6 确认后重算拒绝 250031", "POST",
+            "/api/decoration/orders/%s/calibers/inclusive" % order_a6, tok_admin,
+            {"commonUndis": 1000, "metFlag": 1}, 250031)
+    all86 = api_ok("A6 三口径联合查", "GET", "/api/decoration/orders/%s/calibers" % order_a6, tok_admin)
+    step("A6 联合查:三表齐(包干已冻结)",
+         bool(all86) and all86.get("midpack") and all86.get("holonomy")
+         and all86.get("inclusive") and all86.get("inclusive").get("status") == 1, all86)
+    api_err("A6 合同线锁死拒绝 250002(主链单A已完工)", "POST",
+            "/api/decoration/orders/%s/calibers/midpack" % order_a, tok_admin,
+            {"materialRate": 100000}, 250002)
+    api_ok("A6 段尾收尾:装修单废单", "POST", "/api/decoration/orders/%s/obsolete" % order_a6, tok_admin)
+
     # ---- B 类#7:领料定材校验(定材包成员=定额来源;组织开关默认关)----
     pkg_b7 = api_ok("B7建定材包(surplus=0)", "POST", "/api/basedata/packages", tok_admin,
                     {"name": "定材包B7" + stamp_inv, "surplus": 0})

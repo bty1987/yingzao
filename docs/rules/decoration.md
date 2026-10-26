@@ -191,7 +191,8 @@
 | DecorationPO 四线状态 | decoration_order 表:status/project_status/design_status/source_status 四列 + **显式迁移表**(代码白名单) |
 | 七从表一键创建 | order 主表 + order_profile(1:1) + order_team(人员) + 归属表;快照列下沉 |
 | 单号 counting 表 | order_no 生成器(可配前缀+日期+序号,唯一索引兜底) |
-| 三口径表 | addon-decoration 内 {addonId}_order_caliber 系列(半包/整装 V1 只做主档,口径算法进 V2) |
+| 三口径表 | addon-decoration 内 decoration_caliber_{midpack,holonomy,inclusive}(V503) | ✅ 0.3.0(第 86 次 A6,算法+主档同轮) |
+- 【营造实现定案回写(第 86 次,A6)】**三口径表算法(V503+CaliberService)**:统一门禁(老三表 make 前置链一致)→合同线 status∈{0,1,2,4}(250002)+默认报价定稿锁定(经 QuotationApi.defaultQuotationBreakdown 新契约 250030);**老「订单活动锁定」门禁不迁**(活动域未建,随活动域接入——诚实边界);**口径与款线解耦**:老 make 后 makeDecorationPayment 重建款计划,营造款线=签约 scaleTemplate,口径表只产推导指标(Inclusive 推导总额可作签约 contractAmount 输入);**比例制式收敛 ppm**(配比/费率统一百万分比 200000=20%,老 ppm/万分比/千分比/百分比四制式并存不迁);金额全厘;Midpack 配比 0=手填主材额(老语义);Holonomy 折上折余数不打折(基数取整)+管理费可选跟随;Inclusive MET 三分支(UPMET 仅正计/DOWNMET 仅负计/COMMET 无条件)=老公司配置 QUOTATION_EXTENSION_MET_FLAG **收敛为口径行参数 met_flag 逐单可选**【方林嫌疑收口:公司商务政策→逐单口径】;增减数据源 V1=手工入参(拓展项域未建,随报价 V3——诚实边界);make 幂等重建(on duplicate)+confirm 显式冻结(老裸 update/servicePaidup 冻结不迁,重算仅初始态 250031);PRD 见 docs/prd/addon-destruction 修正为 addon-decoration.md。
 | MessageQueuing JSON 事件表 | 领域事件(DecorationCreatedEvent/DecorationSignedEvent…入 addons-api)+ 内核通知中心消费 |
 | DecorationStatusRight 配置表 | RBAC 数据权限(可见状态集),core 统一模型 |
 | 站内信 MessagePO | 内核 yz_notification(NotificationService,已落地 2026-10-12) |

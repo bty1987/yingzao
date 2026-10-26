@@ -198,6 +198,66 @@
     </el-dialog>
 
     <!-- 详情抽屉:四线状态 + profile + 团队/归属/量房/款项/轨迹 -->
+    <!-- 三口径建单弹窗 -->
+    <el-dialog v-model="caliberDialog" :title="caliberTitle" width="520px" append-to-body>
+      <el-form label-width="110px">
+        <template v-if="caliberKind === 'midpack'">
+          <el-form-item label="主材配比(‰)">
+            <el-input-number v-model="midpackForm.materialRatePct" :min="0" :max="100" :step="1" :precision="1" />
+            <span class="tip" style="margin-left: 6px">0 = 手填主材额</span>
+          </el-form-item>
+          <el-form-item v-if="midpackForm.materialRatePct === 0" label="主材配额(元)">
+            <el-input-number v-model="midpackForm.materialPriceYuan" :min="0" :precision="3" />
+          </el-form-item>
+          <el-form-item label="服务费率(‰)">
+            <el-input-number v-model="midpackForm.serviceRatePct" :min="0" :max="100" :step="1" :precision="1" />
+          </el-form-item>
+        </template>
+        <template v-if="caliberKind === 'holonomy'">
+          <el-form-item label="满减基数(元)">
+            <el-input-number v-model="holonomyForm.discountBaseYuan" :min="0.001" :precision="3" />
+          </el-form-item>
+          <el-form-item label="折扣(%)">
+            <el-input-number v-model="holonomyForm.discountPct" :min="1" :max="100" :step="1" :precision="0" />
+          </el-form-item>
+          <el-form-item label="管理费跟随">
+            <el-switch v-model="holonomyForm.manageFollow" />
+          </el-form-item>
+          <el-form-item label="主材配比(‰)">
+            <el-input-number v-model="holonomyForm.machingPct" :min="0" :max="100" :step="1" :precision="1" />
+          </el-form-item>
+          <el-form-item label="服务费率(‰)">
+            <el-input-number v-model="holonomyForm.serviceRatePct" :min="0" :max="100" :step="1" :precision="1" />
+          </el-form-item>
+        </template>
+        <template v-if="caliberKind === 'inclusive'">
+          <el-form-item label="常规增减(元)">
+            未折 <el-input-number v-model="inclusiveForm.commonUndisYuan" :precision="3" style="width: 130px" />
+            折后 <el-input-number v-model="inclusiveForm.commonDisYuan" :precision="3" style="width: 130px" />
+          </el-form-item>
+          <el-form-item label="常规管理/税">
+            <el-input-number v-model="inclusiveForm.commonManageYuan" :precision="3" style="width: 130px" />
+            <el-input-number v-model="inclusiveForm.commonTaxYuan" :precision="3" style="width: 130px" />
+          </el-form-item>
+          <el-form-item label="MET增减(元)">
+            未折 <el-input-number v-model="inclusiveForm.metUndisYuan" :precision="3" style="width: 130px" />
+            折后 <el-input-number v-model="inclusiveForm.metDisYuan" :precision="3" style="width: 130px" />
+          </el-form-item>
+          <el-form-item label="MET口径">
+            <el-radio-group v-model="inclusiveForm.metFlag">
+              <el-radio :value="1">仅正计</el-radio>
+              <el-radio :value="2">仅负计</el-radio>
+              <el-radio :value="3">无条件</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="caliberDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="onMakeCaliber">推导</el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="detailDrawer" size="640px" :title="detail ? detail.order_no : '装修单详情'">
       <template v-if="detail">
         <div class="status-grid">
@@ -260,6 +320,42 @@
             </template>
           </div>
           <div v-if="!detail.measures.length" class="tip">暂无量房计划</div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">三口径表(半包配比 / 整装满减 / 包干增项)</div>
+          <el-button size="small" @click="loadCalibers">刷新口径</el-button>
+          <div v-if="calibers.midpack" class="kv" style="margin-top: 6px">
+            <el-tag size="small" :type="calibers.midpack.status === 1 ? 'success' : 'info'" effect="plain">
+              半包{{ calibers.midpack.status === 1 ? '已确认' : '初始' }}</el-tag>
+            主材配比 {{ ppmView(calibers.midpack.material_rate) }} · 主材配额 ¥{{ yuan(calibers.midpack.material_price) }}
+            · 服务费 ¥{{ yuan(calibers.midpack.service_price) }} · 推导总额 ¥{{ yuan(calibers.midpack.total_price) }}
+            <el-button v-if="calibers.midpack.status === 0" link size="small" @click="onConfirmCaliber('midpack')">确认</el-button>
+          </div>
+          <div v-if="calibers.holonomy" class="kv">
+            <el-tag size="small" :type="calibers.holonomy.status === 1 ? 'success' : 'info'" effect="plain">
+              整装{{ calibers.holonomy.status === 1 ? '已确认' : '初始' }}</el-tag>
+            折 {{ (calibers.holonomy.discount / 100).toFixed(2) }}(基数 ¥{{ yuan(calibers.holonomy.discount_base) }})
+            · 折后工程 ¥{{ yuan(calibers.holonomy.project_price) }} · 主材配额 ¥{{ yuan(calibers.holonomy.material_price) }}
+            · 推导总额 ¥{{ yuan(calibers.holonomy.total_price) }}
+            <el-button v-if="calibers.holonomy.status === 0" link size="small" @click="onConfirmCaliber('holonomy')">确认</el-button>
+          </div>
+          <div v-if="calibers.inclusive" class="kv">
+            <el-tag size="small" :type="calibers.inclusive.status === 1 ? 'success' : 'info'" effect="plain">
+              包干{{ calibers.inclusive.status === 1 ? '已确认' : '初始' }}</el-tag>
+            报价 ¥{{ yuan(calibers.inclusive.base_total) }} + 常规增减 ¥{{ yuan(calibers.inclusive.common_undis + calibers.inclusive.common_dis) }}
+            · MET 口径 {{ ['仅正计', '仅负计', '无条件'][calibers.inclusive.met_flag - 1] }}
+            · 合同总额 ¥{{ yuan(calibers.inclusive.total_price) }}
+            <el-button v-if="calibers.inclusive.status === 0" link size="small" @click="onConfirmCaliber('inclusive')">确认</el-button>
+          </div>
+          <div class="tip" style="margin-top: 4px">
+            建口径:{{ orderEditable ? '合同线初始/定金/预签/重签可建(需默认报价已定稿锁定)' : '当前合同线不可建' }}
+          </div>
+          <div v-if="orderEditable" style="margin-top: 6px">
+            <el-button size="small" @click="openCaliberDialog('midpack')">建半包口径</el-button>
+            <el-button size="small" @click="openCaliberDialog('holonomy')">建整装口径</el-button>
+            <el-button size="small" @click="openCaliberDialog('inclusive')">建包干口径</el-button>
+          </div>
         </div>
 
         <div class="section">
@@ -327,6 +423,7 @@ import {
   pageDecorations, fetchDecoration, createDecoration, presignDecoration, signDecoration,
   resignDecoration, obsoleteDecoration, terminateDecoration, accountDecoration, finishDecoration,
   accountCheckDecoration, fetchDecorationConfig, updateDecorationConfig,
+  makeMidpackCaliber, makeHolonomyCaliber, makeInclusiveCaliber, confirmCaliber, listCalibers,
   designConfirmDecoration, drawlineConfirmDecoration, applyDecorationMeasure,
   successDecorationMeasure, failDecorationMeasure, transferDecorationBelong,
   pageCustomers, pageVillages, pageHouses, listOrgUsers
@@ -466,6 +563,86 @@ async function openDetail(row) {
   const res = await fetchDecoration(row.id)
   detail.value = res.data
   detailDrawer.value = true
+  loadCalibers()
+}
+
+// ---- 三口径表(A6) ----
+const calibers = ref({ midpack: null, holonomy: null, inclusive: null })
+const caliberDialog = ref(false)
+const caliberKind = ref('midpack')
+const caliberTitle = computed(() => ({ midpack: '建半包配比口径', holonomy: '建整装满减口径', inclusive: '建包干增项口径' })[caliberKind.value])
+const midpackForm = ref({ materialRatePct: 20, serviceRatePct: 10, materialPriceYuan: 0 })
+const holonomyForm = ref({ discountBaseYuan: 1000, discountPct: 90, manageFollow: false, machingPct: 15, serviceRatePct: 10 })
+const inclusiveForm = ref({ commonUndisYuan: 0, commonDisYuan: 0, commonManageYuan: 0, commonTaxYuan: 0,
+  metUndisYuan: 0, metDisYuan: 0, metManageYuan: 0, metTaxYuan: 0, metFlag: 1 })
+const orderEditable = computed(() => detail.value && [0, 1, 2, 4].includes(detail.value.status))
+
+const ppmView = (ppm) => (Number(ppm || 0) / 10000).toFixed(2) + '%'
+
+async function loadCalibers() {
+  if (!detail.value) return
+  try {
+    const res = await listCalibers(detail.value.id)
+    calibers.value = res.data || { midpack: null, holonomy: null, inclusive: null }
+  } catch (e) {
+    calibers.value = { midpack: null, holonomy: null, inclusive: null }
+  }
+}
+
+function openCaliberDialog(kind) {
+  caliberKind.value = kind
+  caliberDialog.value = true
+}
+
+async function onMakeCaliber() {
+  if (!detail.value) return
+  saving.value = true
+  try {
+    const id = detail.value.id
+    if (caliberKind.value === 'midpack') {
+      const f = midpackForm.value
+      await makeMidpackCaliber(id, {
+        materialRate: Math.round(f.materialRatePct * 10000),
+        serviceRate: Math.round(f.serviceRatePct * 10000),
+        materialPrice: f.materialRatePct === 0 ? Math.round(f.materialPriceYuan * 1000) : null
+      })
+    } else if (caliberKind.value === 'holonomy') {
+      const f = holonomyForm.value
+      await makeHolonomyCaliber(id, {
+        discountBase: Math.round(f.discountBaseYuan * 1000),
+        discount: Math.round(f.discountPct * 100),
+        manageFollow: f.manageFollow ? 1 : 0,
+        maching: Math.round(f.machingPct * 10000),
+        serviceRate: Math.round(f.serviceRatePct * 10000)
+      })
+    } else {
+      const f = inclusiveForm.value
+      await makeInclusiveCaliber(id, {
+        commonUndis: Math.round(f.commonUndisYuan * 1000), commonDis: Math.round(f.commonDisYuan * 1000),
+        commonManage: Math.round(f.commonManageYuan * 1000), commonTax: Math.round(f.commonTaxYuan * 1000),
+        metUndis: Math.round(f.metUndisYuan * 1000), metDis: Math.round(f.metDisYuan * 1000),
+        metManage: Math.round(f.metManageYuan * 1000), metTax: Math.round(f.metTaxYuan * 1000),
+        metFlag: f.metFlag
+      })
+    }
+    ElMessage.success('口径已推导')
+    caliberDialog.value = false
+    await loadCalibers()
+  } catch (e) {
+    ElMessage.error(e.message || '推导失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onConfirmCaliber(kind) {
+  try {
+    await confirmCaliber(detail.value.id, kind)
+    ElMessage.success('口径已确认冻结')
+    await loadCalibers()
+  } catch (e) {
+    ElMessage.error(e.message || '确认失败')
+  }
 }
 
 async function act(promise, done) {

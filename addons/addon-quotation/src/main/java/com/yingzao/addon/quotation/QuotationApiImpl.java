@@ -54,6 +54,36 @@ public class QuotationApiImpl implements QuotationApi {
     }
 
     @Override
+    public Optional<QuotationBreakdown> defaultQuotationBreakdown(long orgId, long orderId) {
+        // 费率项金额(管理/搬运/税)在明细行(type=3/2/8,聚合回填),主单只存三段总额
+        String sql = "select q.id, q.name, q.undis_price, q.discount_price, q.total_price,"
+                + " q.discount, q.manage_rate, q.status,"
+                + " (select coalesce(sum(i.price), 0) from quotation_function_item i"
+                + "  where i.quotation_id = q.id and i.type = 3) as manage_price,"
+                + " (select coalesce(sum(i.price), 0) from quotation_function_item i"
+                + "  where i.quotation_id = q.id and i.type = 2) as carry_price,"
+                + " (select coalesce(sum(i.price), 0) from quotation_function_item i"
+                + "  where i.quotation_id = q.id and i.type = 8) as tax_price"
+                + " from quotation_quotation q"
+                + " where q.org_id = ? and q.order_id = ? and q.is_default = 1 limit 1";
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, orgId, orderId);
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, Object> row = rows.get(0);
+        return Optional.of(new QuotationBreakdown(((Number) row.get("id")).longValue(),
+                (String) row.get("name"), ((Number) row.get("undis_price")).longValue(),
+                ((Number) row.get("discount_price")).longValue(),
+                ((Number) row.get("manage_price")).longValue(),
+                ((Number) row.get("carry_price")).longValue(),
+                ((Number) row.get("tax_price")).longValue(),
+                ((Number) row.get("total_price")).longValue(),
+                ((Number) row.get("discount")).intValue(),
+                ((Number) row.get("manage_rate")).intValue(),
+                ((Number) row.get("status")).intValue() == 1));
+    }
+
+    @Override
     public Optional<QuotationSummary> queryDefaultQuotation(long orgId, long orderId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select id, name, total_price, discount from quotation_quotation

@@ -43,6 +43,21 @@ public class DecorationController {
     public record MeasureFailRequest(String remark) {
     }
 
+    public record MidpackRequest(Integer materialRate, Integer serviceRate, Long materialPrice,
+            String remark) {
+    }
+
+    public record HolonomyRequest(Long discountBase, Integer discount, Integer manageFollow,
+            Integer maching, Integer serviceRate, String remark) {
+    }
+
+    public record InclusiveRequest(Long commonUndis, Long commonDis, Long commonManage, Long commonTax,
+            Long metUndis, Long metDis, Long metManage, Long metTax, Integer metFlag, String remark) {
+    }
+
+    public record CaliberKindRequest(String kind) {
+    }
+
     public record TransferBelongRequest(Integer line, Long userId) {
     }
 
@@ -57,10 +72,13 @@ public class DecorationController {
 
     private final DecorationService orders;
     private final DecorationAccountCheckService accountChecks;
+    private final CaliberService calibers;
 
-    public DecorationController(DecorationService orders, DecorationAccountCheckService accountChecks) {
+    public DecorationController(DecorationService orders, DecorationAccountCheckService accountChecks,
+            CaliberService calibers) {
         this.orders = orders;
         this.accountChecks = accountChecks;
+        this.calibers = calibers;
     }
 
     @GetMapping("/orders")
@@ -233,6 +251,56 @@ public class DecorationController {
         orders.transferBelong(orgId, id, body == null ? null : body.line(),
                 body == null || body.userId() == null ? 0 : body.userId(), userId);
         return ApiResponse.ok();
+    }
+
+    // ---- 三口径表(A6:半包配比/整装满减/包干增项;make 幂等重建,confirm 冻结) ----
+
+    @PostMapping("/orders/{id}/calibers/midpack")
+    public ApiResponse<Map<String, Object>> makeMidpack(@PathVariable long id,
+            @RequestBody MidpackRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(calibers.makeMidpack(orgId, id, body == null ? null
+                : new CaliberService.MidpackCmd(body.materialRate(), body.serviceRate(),
+                        body.materialPrice(), body.remark()), userId));
+    }
+
+    @PostMapping("/orders/{id}/calibers/holonomy")
+    public ApiResponse<Map<String, Object>> makeHolonomy(@PathVariable long id,
+            @RequestBody HolonomyRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(calibers.makeHolonomy(orgId, id, body == null ? null
+                : new CaliberService.HolonomyCmd(body.discountBase(), body.discount(),
+                        body.manageFollow(), body.maching(), body.serviceRate(), body.remark()),
+                userId));
+    }
+
+    @PostMapping("/orders/{id}/calibers/inclusive")
+    public ApiResponse<Map<String, Object>> makeInclusive(@PathVariable long id,
+            @RequestBody InclusiveRequest body, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(calibers.makeInclusive(orgId, id, body == null ? null
+                : new CaliberService.InclusiveCmd(body.commonUndis(), body.commonDis(),
+                        body.commonManage(), body.commonTax(), body.metUndis(), body.metDis(),
+                        body.metManage(), body.metTax(), body.metFlag(), body.remark()), userId));
+    }
+
+    @PostMapping("/orders/{id}/calibers/confirm")
+    public ApiResponse<Void> confirmCaliber(@PathVariable long id, @RequestBody CaliberKindRequest body,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        calibers.confirm(orgId, body == null ? null : body.kind(), id, userId);
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/orders/{id}/calibers")
+    public ApiResponse<Map<String, Object>> listCalibers(@PathVariable long id,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(calibers.all(orgId, id));
     }
 
     private static long nvl(Long value) {

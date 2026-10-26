@@ -30,4 +30,16 @@ public interface QuotationApi {
      * 草稿/已提交/已付款均算未确认,已确认终态不算)。无差量单返回 false。
      */
     boolean hasUnconfirmedAddReduce(long orgId, long orderId);
+
+    /**
+     * 默认报价金额拆分(只读;三口径推导的数据源,A6)。无默认报价返回 empty。
+     * 全额厘;discount 万分比;locked=定稿锁定(status=1)。managePrice 由聚合回填列取(0=未回填)。
+     */
+    Optional<QuotationBreakdown> defaultQuotationBreakdown(long orgId, long orderId);
+
+    /** 报价金额拆分快照。 */
+    record QuotationBreakdown(long quotationId, String name, long undisPrice, long discountPrice,
+                              long managePrice, long carryPrice, long taxPrice, long totalPrice,
+                              int discount, int manageRate, boolean locked) {
+    }
 }

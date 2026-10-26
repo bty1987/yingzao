@@ -56,6 +56,7 @@
 1. **缩放**:老系统金额 long 存储,**1e6 缩放**(百万分之一元)——增减单提交生成款项时 `div(total,1000000)×1000000` 按 1e6 精度归一,负数带符号向零取整(正=补款 ONETYPE_ADD,负=退款 ONETYPE_REFUND);营造已定案(2026-10-12 全局金额红线+第 21 次交付):**统一厘(×1000 定点整数)**,禁 1e6;【✅第35次核对回写:原推荐“分或元”已被全局定案推翻】
 2. **折扣**:discount 万分比系数,**10000=不打折**(addQuotation 初始 setDiscount(10000)),如 9500=0.95;
 3. **费率三元组**:管理费/搬运费/税各带 rate(整数)+discount(short 折上折),创建报价时从**报价版本**(QuotationVersion)带出默认值,可单报价覆盖;
+   - 【第 86 次 A6 冒烟实证:V401 注释与实现语义漂移 10 倍】V401 列注释「管理费率千分比‰,50=5%」,但 recalc 实现 manage=dis×manage_rate×manage_discount÷1e8(discount=10000 时=dis×rate÷10000=**万分比系数**)——50 实得 0.5%。以实现为准:**费率 rate=万分比(1000=10%)**,V401 注释待勘误;A6 口径版本 manageRate=1000 即 10%;
 4. **税的可选性**:版本 taxDiscount=0(NOTTAXDISCOUNT)→ 不生成税项(见 §4 自动生成);
 5. **总价公式(由明细聚合,价格快照支撑)**:undisPrice(未折)/disPrice(折后)=Σ功能项;totalPrice=disPrice+管理+搬运+税;成本线 costPrice/consPrice/comsPrice(预算成本/施工成本/公司成本)与利润线 unachePrice 并存——**成本/利润字段是方林经营分析口径【方林嫌疑】,营造 V1 只做对客报价线,成本线归报表插件**;
 6. 默认报价变更(切 defaults)同步回写装修单 decoration.quotationPrice/discount——跨域写,营造改事件(QuotationDefaultChangedEvent)或查询期汇总,V1 建议**查询期汇总**(避免双写)。
