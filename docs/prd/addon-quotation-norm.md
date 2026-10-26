@@ -97,6 +97,20 @@
 - **第 1 轮**:迁移 V405+档案/实例层服务+生成引擎+附加确认线+事件两枚+Web 基础页(体量大头);
 - **第 2 轮**:NormApi 契约+addon-construction 消费(待审徽章/节点工费列)+冒烟补全+enforce 扩样例。
 
+## 实现期核对清单(第 91 次预走;拍板后写码时逐条销,不落码)
+
+1. **ConstructionDrawnEvent 挂点**:写码先 grep construction 域 `ignite(` 现状实证「仅失败事件」结论仍成立,再在 successDrawline/retroactiveDrawline 成功路径插发布;事件类落 addons-api,发布在 addon-construction,消费在 addon-quotation;
+2. **@Lazy 断环**:消费者→服务→YzEventBus 构造环惯例(第 89 次 AcceptanceVisitConsumer 同款,启动即死家族);
+3. **ar_diff 消费守卫**:PaymentCollectedEvent 差量款 bizId=**arId 非 orderId**(第 81 次库实证),重算按该差量单单源;
+4. **完工固化事件**:验收事件复用 `ConstructionAcceptedEvent`(第 89 次 addon-service 已消费实证存在),消费置固化位+拒重算 231206;
+5. 🔴**附加行 uk 自引用**:实例 uk 含 source_id,附加行 source_id=自身→插入时无 id 可填——重算复用锚只需覆盖 0/2 来源(老 disable 按来源维度),附加行要么 uk 排除(source_id 记 0+业务查重)要么落库后补挂——**实现期必须先解此题再写引擎**;
+6. **千分位 HALF_UP 姿势**:照 A5 套合套拆 QuantityCalc 先例;冒烟逐例断言到厘(开放问题 6 拍板前不定案);
+7. **迁移**:V405 起一文件含全部五表(档案 2+套餐 2 若进+实例 2,按拍板增减);MySQL 5.6 向下兼容;uk 列序与查询路径对齐;
+8. **端点归闸**:全部挂 /api/quotation 既有 prefix,零新增闸声明(沿 QuotationArController 先例);enforce 样例同步;
+9. **码段先查后用**:2312xx 落码前 grep 台账防撞(第 55 次 210008 撞码教训);
+10. **冒烟纪律**:专用商品/报价/装修单跨轮隔离(第 57 次 B7 残留教训)+段首定向清理;断言中文走 python urllib;
+11. **Web 三页走 huashu-design 流程**:定额档案/实例详情/附加确认——军规前端审美流程不豁免(先三方向初稿待选)。
+
 ## 待业务方拍板清单(拍板前不写码)
 
 1. **归属**:addon-quotation V2 子域(推荐——与报价项库/增减线同域闭环,老系统亦是同族两库)vs 独立 addon-norm(码段 390000);
