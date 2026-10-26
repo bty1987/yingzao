@@ -305,7 +305,7 @@ cd web-mp && npm install && npm run dev:h5
 | [docs/12-钉钉端内部应用盘点与员工端小程序开发需求反哺.md](docs/12-钉钉端内部应用盘点与员工端小程序开发需求反哺.md) | 方林钉钉端员工应用反哺归档:10 功能域盘点/判断法过堂/**员工端 app/ P0-P2 开发需求**/企微钉钉适配器设计输入(C4) |
 | [docs/13-微信端产品矩阵归纳PRD.md](docs/13-微信端产品矩阵归纳PRD.md) | 方林微信侧全家桶(4 小程序+公众号 H5)归纳 PRD:端矩阵/九大业务闭环/平台能力依赖/web-mp 客户端门户 V2 增补需求 |
 | [docs/scripts/ads-reference/](docs/scripts/ads-reference) | 行业聚合表 SQL 参考(工单达成/渠道漏斗/应收账龄/项目毛利/库存周转/到货准时) |
-| [docs/prd/](docs/prd) | 各 addon 的 PRD(业务闭环),含模板 |
+| [docs/prd/](docs/prd) | 各 addon 的 PRD(业务闭环),含模板;addon-service 售后三件套划界 PRD 待拍板 |
 | [docs/rules/](docs/rules) | 各 addon 的实现口径(状态机/金额口径/字典枚举) |
 | [AGENTS.md](AGENTS.md) | AI 协作开发指南(架构军规/文档金字塔/工作流) |
 
