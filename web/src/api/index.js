@@ -184,6 +184,22 @@ export const obsoleteDecoration = (id) => http.post(`/api/decoration/orders/${id
 export const terminateDecoration = (id, data) => http.post(`/api/decoration/orders/${id}/terminate`, data)
 export const accountDecoration = (id) => http.post(`/api/decoration/orders/${id}/account`)
 export const accountCheckDecoration = (id) => http.get(`/api/decoration/orders/${id}/account-check`)
+// 售后服务(addon-service):投诉/回访/保修三件套+B1 划界 PRD 兑现
+export const pageServiceComplaints = (params) => http.get('/api/service/complaints', { params })
+export const createServiceComplaint = (data) => http.post('/api/service/complaints', data)
+export const startServiceComplaint = (id) => http.post(`/api/service/complaints/${id}/start`)
+export const handleServiceComplaint = (id, data) => http.post(`/api/service/complaints/${id}/handle`, data)
+export const pageServiceVisits = (params) => http.get('/api/service/visits', { params })
+export const createServiceVisit = (data) => http.post('/api/service/visits', data)
+export const draftServiceVisit = (id, data) => http.post(`/api/service/visits/${id}/draft`, data)
+export const finishServiceVisit = (id, data) => http.post(`/api/service/visits/${id}/finish`, data)
+export const failServiceVisit = (id, data) => http.post(`/api/service/visits/${id}/fail`, data)
+export const pageServiceGuarantees = (params) => http.get('/api/service/guarantees', { params })
+export const createServiceGuarantee = (data) => http.post('/api/service/guarantees', data)
+export const cancelServiceGuarantee = (id) => http.post(`/api/service/guarantees/${id}/cancel`)
+export const fetchServiceConfig = () => http.get('/api/service/config')
+export const updateServiceConfig = (data) => http.put('/api/service/config', data)
+
 // 礼品采购流(A7):父单链分批入库/库存回加+采购流水/结算
 export const pageGiftPurchases = (params) => http.get('/api/member/purchases', { params })
 export const fetchGiftPurchase = (id) => http.get(`/api/member/purchases/${id}`)

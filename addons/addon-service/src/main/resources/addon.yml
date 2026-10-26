@@ -1,0 +1,44 @@
+addon:
+  id: service
+  name: 售后服务
+  version: 0.1.0
+  error-code-segment: 380000
+  menus:
+    - path: /service/complaints
+      title: 投诉处理
+      icon: warning
+    - path: /service/visits
+      title: 回访任务
+      icon: phone
+    - path: /service/guarantees
+      title: 保修登记
+      icon: shield
+  dicts:
+    complaintType:
+      - { key: 'quality', label: 质量 }
+      - { key: 'service', label: 服务 }
+      - { key: 'design', label: 设计 }
+      - { key: 'other', label: 其他 }
+    complaintLevel:
+      - { key: 'normal', label: 一般 }
+      - { key: 'urgent', label: 紧急 }
+    complaintStatus:
+      - { key: '0', label: 待处理 }
+      - { key: '1', label: 处理中 }
+      - { key: '2', label: 已处理 }
+    visitBizType:
+      - { key: 'manual', label: 手工登记 }
+      - { key: 'complaint', label: 投诉回访 }
+      - { key: 'acceptance', label: 验收回访 }
+    visitStatus:
+      - { key: '0', label: 待回访 }
+      - { key: '1', label: 已完成 }
+      - { key: '2', label: 无法完成 }
+    visitReason:
+      - { key: 'absent', label: 客户不在家 }
+      - { key: 'noanswer', label: 电话未接 }
+      - { key: 'refused', label: 拒绝回访 }
+      - { key: 'other', label: 其他 }
+  api:
+    - prefix: /api/service
+      require: /service/complaints

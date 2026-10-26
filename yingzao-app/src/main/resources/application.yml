@@ -29,7 +29,7 @@ spring:
 yingzao:
   # 启用的插件清单(编译期装配,未列出的 addon bean 不装配)
   addons:
-    enabled: customer,customerprofile,example,basedata,payment,decoration,quotation,construction,inventory,sales,balance,market,supplier,member,portal,target
+    enabled: customer,customerprofile,example,basedata,payment,decoration,quotation,construction,inventory,sales,balance,market,supplier,member,portal,target,service
   rbac:
     # RBAC v2 端点鉴权模式:observe=未声明 API 放行+审计(默认,存量补声明期)/enforce=未声明即拒(全插件补齐后的终态)
     mode: ${YINGZAO_RBAC_MODE:observe}

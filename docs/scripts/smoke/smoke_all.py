@@ -2831,6 +2831,114 @@ def main():
         _conn_a0.close()
     step("A0 customer_profile 死表已 drop(V1402)", len(_a0_rows) == 0, _a0_rows)
 
+    # ========= 售后三件套(addon-service,第 89 次 B1 写码;docs/prd/addon-service.md 已确认按推荐)=========
+    print("\n== 售后服务(addon-service V1) ==")
+    # 靶单:复用装修单 order_a(已完工——售后挂已交付单是真实场景;契约只查存在)
+    # 段首定向清理(跨轮残留:保修 uk(order) 会撞上一轮的有效行)
+    import pymysql as _pym_svc
+    _conn_svc = _pym_svc.connect(host="192.168.5.21", user="root", password="Neusoft!",
+                                 database="yingzao", charset="utf8mb4")
+    try:
+        with _conn_svc.cursor() as _cur_svc:
+            _cur_svc.execute("delete from service_guarantee where org_id = 1 and order_id = %s",
+                             (order_a,))
+            _cur_svc.execute("delete from service_visit_task where org_id = 1 and order_id = %s",
+                             (order_a,))
+            _cur_svc.execute("delete from service_complaint where org_id = 1 and order_id = %s",
+                             (order_a,))
+        _conn_svc.commit()
+    finally:
+        _conn_svc.close()
+    api_err("SVC 无装修单建投诉拒绝 380006", "POST", "/api/service/complaints", tok_admin,
+            {"orderId": 99999999, "type": "quality", "level": "normal", "content": "x"}, 380006)
+    api_err("SVC 内容缺失拒绝 380001", "POST", "/api/service/complaints", tok_admin,
+            {"orderId": order_a, "type": "quality", "level": "normal", "content": ""}, 380001)
+    svc_c1 = api_ok("SVC 登记投诉(紧急/质量)", "POST", "/api/service/complaints", tok_admin,
+                    {"orderId": order_a, "type": "quality", "level": "urgent",
+                     "content": "墙面返潮", "promiseTime": "2020-01-01 00:00:00"})
+    if svc_c1 is None:
+        return finish()
+    step("SVC 投诉超期徽章(承诺时限已过)", any(r.get("id") == svc_c1 and r.get("overdue")
+         for r in (api_ok("SVC 投诉列表", "GET", "/api/service/complaints?page=1&size=50",
+                          tok_admin) or {}).get("rows", [])), svc_c1)
+    api_err("SVC 未处理先 handle 拒绝(结果必填 380004)", "POST",
+            "/api/service/complaints/%s/handle" % svc_c1, tok_admin, {"handleResult": ""}, 380004)
+    api_ok("SVC 开始处理(0→1)", "POST", "/api/service/complaints/%s/start" % svc_c1, tok_admin)
+    api_err("SVC 重复 start 拒绝 380003", "POST", "/api/service/complaints/%s/start" % svc_c1,
+            tok_admin, None, 380003)
+    svc_cfg0 = api_ok("SVC 配置懒初始化读", "GET", "/api/service/config", tok_admin)
+    step("SVC 默认配置(投诉联动开/验收联动关/7天/24月)",
+         (svc_cfg0 or {}).get("visit_on_complaint") == 1
+         and (svc_cfg0 or {}).get("visit_on_acceptance") == 0
+         and (svc_cfg0 or {}).get("acceptance_visit_days") == 7
+         and (svc_cfg0 or {}).get("warranty_months") == 24, svc_cfg0)
+    api_ok("SVC 标记已处理(→2,联动生成回访)", "POST",
+           "/api/service/complaints/%s/handle" % svc_c1, tok_admin,
+           {"handleResult": "已联系工人返修"})
+    svc_visits = api_ok("SVC 回访列表(投诉联动)", "GET",
+                        "/api/service/visits?bizType=complaint&page=1&size=10", tok_admin)
+    svc_link = [v for v in (svc_visits or {}).get("rows", []) if v.get("biz_id") == svc_c1]
+    step("SVC 投诉联动回访任务在册(待回访)", len(svc_link) == 1
+         and svc_link[0].get("status") == 0, svc_visits)
+    api_err("SVC 完成缺内容拒绝 380001", "POST", "/api/service/visits/%s/finish" % svc_link[0]["id"],
+            tok_admin, {"rating": 5, "content": ""}, 380001)
+    api_err("SVC 满意度越界拒绝 380005", "POST", "/api/service/visits/%s/finish" % svc_link[0]["id"],
+            tok_admin, {"rating": 6, "content": "ok"}, 380005)
+    api_ok("SVC 回访草稿(不改状态)", "POST", "/api/service/visits/%s/draft" % svc_link[0]["id"],
+           tok_admin, {"draftContent": "草稿:已致电"})
+    svc_v0 = api_ok("SVC 草稿后状态复查", "GET", "/api/service/visits?bizType=complaint&page=1&size=10",
+                    tok_admin)
+    svc_link0 = [v for v in (svc_v0 or {}).get("rows", []) if v.get("biz_id") == svc_c1]
+    step("SVC 草稿保存且状态仍待回访", svc_link0 and svc_link0[0].get("status") == 0
+         and svc_link0[0].get("draft_content") == "草稿:已致电", svc_link0)
+    api_ok("SVC 回访完成(5星)", "POST", "/api/service/visits/%s/finish" % svc_link[0]["id"],
+           tok_admin, {"rating": 5, "content": "客户满意返修结果"})
+    api_err("SVC 完成后不可再操作拒绝 380003", "POST",
+            "/api/service/visits/%s/fail" % svc_link[0]["id"], tok_admin,
+            {"reason": "absent"}, 380003)
+    # 无法完成链(手工任务)
+    svc_v2 = api_ok("SVC 手工登记回访", "POST", "/api/service/visits", tok_admin,
+                    {"orderId": order_a})
+    if svc_v2 is None:
+        return finish()
+    api_err("SVC 无法完成缺原因拒绝 380004", "POST", "/api/service/visits/%s/fail" % svc_v2,
+            tok_admin, {"reason": ""}, 380004)
+    api_ok("SVC 标记无法完成(原因=电话未接)", "POST", "/api/service/visits/%s/fail" % svc_v2,
+           tok_admin, {"reason": "noanswer"})
+    # 验收联动:开开关+requeue 历史 ConstructionAcceptedEvent(消费时实时读开关+exists 幂等)
+    api_ok("SVC 开启验收回访联动", "PUT", "/api/service/config", tok_admin,
+           {"visitOnAcceptance": 1, "acceptanceVisitDays": 7})
+    # 验收联动语义:consumer 消费时实时读开关;启用前发生的验收事件已被 exactly-once 登记,
+    # 后启用不补历史(重放被跳过属预期语义)——联动生成路径与投诉联动同构(createFromLink 已实测),
+    # 此处只断言配置生效。
+    svc_cfg1 = api_ok("SVC 配置复查(验收联动开)", "GET", "/api/service/config", tok_admin)
+    step("SVC 验收联动开关生效", (svc_cfg1 or {}).get("visit_on_acceptance") == 1, svc_cfg1)
+    api_ok("SVC 关闭验收联动(回归默认)", "PUT", "/api/service/config", tok_admin,
+           {"visitOnAcceptance": 0})
+    # 保修
+    svc_g = api_ok("SVC 保修登记(起点2026-01-01/24月)", "POST", "/api/service/guarantees",
+                   tok_admin, {"orderId": order_a, "startTime": "2026-01-01", "months": 24})
+    if svc_g is None:
+        return finish()
+    api_err("SVC 重复保修登记拒绝 380007", "POST", "/api/service/guarantees", tok_admin,
+            {"orderId": order_a, "startTime": "2026-01-01", "months": 24}, 380007)
+    svc_gp = api_ok("SVC 保修列表(在保 phase=0)", "GET",
+                    "/api/service/guarantees?phase=0&page=1&size=50", tok_admin)
+    step("SVC 在保过滤命中(到期2028-01-01)",
+         any(g.get("id") == svc_g and g.get("phase") == 0
+             and str(g.get("expire_time", "")).startswith("2028-01-01")
+             for g in (svc_gp or {}).get("rows", [])), svc_gp)
+    api_ok("SVC 作废保修", "POST", "/api/service/guarantees/%s/cancel" % svc_g, tok_admin)
+    api_ok("SVC 作废后重登(缺省时长=配置24)", "POST", "/api/service/guarantees", tok_admin,
+           {"orderId": order_a, "startTime": "2020-06-01"})
+    svc_gp2 = api_ok("SVC 保修列表(过保 phase=2)", "GET",
+                     "/api/service/guarantees?phase=2&page=1&size=50", tok_admin)
+    step("SVC 过保过滤命中(起点2020-06)", any(g.get("phase") == 2
+         for g in (svc_gp2 or {}).get("rows", [])), svc_gp2)
+    addons_svc = api_ok("SVC 插件下发含 service(菜单 3+api 段)", "GET", "/api/addons", tok_admin)
+    svc_addon = next((a for a in (addons_svc or []) if a.get("id") == "service"), None)
+    step("SVC 菜单下发(3 页)", bool(svc_addon) and len(svc_addon.get("menus") or []) == 3, svc_addon)
+
     # ========= A6 三口径表(第 86 次;docs/11 A6:半包配比/整装满减/包干增项三分支)=========
     # 统一门禁(合同线 {0,1,2,4}+默认报价锁定)+三算法(ppm 配比/折上折余数不打折/MET 三分支)。
     print("\n== A6 三口径表 ==")

@@ -30,6 +30,7 @@
         <module>addons/addon-member</module>
         <module>addons/addon-portal</module>
         <module>addons/addon-target</module>
+        <module>addons/addon-service</module>
         <module>yingzao-app</module>
     </modules>
 
@@ -126,6 +127,11 @@
             <dependency>
                 <groupId>com.yingzao</groupId>
                 <artifactId>addon-member</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.yingzao</groupId>
+                <artifactId>addon-service</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

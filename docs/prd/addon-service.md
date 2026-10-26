@@ -1,6 +1,7 @@
 # PRD - addon-service 售后三件套(投诉/回访/保修)
 
-> 状态:**草稿(待业务方拍板)**——2026-10-26,第 88 次运行产出
+> 状态:**已确认(2026-10-26,用户拍板「按推荐」——5 项开放问题全按推荐口径)**;第 89 次运行写码兑现(V1801/错误码 380001-380008)
+> 实现勘误:①联动锚事件为 ConstructionAcceptedEvent(验收竣工,实际存在的事件;PRD 初稿误写 ConstructionFinishedEvent);②退单(terminate)联动归 V2;③新增 380008 配置非法
 > 老系统参考:construction 域 CustomerServiceComplaint/BackVisit/Guarantee 三件套(裸 CRUD,无真实状态机,docs/rules/construction.md §9)+ fl-yy 退单回访体系(yy_return_visit_task/_result/_reason,docs/07 §2.5)+ decoration 域 DecorationBackVisit(通知型)
 > 建议码段:**380000**(target 370000 之后顺延)/ 迁移段:**1800+**(V1801)
 > 表前缀:service_(军规 3)
@@ -74,7 +75,7 @@ service_guarantee:org_id/order_id/order_no/customer_name/start_time(保修起)/m
                   + uk(org,order)(一单一保,V1)
 ```
 
-- 错误码段 380000:380001 参数/380002 不存在/380003 状态不可操作/380004 原因必填/380005 满意度非法/380006 装修单不存在(契约)/380007 保修已登记(uk 幂等提示);
+- 错误码段 380000:380001 参数/380002 不存在/380003 状态不可操作/380004 原因必填/380005 满意度非法/380006 装修单不存在(契约)/380007 保修已登记(uk 幂等提示)/380008 配置非法;
 - 字典单源:complaintType/complaintLevel/visitBizType/visitReason/visitStatus/complaintStatus 全走 addon.yml dicts;
 - 事件:ComplaintHandledEvent/VisitFinishedEvent(报表/通知消费方 V2 接);监听 ConstructionFinishedEvent(验收联动开关)。
 

@@ -335,6 +335,15 @@ ENDPOINTS = [
     ("member", "GET", "/api/member/points/accounts"),
     ("member", "GET", "/api/member/points/accounts/1/records"),
     ("member", "POST", "/api/member/points/adjust"),
+    # service(第 89 次 B1:投诉/回访/保修)
+    ("service", "GET", "/api/service/complaints"), ("service", "POST", "/api/service/complaints"),
+    ("service", "POST", "/api/service/complaints/1/start"), ("service", "POST", "/api/service/complaints/1/handle"),
+    ("service", "GET", "/api/service/visits"), ("service", "POST", "/api/service/visits"),
+    ("service", "POST", "/api/service/visits/1/draft"), ("service", "POST", "/api/service/visits/1/finish"),
+    ("service", "POST", "/api/service/visits/1/fail"),
+    ("service", "GET", "/api/service/guarantees"), ("service", "POST", "/api/service/guarantees"),
+    ("service", "POST", "/api/service/guarantees/1/cancel"),
+    ("service", "GET", "/api/service/config"), ("service", "PUT", "/api/service/config"),
 ]
 
 # 12 插件代表 GET 端点(admin/全授权组用;三条读放开端点返回 200 属预期)
@@ -348,6 +357,7 @@ REP_GETS = [
     ("/api/market/inbounds", "进线"),
     ("/api/supplier/suppliers", "厂商"),
     ("/api/member/exchanges", "会员兑换单"),
+    ("/api/service/complaints", "售后投诉"),
 ]
 
 # 无角色拒绝面:详情/子资源/未放开列表(读放开的三条列表端点不含在内,放开行为在第 4 组断言)
@@ -361,12 +371,13 @@ REP_DENIES = [
     ("/api/market/inbounds", "进线"),
     ("/api/supplier/suppliers/1", "厂商详情"),
     ("/api/member/gifts/1", "礼品详情"),
+    ("/api/service/visits/1", "回访任务详情"),
 ]
 
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(16 插件 57 条)", len({r["addon"] for r in rules}) == 16 and len(rules) == 57,
+    step("载入 api 规则(17 插件 58 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 58,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====
