@@ -78,10 +78,14 @@
 
 - 定额单按报价(qid)建,创建报价时自动 addNormtion;
 - **生成 = 全量重算**:先禁用(disable)该报价全部定额项,再从三来源重建——①默认报价 ②该单全部拓展项 ③该单全部增减单(三来源 × 三类型 = 9 组展开);装修单已完工(PROJECTSTATUS_FINISH)→ 清掉禁用项、不再生成;
-- 定额项来源类型:0 报价(OFFER)/ 1 拓展(EXPAND)/ 2 增减(ADDCUT);人工定额带 normtype(0 工作费/1 追加)与收/付向(ATTTYPE 0 收取/1 支付);
-- 人工定额(NormriceItem)四态:0 初始 / 1 禁用 / 2 确认 / 3 驳回(确认线是人工/工费核算的前置)——材料/工时无此线;
-- 打印计数:moodPrintNum/mricePriceNum(NormtionPO)【方林嫌疑:打印管控】;
-- 【方林嫌疑】"定额"概念行业共性(成本核算底座),但确认/驳回线挂工费工资(联动 addon-salary)是公司玩法 → 营造保留定额展开+全量重算,**确认线延后到 addon-salary 需求时再议**。
+- **【第 90 次增量考证:实例层常量全集】**三类实例行 type 均 0 报价/1 拓展/2 增减/**3 附加(QUOTA,手工登记行)**;NORMTYPE 各异——材料 0 材料/1 套餐(PACK,Normpack 展开)、人工 0 工作费/1 追加、工时 0 工日/1 追加;atttype 0 收/1 支(减项反向走支);status 材料与工时两态(0 初始/1 禁用),**人工四态 0/1/2 确认/3 驳回**(确认线全族唯一);
+- **【触发点实证(第 90 次)】**①放线确认 DrawLineServiceImpl(全量=默认报价+全部拓展);②**增减款收齐 DecorationPaymentServiceImpl(按 arId 单源重算,带 schedule)**;③手动三入口(NormtionAction:makeNormtion 全量/makeNormtionForQuotation 报价线/makeNormtionForExtension 拓展线)——报价编辑本身不触发,放线=定额基准确立;
+- **档案层动作面(第 90 次)**:三档案(挂报价项 qiid)仅 page/queryByQiid/add/delete 四动作**无 update(改=删了重加)**;附加项档案 Normadd(公司级:name+节点+unit+price)与材料定额套餐 Normpack/NormpackItem 为全 CRUD+启停;Normood add 守卫=定材必存在(130118);
+- **人工定额(NormriceItem)确认线 = 附加项审核**(老 NormriceItemServiceImpl):登记走附加项档案(Normadd,带 sid→NORMTYPE_ADD 追加)或手工填(→NORMTYPE_WORKFEE);0 待确认→confirm(2,记 userId)/reject(3);删除仅 0 可(200063);**联动工程排期 additemStatus**(节点下存在待确认行→schedule.additemStatus=1,跨域直写 construction schedule 表——营造改事件回写);确认人/时间列系 2026-10 生产补列(方林 91320a149),营造原生;
+- **工费工资聚合口径(老 amountNormriceItemForSalary 实锤)**:`Σ(if(atttype=0,+salary,−salary)×if(trannum=0,1,num/1000×trannum/1000))` 按 qid+cnid,计入=**非附加行 status=0 + 附加行 status=2 且 NORMTYPE_ADD(追加)**;**quirk:手工工作费附加行(WORKFEE+QUOTA)确认后不计入——疑缺陷**,消费方=WorkerSalaryServiceImpl(工资域);
+- NormtionPO 头:moodTotal/mriceTotal **冗余合计**+moodPrintNum/mricePriceNum 打印计数,status 仅 0【冗余合计与打印管控均为方林实现习惯,营造不迁】;
+- 【方林嫌疑】"定额"概念行业共性(成本核算底座),但确认/驳回线挂工费工资(联动 addon-salary)是公司玩法 → 营造保留定额展开+全量重算,确认线随附加项审核保留(费用审核行业共性);
+- 【营造映射定案 2026-10-27,第 90 次】**定额子域 PRD 已产出:docs/prd/addon-quotation-norm.md**(推荐 addon-quotation V2 子域/231200 段/V405+):档案层单表+kind 位(挂 V404 报价项库 catalog_item_id)+实例单表收敛(沿五分表收敛先例)+source_type 四分(0 报价/1 拓展预留/2 增减/3 附加)+触发点三处(放线成功【需契约新增 ConstructionDrawnEvent——construction 域现仅失败事件】/增减款收齐【PaymentCollectedEvent 既有】/手动)+附加确认线三态(0/2/3,confirmer 原生)+待审徽章事件回写(NormAdditionPendingChangedEvent)+**NormApi 工费/工日/材料聚合契约**(工资底座,首个消费方 addon-construction);**7 项开放问题待拍板(归属/表形态/工时/套餐/聚合口径 quirk/千分位缩放/联动方式),拍板前不写码**。
 
 ## 6. 增减项(AddReduce,合同后变更)
 
@@ -94,6 +98,7 @@
 - 【方林嫌疑】漏项(LEAKAGE)单列类型 + 漏项追责玩法是方林管理特色,行业少见于系统化 → v1 保留 type 枚举位但漏项流程不做。
 - 【营造映射定案 2026-10-16,第 57 次扩充】**定材包挂包**:quotation_quotation.material_package_id(V402;setMaterialPackage 仅编辑态可挂/换/解绑,包存在且启用经 MaterialQuotaApi 契约校验 230023;解绑守卫 230153=存在已确认差量不可解绑,与增减线联动);领料侧消费经 QuotationApi.designatedMaterialPackageId(inventory.md §13.1);
 - 【营造映射定案 2026-10-16】增减线 V2 详细设计见 docs/prd/addon-quotation-addreduce.md:差量单(0 草稿/1 已提交/2 已付款/3 已确认,草稿可删、已提交未付款可撤)+明细行挂 ref_qiid+金额全厘服务端算+提交单事务聚合经 PaymentApi.createBill(typeCode=ar_diff)+PaymentConfirmedEvent 回程置已付+财务 confirm 终态;paytype COM/ARO 不迁(方林财务口径);重签前置「无未确认差量单」与决算金额「折后合计+Σ已确认差量」双向联动。
+- 【营造实现定案回写(第 81 次,A1)】**增减净退款 V2.1(撤 230105 净负拒)**:submit 净额<0 不再拒,不生成应收款,遍历同装修单已提交兄弟差量单的款项单(bizId=arId——库实锤差量款三元组挂 arId 非 orderId)找已收/已确认者按 |净额| 发起部分退(经 PaymentApi.submitRefundPartial);无可退→remark 追加人工标记(轨迹可见零新表);净负单照常 status=1+发事件;净正行为零变化。老「净负即拒」把减项拆单逼成假单据的运营绕法收口。验证第 81 次报告。
 
 ## 7. 测量/复测(Qeasure/Remeasure)与拓展项(Extension)
 
@@ -125,7 +130,7 @@
 | 报价数量上限/保价天数/综合项开关 | addon.yml 配置项(组织级) | V1 |
 | 价格快照时间线 + 保价重算 | quotation_item/quotation_item_price(V404) | ✅ 0.5.0(第 84 次 A4) |
 | 金额口径 | **厘(×1000 定点整数,全局定案),禁 1e6/万分比黑盒**,系数字段语义文档化 | V1 红线(✅第35次核对回写) |
-| 定额三来源全量重算 | addon-quotation 定额子域 | V2 |
+| 定额三来源全量重算 | addon-quotation 定额子域 | V2(**PRD 已出** docs/prd/addon-quotation-norm.md,第 90 次) |
 | 增减项(→款项生成) | addon-quotation,发 QuotationAddReduceSubmittedEvent,款项归 addon-payment | V2 |
 | 拓展项/选材/测量复测 | V2/V3(选材联动 addon-sales/材料) | V3 |
 | 整装产品报价(Protation 公式) | addon-quotation 产品报价扩展点(公式求值器接口化) | V3 |
@@ -140,6 +145,6 @@
 3. 审核线(提交→审核→完成)是否 V1 保留,还是接入自研轻量工作流(与客源两级审批同题);
 4. 成本/利润字段(consPrice/comsPrice/unachePrice)确认不进开源核心、归经营分析插件?
 5. 增减项 paytype 的 COM/ARO 语义与漏项(LEAKAGE)流程是否公司特有(建议:不迁);
-6. 定额确认/驳回线(联动工费)是否 V2 做,还是等 addon-salary 需求;
+6. 【第 90 次演进】定额确认/驳回线已随定额子域 PRD 收口为「附加项审核」(费用审核行业共性保留,不等 addon-salary)——聚合口径 quirk(手工工作费附加行不计入)等 7 项开放问题见 docs/prd/addon-quotation-norm.md 待拍板;
 7. 测量/复测子域归 addon-quotation 还是 addon-building;
 8. 整装产品报价(公式字符串求值)是否进开源版(建议:公式求值器接口开源,内置实现简单四则,复杂公式商业插件)。

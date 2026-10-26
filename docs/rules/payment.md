@@ -47,6 +47,7 @@
 - **幂等 = 状态位读-判-写**:全模块无 @Version、无条件 UPDATE,并发双收款窗口存在;confirm 批量对非目标态**静默跳过**(天然幂等,与 150036 抛错两种风格并存);
 - **收据双人留痕**:collecter/confirmer+姓名快照+双时间戳,行业共性保留;**"收款即确认"是前端联动**(decorationPayment.js collect 成功后紧接着 post confirm),服务端无保障【方林嫌疑:财务确认让位于体验】;
 - **销售线独有**:客户微信确认 isAffirm(验证码 330012+电话匹配 130115+绑定校验 330017)与财务 confirm 完全独立;落款门槛校验的是 sales 级 isAffirm(两个不同字段,疑漏)。
+- 【营造实现定案回写(第 81 次,A1)】**部分退款统一入口(PaymentApi.PartialRefundCmd)**:amount 可空(空=整单退,等价原 RefundCmd 委派);校验 0<amount≤原单额;**RefundApprovalConsumer 审批通过后仅整单退(refundAmount≥originAmount)才置原单终态 3,部分退原单状态不动、净额由聚合口径体现**——修老「退款即清零」家族缺陷(§7 服务款清零常量实锤)的营造回答:原单留痕+净额可算;内核轻量审批(270012 幂等闸)天然防重。验证第 81 次报告。
 
 ## 3. 装修款线(decorationpayment,规则最密)
 
