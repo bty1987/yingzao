@@ -184,6 +184,14 @@ export const obsoleteDecoration = (id) => http.post(`/api/decoration/orders/${id
 export const terminateDecoration = (id, data) => http.post(`/api/decoration/orders/${id}/terminate`, data)
 export const accountDecoration = (id) => http.post(`/api/decoration/orders/${id}/account`)
 export const accountCheckDecoration = (id) => http.get(`/api/decoration/orders/${id}/account-check`)
+// 礼品采购流(A7):父单链分批入库/库存回加+采购流水/结算
+export const pageGiftPurchases = (params) => http.get('/api/member/purchases', { params })
+export const fetchGiftPurchase = (id) => http.get(`/api/member/purchases/${id}`)
+export const createGiftPurchase = (data) => http.post('/api/member/purchases', data)
+export const purchaseGift = (id) => http.post(`/api/member/purchases/${id}/purchase`)
+export const instoreGiftPurchase = (id, data) => http.post(`/api/member/purchases/${id}/instore`, data)
+export const balanceGiftPurchase = (id, data) => http.post(`/api/member/purchases/${id}/balance`, data)
+export const cancelGiftPurchase = (id) => http.post(`/api/member/purchases/${id}/cancel`)
 // 三口径表(A6):半包配比/整装满减/包干增项——合同价与主材/服务费指标推导
 export const makeMidpackCaliber = (id, data) => http.post(`/api/decoration/orders/${id}/calibers/midpack`, data)
 export const makeHolonomyCaliber = (id, data) => http.post(`/api/decoration/orders/${id}/calibers/holonomy`, data)

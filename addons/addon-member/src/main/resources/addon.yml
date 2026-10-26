@@ -1,7 +1,7 @@
 addon:
   id: member
   name: 会员营销
-  version: 0.2.0
+  version: 0.3.0
   error-code-segment: 350000
   menus:
     - path: /member/activities
@@ -13,6 +13,9 @@ addon:
     - path: /member/exchanges
       title: 兑换单
       icon: shopping-cart
+    - path: /member/purchases
+      title: 礼品采购
+      icon: goods
     - path: /member/points
       title: 积分台账
       icon: coin
@@ -46,6 +49,13 @@ addon:
       - { key: '4', label: 退款冲减 }
       - { key: '5', label: 运营调整 }
       - { key: '6', label: 过期清算 }
+    purchaseStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 采购中 }
+      - { key: '2', label: 已入库 }
+      - { key: '3', label: 已结算 }
+      - { key: '4', label: 已失效 }
+      - { key: '5', label: 已完成 }
     exchangeStatus:
       - { key: '0', label: 已受理 }
       - { key: '1', label: 已核销 }

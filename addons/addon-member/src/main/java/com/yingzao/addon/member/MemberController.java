@@ -136,6 +136,65 @@ public class MemberController {
         return ApiResponse.ok(gifts.page(orgId(request), status, keyword, page, size));
     }
 
+    // ---- 礼品采购流(A7:父单链分批入库) ----
+
+    public record PurchaseRequest(Long giftId, Long num, String remark) {
+    }
+
+    public record PurchaseInstoreRequest(Long num, Long inprice) {
+    }
+
+    public record PurchaseBalanceRequest(Long baprice) {
+    }
+
+    @GetMapping("/purchases")
+    public ApiResponse<Map<String, Object>> pagePurchases(@RequestParam(required = false) Integer status,
+            @RequestParam(required = false) Long giftId,
+            @RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size,
+            HttpServletRequest request) {
+        return ApiResponse.ok(gifts.pagePurchases(orgId(request), status, giftId, page, size));
+    }
+
+    @PostMapping("/purchases")
+    public ApiResponse<Long> createPurchase(@RequestBody PurchaseRequest body, HttpServletRequest request) {
+        return ApiResponse.ok(gifts.createPurchase(orgId(request),
+                body == null ? null
+                        : new MemberGiftService.PurchaseCmd(body.giftId(), body.num(), body.remark()),
+                userId(request)));
+    }
+
+    @GetMapping("/purchases/{id}")
+    public ApiResponse<Object> purchaseDetail(@PathVariable long id, HttpServletRequest request) {
+        return ApiResponse.ok(gifts.purchaseDetail(orgId(request), id));
+    }
+
+    @PostMapping("/purchases/{id}/purchase")
+    public ApiResponse<Void> purchase(@PathVariable long id, HttpServletRequest request) {
+        gifts.purchase(orgId(request), id, userId(request));
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/purchases/{id}/instore")
+    public ApiResponse<Long> instore(@PathVariable long id, @RequestBody PurchaseInstoreRequest body,
+            HttpServletRequest request) {
+        return ApiResponse.ok(gifts.instore(orgId(request), id,
+                body == null ? null : body.num(), body == null ? null : body.inprice(),
+                userId(request)));
+    }
+
+    @PostMapping("/purchases/{id}/balance")
+    public ApiResponse<Void> balance(@PathVariable long id, @RequestBody PurchaseBalanceRequest body,
+            HttpServletRequest request) {
+        gifts.balance(orgId(request), id, body == null ? null : body.baprice(), userId(request));
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/purchases/{id}/cancel")
+    public ApiResponse<Void> cancelPurchase(@PathVariable long id, HttpServletRequest request) {
+        gifts.cancelPurchase(orgId(request), id, userId(request));
+        return ApiResponse.ok();
+    }
+
     @GetMapping("/gifts/{id}")
     public ApiResponse<Map<String, Object>> giftDetail(HttpServletRequest request, @PathVariable long id) {
         return ApiResponse.ok(gifts.get(orgId(request), id));

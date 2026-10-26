@@ -88,6 +88,7 @@ atttype=1 每单限 1 件(**count>1 才拒=off-by-one,已有 1 件仍放行可�
 - **AwardRecord 流水**(25.4 万行):type 0 入/1 出/2 盘盈/3 盘亏 × subtype 15 种(领取 5/退货 6/配送 7/采购 8/自购 11/福利 13/营销 15 等)× onetype 归属域;totalPrice=Arith.mul(unitPrice,num)(long×long,正面教材);
 - **AwardPurchase 采购流**(1.12 万行):0 初始→1 采购(160057/160058)→2 入库→3 结算/4 失效(仅 0 可失效)/5 完成;**fapid 父单链分批入库**:入库须 surplus≥本次(160059),新建子单(fapid=父 apid,status=2),本次==父 surplus→父置 5,父 surplus-=本次;isStock=0 时**库存回加+记 awardrecord**(:193-202);下单推钉钉群(MESSAGE_DING_GROUP_AWARD_PURCHASE);并发入库丢更新;
 - 手工出入库/盘点:AwardStockServiceImpl 出库:134-162/入库:166-190/盘点:194-221(160040-160042 受限码)。
+- 【营造实现定案回写(第 87 次,A7)】**采购流 member_gift_purchase(V1603)+MemberGiftService 五方法**:老状态机原样回归(0 初始→1 采购中→2 已入库→3 已结算/4 已失效(仅 0)/5 已完成);**父单链分批入库**(老 fapid→father_id):每批新建子单(father_id=父,status=2,surplus=0),父 surplus **条件扣减 WHERE surplus>=本次(修老并发丢更新)**,扣后 0→父置 5;库存联动 is_stock=0→increase+流水(subtype=purchase);老钉钉群通知不迁(内核通知中心收件人模型未定)/老 activity/dept 申请标签不迁(remark 收敛);错误码 350030-350032(老 160057/58/59);PRD 见 docs/prd/addon-member.md §48。
 
 ## 6. decoration 侧核销(线下券/物品通用机制,与积分商城交叉)
 

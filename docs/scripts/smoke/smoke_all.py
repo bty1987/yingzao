@@ -2754,6 +2754,83 @@ def main():
                    "/api/events?eventType=StockManifestCreatedEvent&status=1&page=1&size=5", tok_admin)
     step("A5 StockManifestCreated 消费行存在", bool(ev_a5) and ev_a5.get("total", 0) >= 1, ev_a5)
 
+    # ========= A7 礼品采购流(第 87 次;docs/11 A7:老 AwardPurchase 状态机回归,父单链分批入库)=========
+    print("\n== A7 礼品采购流 ==")
+    stamp87 = time.strftime("%H%M%S")
+    gp87 = api_ok("A7 建采购礼品(算库存)", "POST", "/api/member/gifts", tok_admin,
+                  {"name": "A7采购礼品" + stamp87, "integralPrice": 100, "unitPrice": 50000,
+                   "isStock": 0})
+    if gp87 is None:
+        return finish()
+    api_err("A7 采购单不存在拒绝 350030", "POST", "/api/member/purchases/999999999/purchase",
+            tok_admin, None, 350030)
+    pur87 = api_ok("A7 采购申请(100 件)", "POST", "/api/member/purchases", tok_admin,
+                   {"giftId": gp87, "num": 100, "remark": "A7 采购"})
+    if pur87 is None:
+        return finish()
+    api_err("A7 初始态不可入库(未采购)拒绝 350031", "POST",
+            "/api/member/purchases/%s/instore" % pur87, tok_admin, {"num": 50, "inprice": 40000}, 350031)
+    api_ok("A7 采购(0→1)", "POST", "/api/member/purchases/%s/purchase" % pur87, tok_admin)
+    api_err("A7 重复采购拒绝 350031", "POST", "/api/member/purchases/%s/purchase" % pur87,
+            tok_admin, None, 350031)
+    api_err("A7 入库超剩余量拒绝 350032", "POST", "/api/member/purchases/%s/instore" % pur87,
+            tok_admin, {"num": 101, "inprice": 40000}, 350032)
+    ch1 = api_ok("A7 第一批入库(60 件,进价 40 元)", "POST",
+                 "/api/member/purchases/%s/instore" % pur87, tok_admin,
+                 {"num": 60, "inprice": 40000})
+    if ch1 is None:
+        return finish()
+    pur87_det = api_ok("A7 父单详情(批一后)", "GET", "/api/member/purchases/%s" % pur87, tok_admin)
+    ok87 = bool(pur87_det) and pur87_det.get("surplus") == 40 and pur87_det.get("status") == 1 \
+        and len(pur87_det.get("children") or []) == 1 \
+        and (pur87_det.get("children") or [{}])[0].get("num") == 60 \
+        and (pur87_det.get("children") or [{}])[0].get("status") == 2
+    step("A7 批一:父 surplus=40 仍采购中+子单 60 已入库", ok87, pur87_det)
+    ch2 = api_ok("A7 第二批入库(40 件=剩余,父单自动完成)", "POST",
+                 "/api/member/purchases/%s/instore" % pur87, tok_admin,
+                 {"num": 40, "inprice": 41000})
+    pur87_det2 = api_ok("A7 父单详情(批二后)", "GET", "/api/member/purchases/%s" % pur87, tok_admin)
+    step("A7 批二:父置 5 已完成+两批子单", bool(pur87_det2) and pur87_det2.get("status") == 5
+         and pur87_det2.get("surplus") == 0 and len(pur87_det2.get("children") or []) == 2, pur87_det2)
+    api_err("A7 完成后不可再入库拒绝 350031", "POST", "/api/member/purchases/%s/instore" % pur87,
+            tok_admin, {"num": 10, "inprice": 40000}, 350031)
+    stocks87 = api_ok("A7 礼品库存复查", "GET", "/api/member/gifts?page=1&size=50", tok_admin)
+    g87 = [g for g in (stocks87 or {}).get("rows", []) if g.get("id") == gp87]
+    step("A7 库存回加 100(is_stock=0 算库存)", g87 and g87[0].get("stock_num") == 100, g87)
+    rec87 = api_ok("A7 采购流水在册", "GET", "/api/member/gifts/%s/records?page=1&size=10" % gp87,
+                   tok_admin)
+    rec87_rows = [r for r in (rec87 or {}).get("rows", []) if r.get("subtype") == "purchase"]
+    step("A7 采购流水两批(type=入库/subtype=purchase)", len(rec87_rows) == 2
+         and rec87_rows[0].get("num") == 40 and rec87_rows[1].get("num") == 60, rec87)
+    api_ok("A7 子单结算(批一 42000 厘)", "POST", "/api/member/purchases/%s/balance" % ch1,
+           tok_admin, {"baprice": 42000})
+    api_err("A7 父单不可结算拒绝 350031", "POST", "/api/member/purchases/%s/balance" % pur87,
+            tok_admin, {"baprice": 1}, 350031)
+    pur87_x = api_ok("A7 采购申请(失效靶)", "POST", "/api/member/purchases", tok_admin,
+                     {"giftId": gp87, "num": 5})
+    if pur87_x is None:
+        return finish()
+    api_ok("A7 失效(仅初始态 0→4)", "POST", "/api/member/purchases/%s/cancel" % pur87_x, tok_admin)
+    api_err("A7 失效后不可采购拒绝 350031", "POST", "/api/member/purchases/%s/purchase" % pur87_x,
+            tok_admin, None, 350031)
+    page87 = api_ok("A7 采购单列表按状态过滤(5=已完成)", "GET",
+                    "/api/member/purchases?status=5&page=1&size=10", tok_admin)
+    step("A7 列表过滤命中父单", any(r.get("id") == pur87 for r in (page87 or {}).get("rows", [])),
+         page87)
+
+    # ========= A0 V300 死表下线(第 87 次搭车;customer_profile spike 遗留 drop)=========
+    print("\n== A0 V300 死表清理 ==")
+    import pymysql as _pym_a0
+    _conn_a0 = _pym_a0.connect(host="192.168.5.21", user="root", password="Neusoft!",
+                               database="yingzao", charset="utf8mb4")
+    try:
+        with _conn_a0.cursor() as _cur_a0:
+            _cur_a0.execute("show tables like 'customer_profile'")
+            _a0_rows = _cur_a0.fetchall()
+    finally:
+        _conn_a0.close()
+    step("A0 customer_profile 死表已 drop(V1402)", len(_a0_rows) == 0, _a0_rows)
+
     # ========= A6 三口径表(第 86 次;docs/11 A6:半包配比/整装满减/包干增项三分支)=========
     # 统一门禁(合同线 {0,1,2,4}+默认报价锁定)+三算法(ppm 配比/折上折余数不打折/MET 三分支)。
     print("\n== A6 三口径表 ==")

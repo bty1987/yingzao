@@ -33,12 +33,24 @@ public class MemberGiftService {
     public static final int CODE_STOCKPARAM = 350018;
     public static final int CODE_NO_EXISTS = 350016;
     public static final int CODE_PARAM = 350020;
+    // ---- 采购流(A7;350030-350032) ----
+    public static final int CODE_PURCHASE_NOT_FOUND = 350030;
+    public static final int CODE_PURCHASE_BAD_STATE = 350031;
+    public static final int CODE_PURCHASE_SURPLUS = 350032;
 
     /** 库存流水类型。 */
     public static final int STOCK_IN = 0;
     public static final int STOCK_OUT = 1;
     public static final int STOCK_CHECKIN = 2;
     public static final int STOCK_CHECKOUT = 3;
+
+    // ---- 采购单状态(老 AwardPurchase 状态机原样回归) ----
+    public static final int PUR_INIT = 0;
+    public static final int PUR_PROC = 1;
+    public static final int PUR_WARE = 2;
+    public static final int PUR_CLOSE = 3;
+    public static final int PUR_DISABLE = 4;
+    public static final int PUR_FINISH = 5;
 
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
@@ -240,6 +252,170 @@ public class MemberGiftService {
         return result;
     }
 
+    // ---- 采购流(A7:父单链分批入库;老 AwardPurchase 状态机回归) ----
+
+    /** 采购登记命令。 */
+    public record PurchaseCmd(Long giftId, Long num, String remark) {
+    }
+
+    public Map<String, Object> pagePurchases(long orgId, Integer status, Long giftId,
+            int pageNum, int size) {
+        int safePage = Math.max(pageNum, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        StringBuilder where = new StringBuilder(" where org_id = ?");
+        List<Object> args = new ArrayList<>();
+        args.add(orgId);
+        if (status != null) {
+            where.append(" and status = ?");
+            args.add(status);
+        }
+        if (giftId != null) {
+            where.append(" and gift_id = ?");
+            args.add(giftId);
+        }
+        Long total = jdbc.queryForObject(
+                "select count(*) from member_gift_purchase" + where, Long.class, args.toArray());
+        List<Object> allArgs = new ArrayList<>(args);
+        allArgs.add(safeSize);
+        allArgs.add((safePage - 1) * safeSize);
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select id, gift_id, gift_no, gift_name, father_id, num, surplus, inprice, baprice,
+                       status, remark, creater_id, purchaser_id, instorer_id, purchase_time,
+                       instore_time, balance_time, created_at
+                from member_gift_purchase""" + where + " order by id desc limit ? offset ?",
+                allArgs.toArray());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", total == null ? 0 : total);
+        result.put("rows", rows);
+        return result;
+    }
+
+    /** 采购申请(主单,status=0,surplus=num)。 */
+    @Transactional
+    public long createPurchase(long orgId, PurchaseCmd cmd, long userId) {
+        require(cmd != null && cmd.giftId() != null && cmd.num() != null && cmd.num() > 0,
+                CODE_PARAM, "param.invalid");
+        Map<String, Object> gift = find(orgId, cmd.giftId());
+        require(gift != null, CODE_NOT_FOUND, "gift.notfound");
+        jdbc.update("""
+                insert into member_gift_purchase(org_id, gift_id, gift_no, gift_name, num, surplus,
+                    status, remark, creater_id)
+                values (?,?,?,?,?,?,0,?,?)
+                """, orgId, cmd.giftId(), gift.get("no"), gift.get("name"), cmd.num(), cmd.num(),
+                blankToNull(cmd.remark()), userId);
+        return jdbc.queryForObject("select last_insert_id()", Long.class);
+    }
+
+    /** 采购(0→1,登记采购人;条件更新修老裸状态写)。 */
+    @Transactional
+    public void purchase(long orgId, long purchaseId, long userId) {
+        int updated = jdbc.update("""
+                update member_gift_purchase set status = 1, purchaser_id = ?, purchase_time = now()
+                where id = ? and org_id = ? and status = 0 and father_id is null
+                """, userId, purchaseId, orgId);
+        if (updated == 0) {
+            throwPurchaseState(orgId, purchaseId);
+        }
+    }
+
+    /**
+     * 分批入库(父单 status=1):每批新建子单(father_id=父,status=2,surplus=0);
+     * 父 surplus 条件扣减(WHERE surplus>=本次,修老并发丢更新);扣后=0 → 父置 5 完成;
+     * gift is_stock=0(算库存)→ 库存回加+记采购入库流水。
+     */
+    @Transactional
+    public long instore(long orgId, long purchaseId, Long num, Long inprice, long userId) {
+        require(num != null && num > 0, CODE_PARAM, "param.invalid");
+        Map<String, Object> father = findPurchase(orgId, purchaseId);
+        if (((Number) father.get("status")).intValue() != PUR_PROC
+                || father.get("father_id") != null) {
+            throw new BizException(CODE_PURCHASE_BAD_STATE, msg("gift.purchase.badState"));
+        }
+        int deducted = jdbc.update(
+                "update member_gift_purchase set surplus = surplus - ?, instorer_id = ?,"
+                        + " instore_time = coalesce(instore_time, now())"
+                        + " where id = ? and org_id = ? and status = 1 and surplus >= ?",
+                num, userId, purchaseId, orgId, num);
+        if (deducted == 0) {
+            throw new BizException(CODE_PURCHASE_SURPLUS, msg("gift.purchase.surplus"));
+        }
+        Map<String, Object> after = findPurchase(orgId, purchaseId);
+        long surplusAfter = ((Number) after.get("surplus")).longValue();
+        if (surplusAfter == 0) {
+            jdbc.update("update member_gift_purchase set status = 5 where id = ? and org_id = ?",
+                    purchaseId, orgId);
+        }
+        jdbc.update("""
+                insert into member_gift_purchase(org_id, gift_id, gift_no, gift_name, father_id, num,
+                    surplus, inprice, status, creater_id, purchaser_id, instorer_id, purchase_time,
+                    instore_time)
+                select org_id, gift_id, gift_no, gift_name, id, ?, 0, ?, 2, creater_id, purchaser_id, ?,
+                       purchase_time, now()
+                from member_gift_purchase where id = ? and org_id = ?
+                """, num, inprice, userId, purchaseId, orgId);
+        long childId = jdbc.queryForObject("select last_insert_id()", Long.class);
+        long giftId = ((Number) father.get("gift_id")).longValue();
+        Map<String, Object> gift = find(orgId, giftId);
+        // is_stock=0 = 算库存:入库回加+流水(与老 ISSTOCK_CAL_INT 同口径)
+        if (((Number) gift.get("is_stock")).intValue() == 0) {
+            long stockAfter = increase(orgId, giftId, num);
+            writeRecord(orgId, giftId, (String) gift.get("no"), STOCK_IN, "purchase", num, stockAfter,
+                    "member", "purchase", String.valueOf(childId), null, userId);
+            publishStock(0L, giftId, orgId, (String) gift.get("no"), STOCK_IN, num, stockAfter,
+                    "member", "purchase", String.valueOf(childId));
+        }
+        return childId;
+    }
+
+    /** 结算(子单 2→3,登记结算价)。 */
+    @Transactional
+    public void balance(long orgId, long purchaseId, Long baprice, long userId) {
+        require(baprice != null && baprice >= 0, CODE_PARAM, "param.invalid");
+        int updated = jdbc.update("""
+                update member_gift_purchase set baprice = ?, status = 3, balance_time = now()
+                where id = ? and org_id = ? and status = 2 and father_id is not null
+                """, baprice, purchaseId, orgId);
+        if (updated == 0) {
+            throwPurchaseState(orgId, purchaseId);
+        }
+    }
+
+    /** 失效(仅主单初始态 0→4)。 */
+    @Transactional
+    public void cancelPurchase(long orgId, long purchaseId, long userId) {
+        int updated = jdbc.update("""
+                update member_gift_purchase set status = 4
+                where id = ? and org_id = ? and status = 0 and father_id is null
+                """, purchaseId, orgId);
+        if (updated == 0) {
+            throwPurchaseState(orgId, purchaseId);
+        }
+    }
+
+    /** 采购单详情(主单带入库子单链)。 */
+    public Map<String, Object> purchaseDetail(long orgId, long purchaseId) {
+        Map<String, Object> purchase = findPurchase(orgId, purchaseId);
+        purchase.put("children", jdbc.queryForList("""
+                select id, num, inprice, baprice, status, instorer_id, instore_time, balance_time
+                from member_gift_purchase where father_id = ? and org_id = ? order by id
+                """, purchaseId, orgId));
+        return purchase;
+    }
+
+    private Map<String, Object> findPurchase(long orgId, long purchaseId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select * from member_gift_purchase where id = ? and org_id = ?", purchaseId, orgId);
+        if (rows.isEmpty()) {
+            throw new BizException(CODE_PURCHASE_NOT_FOUND, msg("gift.purchase.notFound"));
+        }
+        return rows.get(0);
+    }
+
+    private void throwPurchaseState(long orgId, long purchaseId) {
+        findPurchase(orgId, purchaseId);
+        throw new BizException(CODE_PURCHASE_BAD_STATE, msg("gift.purchase.badState"));
+    }
+
     public Map<String, Object> records(long orgId, long giftId, int pageNum, int size) {
         int safePage = Math.max(pageNum, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
@@ -353,5 +529,9 @@ public class MemberGiftService {
 
     private String msg(String key) {
         return messages.getMessage(key, null, LocaleContextHolder.getLocale());
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
     }
 }

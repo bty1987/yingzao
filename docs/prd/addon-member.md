@@ -45,7 +45,7 @@ status: 0 有效 ⇄ 1 失效(可逆)
 库存流水 gift_record:只追加,type 入库/出库/盘盈/盘亏 × 业务动作 subtype;
 扣减:条件 UPDATE 原子扣(WHERE num>=:x),不足 350003(修老 9 处 check-then-act 竞态)
 目录同步:外部商城 upsert by no(命中更新/否则新建,回显 created,并发 DB 兜底重查——沿 supplier ext_no 幂等模式)
-采购流(AwardPurchase)V2(待业务确认 §13-3)
+采购流(AwardPurchase)V2(待业务确认 §13-3)——【兑现 2026-10-26,第 87 次 A7】member_gift_purchase 父单链分批入库(V1603):老状态机原样回归+surplus 条件扣减修并发+is_stock 联动回加与流水;老钉钉通知/activity/dept 标签不迁;350030-350032
 ```
 
 ### 4. 兑换 exchange(单+明细)
