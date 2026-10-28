@@ -355,3 +355,14 @@ balanceaccount/balancedccount/balancedetail/apportdetail 仍 0 行、balancecutp
 - **当前实况**:上游(addon-sales 结算 post)恒发 "A"(`GRADE_DEFAULT` 常量),枚举位预留——
   多级分桶(如按客户等级 A/B/C 分结算桶)待真实业务出现再启用,不预设枚举字典;
 - 消费方注意:grade 是字符串维度非布尔,聚桶键含 grade 意味着不同 grade 永不共桶。
+
+## 17. 毛利与管理线子域实现定案(V1302,第 96 次回写)
+
+- **两线两主体**:集团管理线主体=组织树根(单树一根,parent_id is null);分公司要求线主体=**根的直接子组织**(parent=根校验,320111);直接配置不反算(docs/14 铁律);
+- **17 周期集**:年 `yyyy` 1+季 `yyyy-Qn` 4+月 `yyyy-MM` 12,服务端 standardCycles 生成,发布整年完整(320103/320104/320105);线值万分比 0<x≤10000(320106,对齐 A6 ppm 定案);
+- **发布管道**:乐观并发闸(baseVersionId vs latest=id 最大,320107)→插版次→**append-only 全量 17 行快照**(历史一手证据免链回放)→diff 仅记 before≠after 行——🔴**首发(无前版本)跳过 diff**(第 96 次冒烟实锤:漏判时首发插 51 行 before=NULL 脏行);发布无删除无反发布;
+- **集团线引用**:分公司快照行 group_*_ref 冗余拷贝**发布时点当期(最新)集团线值**(冒烟断言动态对照当期版本,修静态预期错位);集团行引用列 null(修 fl-yy 一行两用);
+- **周期状态**:PENDING/NORMAL 查询期计算(年/季/月与当前日比较,空态原则禁假 0);实际值两列就位恒 null(F1 后新发布起填充);
+- **权限=S2 基座**:集团守卫=操作者 scope 含根(替代 fl-yy orgId==222,320112);分公司=目标∈scope 且非根且 parent=根(320111);集团身份操作分公司线必须显式选组织(320110);前置=同年度集团线已发布且快照完整(320108/320109);
+- **配置进度**:发布制无草稿态→NONE/COMPLETED 二态(PARTIAL 枚举位保留不可达);**冒烟姿势**:跨组织用户(example_mb)API 绑角色被同组织校验拒(122005)→DB 直插 yz_user_role+重写 menus 逐出权限缓存;
+- PRD:docs/prd/addon-balance-margin.md(2026-10-28 按推荐拍板);八端点归 /api/balance/margin-lines 菜单闸;错误码 320100-320115。

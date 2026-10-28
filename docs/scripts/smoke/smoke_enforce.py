@@ -377,7 +377,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(17 插件 58 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 58,
+    step("载入 api 规则(17 插件 59 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 59,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

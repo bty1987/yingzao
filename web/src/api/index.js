@@ -455,6 +455,19 @@ export const bindCutpay = (id, data) => http.post(`/api/balance/cutpays/${id}/bi
 export const unbindCutpay = (id, data) => http.post(`/api/balance/cutpays/${id}/unbind`, data)
 export const deductCutpay = (id, data) => http.post(`/api/balance/cutpays/${id}/deduct`, data)
 
+// 毛利管理线(addon-balance):集团管理线/分公司要求线版本化发布(docs/prd/addon-balance-margin.md)
+export const fetchMarginGroup = (params) => http.get('/api/balance/margin-lines/group', { params })
+export const publishMarginGroup = (data) => http.post('/api/balance/margin-lines/group/publish', data)
+export const pageMarginGroupVersions = (params) =>
+  http.get('/api/balance/margin-lines/group/versions', { params })
+export const fetchMarginCompanyOptions = (params) =>
+  http.get('/api/balance/margin-lines/company-options', { params })
+export const fetchMarginBranch = (params) => http.get('/api/balance/margin-lines/branch', { params })
+export const publishMarginBranch = (data) => http.post('/api/balance/margin-lines/branch/publish', data)
+export const pageMarginBranchVersions = (params) =>
+  http.get('/api/balance/margin-lines/branch/versions', { params })
+export const fetchMarginVersionDetail = (id) => http.get(`/api/balance/margin-lines/versions/${id}`)
+
 // 营销获客(addon-market):投放物(活动/渠道/投放源)/进线工作台/获客漏斗/案例库
 export const createCampaign = (data) => http.post('/api/market/campaigns', data)
 export const updateCampaign = (id, data) => http.put(`/api/market/campaigns/${id}`, data)

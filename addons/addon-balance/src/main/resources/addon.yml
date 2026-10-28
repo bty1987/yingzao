@@ -1,12 +1,15 @@
 addon:
   id: balance
   name: 结算
-  version: 0.1.0
+  version: 0.2.0
   error-code-segment: 320000
   menus:
     - path: /balance/settlements
       title: 结算工作台
       icon: money
+    - path: /balance/margin-lines
+      title: 毛利管理线
+      icon: trend-charts
     - path: /balance/cutpays
       title: 扣款池
       icon: wallet
@@ -51,9 +54,29 @@ addon:
       - { key: 'settleEnter', label: 结算入账 }
       - { key: 'payCash', label: 出纳付款 }
       - { key: 'lazySync', label: 归属账户同步 }
+    marginLineType:
+      - { key: '1', label: 集团管理线 }
+      - { key: '2', label: 分公司要求线 }
+    marginCycleType:
+      - { key: '1', label: 年度 }
+      - { key: '2', label: 季度 }
+      - { key: '3', label: 月度 }
+    marginRateType:
+      - { key: '1', label: 综合 }
+      - { key: '2', label: 基装(工程) }
+      - { key: '3', label: 主材 }
+    marginPeriodStatus:
+      - { key: 'PENDING', label: 未结束 }
+      - { key: 'NORMAL', label: 已结束 }
+    marginConfigStatus:
+      - { key: 'NONE', label: 未配置 }
+      - { key: 'PARTIAL', label: 部分配置 }
+      - { key: 'COMPLETED', label: 已完成 }
   api:
     - prefix: /api/balance/settlements
       require: /balance/settlements
+    - prefix: /api/balance/margin-lines
+      require: /balance/margin-lines
     - prefix: /api/balance/accounts
       require: /balance/accounts
     - prefix: /api/balance/cutpay-pools

@@ -3779,9 +3779,9 @@ def main():
     # 插件下发:三菜单
     addons_bal = api_ok("admin 插件下发复查(balance)", "GET", "/api/addons", tok_admin)
     bal_addon = next((a for a in (addons_bal or []) if a.get("id") == "balance"), None)
-    step("balance 三菜单动态下发", bool(bal_addon)
+    step("balance 四菜单动态下发", bool(bal_addon)
          and sorted(m.get("path") for m in bal_addon.get("menus") or []) == [
-             "/balance/accounts", "/balance/cutpays", "/balance/settlements"],
+             "/balance/accounts", "/balance/cutpays", "/balance/margin-lines", "/balance/settlements"],
          bal_addon and bal_addon.get("menus"))
 
     # 事件快照吸附:同键(品牌+归属人+等级)聚一桶,服务端加总四项
@@ -5598,6 +5598,231 @@ def main():
     if order_a:
         api_err("非本人装修单进度拒绝 360004", "GET",
                 "/api/c/progress?orderId=%s" % order_a, c_token, None, 360004)
+
+    # ---- 毛利管理线(D2,addon-balance V1302;测试年 2027 全 PENDING + 2025 过去年全 NORMAL) ----
+    print("== 毛利管理线(addon-balance D2:两线两主体+版本化发布+乐观闸+scope 守卫) ==")
+    MY = 2027   # 测试业务年(未来年,17 周期全 PENDING)
+    MYP = 2025  # 过去年(NORMAL 断言)
+    MBRANCH_NAME = "冒烟分公司M2"
+
+    def db_q(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                return cur.fetchall()
+        finally:
+            conn.close()
+
+    def db_x(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                conn.commit()
+                return cur.rowcount
+        finally:
+            conn.close()
+
+    def margin_periods(y, comp, proj, main):
+        ps = [{"cycleType": 1, "periodValue": str(y), "comprehensiveLine": comp,
+               "projectLine": proj, "mainMaterialLine": main}]
+        for q in range(1, 5):
+            ps.append({"cycleType": 2, "periodValue": "%s-Q%d" % (y, q),
+                       "comprehensiveLine": comp, "projectLine": proj, "mainMaterialLine": main})
+        for m in range(1, 13):
+            ps.append({"cycleType": 3, "periodValue": "%s-%02d" % (y, m),
+                       "comprehensiveLine": comp, "projectLine": proj, "mainMaterialLine": main})
+        return ps
+
+    MP = "/api/balance/margin-lines"
+    # 段首定向清理(跨轮幂等:只删测试年,不碰真实数据)
+    db_x("delete from balance_margin_line_change where version_id in "
+         "(select id from balance_margin_line_version where biz_year in (%s, %s))", (MY, MYP))
+    db_x("delete from balance_margin_line_publish where version_id in "
+         "(select id from balance_margin_line_version where biz_year in (%s, %s))", (MY, MYP))
+    db_x("delete from balance_margin_line_version where biz_year in (%s, %s)", (MY, MYP))
+
+    # 分支组织幂等(根直接子组织,拍板②;存在即复用)
+    tree = api_ok("组织树(找冒烟分公司)", "GET", "/api/orgs", tok_admin)
+
+    def find_org(nodes, name):
+        for n in nodes or []:
+            if n.get("name") == name:
+                return n["id"]
+            hit = find_org(n.get("children"), name)
+            if hit:
+                return hit
+        return None
+
+    branch_org = find_org((tree or {}).get("rows") if isinstance(tree, dict) else tree, MBRANCH_NAME)
+    if not branch_org:
+        branch_org = api_ok("建冒烟分公司(根直接子组织)", "POST", "/api/orgs", tok_admin,
+                            {"parentId": 1, "name": MBRANCH_NAME, "levelType": "company"})
+    step("分支组织就绪(parent=根)", bool(branch_org), branch_org)
+
+    # 分公司用户 example_mb 幂等(DB 直插,ensure_users 同姿势)
+    import hashlib as _hl
+    _sha = _hl.sha256(PASSWORD.encode()).hexdigest()
+    if not db_q("select id from yz_user where username = 'example_mb'"):
+        db_x("insert into yz_user(org_id, username, password_sha256, display_name) "
+             "values (%s, 'example_mb', %s, '毛利线分公司用户')", (branch_org, _sha))
+    mb_row = db_q("select id, org_id from yz_user where username = 'example_mb'")[0]
+    step("分公司用户 org=冒烟分公司", mb_row[1] == branch_org, mb_row)
+    mb_login = login("example_mb")
+    tok_mb, uid_mb = mb_login["token"], mb_login["userId"]
+    # example_mb 须有 /balance/margin-lines 菜单授权,否则 122006 拦在 scope 业务守卫之前;
+    # 角色绑用户 API 有同组织校验(122005,跨组织用户不可绑 org1 角色)——DB 直插 yz_user_role
+    # (ensure_users 同姿势,冒烟专用),幂等=先查后插
+    emp_roles_m = api_ok("查 emp_all 角色(margin 授权)", "GET", "/api/roles", tok_admin)
+    emp_id_m = next((r["id"] for r in (emp_roles_m or []) if r.get("code") == "emp_all"), None)
+    if not db_q("select 1 from yz_user_role where role_id = %s and user_id = %s", (emp_id_m, uid_mb)):
+        db_x("insert into yz_user_role(user_id, role_id) values (%s, %s)", (uid_mb, emp_id_m))
+    step("example_mb 绑 emp_all(DB 直插跨组织)", bool(db_q(
+        "select 1 from yz_user_role where role_id = %s and user_id = %s", (emp_id_m, uid_mb))), None)
+    api_ok("重写 emp_all 菜单授权(触发权限缓存逐出)", "PUT", "/api/roles/%s/menus" % emp_id_m,
+           tok_admin, {"menus": all_menus})
+
+    # -- scope 守卫:分公司身份碰集团线 --
+    api_err("分公司身份读集团线 320112", "GET", MP + "/group?year=%d" % MY, tok_mb, None, 320112)
+    api_err("分公司身份发集团线 320112", "POST", MP + "/group/publish", tok_mb,
+            {"bizYear": MY, "periods": margin_periods(MY, 5000, 4000, 6000)}, 320112)
+    # -- 前置守卫:未发集团线先发分公司线 --
+    api_err("未发集团线发分公司线 320108", "POST", MP + "/branch/publish", tok_admin,
+            {"orgId": branch_org, "bizYear": MY, "periods": margin_periods(MY, 4500, 3500, 5500)}, 320108)
+    # -- 参数守卫族 --
+    ps16 = margin_periods(MY, 5000, 4000, 6000)
+    ps16.pop()
+    api_err("16 项不完整 320103", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": MY, "periods": ps16}, 320103)
+    ps_bad = margin_periods(MY, 5000, 4000, 6000)
+    ps_bad[1]["periodValue"] = "%s-Q5" % MY
+    api_err("非法周期 Q5 320104", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": MY, "periods": ps_bad}, 320104)
+    ps_dup = margin_periods(MY, 5000, 4000, 6000)
+    ps_dup[1]["periodValue"] = ps_dup[2]["periodValue"]
+    api_err("重复周期 320105", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": MY, "periods": ps_dup}, 320105)
+    ps_zero = margin_periods(MY, 0, 4000, 6000)
+    api_err("线值为 0 拒 320106", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": MY, "periods": ps_zero}, 320106)
+    ps_over = margin_periods(MY, 10001, 4000, 6000)
+    api_err("线值超 100% 拒 320106", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": MY, "periods": ps_over}, 320106)
+    api_err("年度非法 320102", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": 1899, "periods": margin_periods(1899, 5000, 4000, 6000)}, 320102)
+
+    # -- 集团线首发(零变更行) --
+    v1 = api_ok("集团线首发 2027", "POST", MP + "/group/publish", tok_admin,
+                {"bizYear": MY, "baseVersionId": None, "periods": margin_periods(MY, 5000, 4000, 6000)})
+    v1 = (v1 or {}).get("versionId")
+    step("首发返回 versionId", bool(v1), v1)
+    step("首发 version 行 line_type=1", list(db_q("select line_type, org_id from balance_margin_line_version "
+         "where id = %s", (v1,))) == [(1, 1)], v1)
+    step("首发快照 17 行", db_q("select count(*) from balance_margin_line_publish "
+         "where version_id = %s", (v1,))[0][0] == 17, v1)
+    step("首发零变更行", db_q("select count(*) from balance_margin_line_change "
+         "where version_id = %s", (v1,))[0][0] == 0, v1)
+
+    # -- 乐观并发闸 --
+    api_err("baseVersionId=null 重发 320107", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": MY, "baseVersionId": None, "periods": margin_periods(MY, 5000, 4000, 6000)}, 320107)
+
+    # -- 再发布:改 2027-01 综合 5000→5500、主材 6000→6300,diff 恰 2 行 --
+    ps_v2 = margin_periods(MY, 5000, 4000, 6000)
+    for p in ps_v2:
+        if p["periodValue"] == "%s-01" % MY:
+            p["comprehensiveLine"], p["mainMaterialLine"] = 5500, 6300
+    v2 = api_ok("集团线再发布(改 2 口径)", "POST", MP + "/group/publish", tok_admin,
+                {"bizYear": MY, "baseVersionId": v1, "periods": ps_v2})
+    v2 = (v2 or {}).get("versionId")
+    chg = db_q("select period_value, rate_type, before_value, after_value from "
+               "balance_margin_line_change where version_id = %s order by rate_type", (v2,))
+    step("diff 恰 2 行且前后值精确", list(chg) == [("%s-01" % MY, 1, 5000, 5500),
+         ("%s-01" % MY, 3, 6000, 6300)], chg)
+    # append-only:v1 快照逐列不变
+    row_v1 = db_q("select comprehensive_line, project_line, main_material_line from "
+                  "balance_margin_line_publish where version_id = %s and period_value = %s",
+                  (v1, "%s-01" % MY))
+    step("append-only:v1 行不变", list(row_v1) == [(5000, 4000, 6000)], row_v1)
+    api_err("过期 baseVersionId=v1 再发 320107", "POST", MP + "/group/publish", tok_admin,
+            {"bizYear": MY, "baseVersionId": v1, "periods": margin_periods(MY, 5000, 4000, 6000)}, 320107)
+
+    # -- 版本详情 / 发布记录分页 / 当前线 --
+    detail = api_ok("版本 v2 修改详情", "GET", MP + "/versions/%d" % v2, tok_admin)
+    dch = [c for c in (detail or {}).get("changes", []) if c["period_value"] == "%s-01" % MY]
+    step("详情 change 值读取期计算", sorted([c["change_value"] for c in dch]) == [300, 500], dch)
+    gv = api_ok("集团发布记录分页", "GET", MP + "/group/versions?year=%d&page=1&size=20" % MY, tok_admin)
+    step("记录 total=2 且倒序最新在前", (gv or {}).get("total") == 2
+         and (gv["rows"][0]["id"] == v2) and gv["rows"][0]["created_by_name"], gv)
+    cur = api_ok("集团当前线", "GET", MP + "/group?year=%d" % MY, tok_admin)
+    cur_p01 = next((p for p in (cur or {}).get("periods", []) if p["periodValue"] == "%s-01" % MY), {})
+    step("当前线=最新版本(v2)值", (cur or {}).get("versionId") == v2
+         and cur_p01.get("comprehensiveLine") == 5500, cur_p01)
+    step("未来年 17 周期全 PENDING", all(p["periodStatus"] == "PENDING"
+         for p in (cur or {}).get("periods", [])), None)
+
+    # -- 过去年 NORMAL 断言 --
+    api_ok("集团线首发 2025(过去年)", "POST", MP + "/group/publish", tok_admin,
+           {"bizYear": MYP, "periods": margin_periods(MYP, 5000, 4000, 6000)})
+    past = api_ok("过去年当前线", "GET", MP + "/group?year=%d" % MYP, tok_admin)
+    step("过去年 17 周期全 NORMAL", all(p["periodStatus"] == "NORMAL"
+         for p in (past or {}).get("periods", [])), None)
+
+    # -- 分公司选项+配置进度 --
+    co = api_ok("分公司选项+进度(发布前)", "GET",
+                MP + "/company-options?year=%d" % MY, tok_admin)
+    co_row = next((r for r in (co or {}).get("rows", []) if r["orgId"] == branch_org), {})
+    step("冒烟分公司在列且 NONE", co_row.get("configStatus") == "NONE", co_row)
+    step("进度汇总自洽(none+completed=total)",
+         co.get("none", 0) + co.get("partial", 0) + co.get("completed", 0) == co.get("total"), co)
+    co_kw = api_ok("keyword 过滤生效", "GET",
+                   MP + "/company-options?year=%d&keyword=%s" % (MY, urllib.parse.quote("M2")), tok_admin)
+    step("keyword 命中且不含他组织", all(MBRANCH_NAME in (r.get("name") or "")
+         for r in (co_kw or {}).get("rows", [])) and co_kw.get("total", 0) >= 1, co_kw)
+
+    # -- 分公司线守卫族 --
+    api_err("集团发分公司线不选组织 320110", "POST", MP + "/branch/publish", tok_admin,
+            {"bizYear": MY, "periods": margin_periods(MY, 4500, 3500, 5500)}, 320110)
+    api_err("以根为分公司目标 320111", "POST", MP + "/branch/publish", tok_admin,
+            {"orgId": 1, "bizYear": MY, "periods": margin_periods(MY, 4500, 3500, 5500)}, 320111)
+    api_err("分公司身份拿他组织 320111", "POST", MP + "/branch/publish", tok_mb,
+            {"orgId": 1, "bizYear": MY, "periods": margin_periods(MY, 4500, 3500, 5500)}, 320111)
+
+    # -- 分公司线发布:快照行冗余拷贝当期集团线 --
+    v3 = api_ok("分公司线发布", "POST", MP + "/branch/publish", tok_admin,
+                {"orgId": branch_org, "bizYear": MY, "baseVersionId": None,
+                 "periods": margin_periods(MY, 4500, 3500, 5500)})
+    v3 = (v3 or {}).get("versionId")
+    brow = db_q("select v.line_type, p.org_id, p.comprehensive_line, p.group_comprehensive_ref, "
+                "p.group_project_ref, p.group_main_ref from balance_margin_line_publish p "
+                "join balance_margin_line_version v on v.id = p.version_id "
+                "where p.version_id = %s and p.period_value = %s", (v3, "%s-01" % MY))
+    # 集团线引用=当期(最新)v2 值:v2 已把 2027-01 改为 5500/4000/6300,动态对照防段内流程演进错位
+    step("分公司快照行+集团线引用精确(=当期集团线)", list(brow) == [(2, branch_org, 4500,
+         cur_p01.get("comprehensiveLine"), cur_p01.get("projectLine"),
+         cur_p01.get("mainMaterialLine"))], brow)
+    step("分公司首发零变更行", db_q("select count(*) from balance_margin_line_change "
+         "where version_id = %s", (v3,))[0][0] == 0, v3)
+
+    # -- 分公司线读取面 --
+    br = api_ok("分公司身份读本组织线", "GET", MP + "/branch?year=%d" % MY, tok_mb)
+    br_p01 = next((p for p in (br or {}).get("periods", []) if p["periodValue"] == "%s-01" % MY), {})
+    step("本组织线+集团对照(引用=当期集团线)", (br or {}).get("versionId") == v3
+         and br_p01.get("comprehensiveLine") == 4500
+         and br_p01.get("groupComprehensiveRef") == cur_p01.get("comprehensiveLine")
+         and br_p01.get("groupMainRef") == cur_p01.get("mainMaterialLine"), br_p01)
+    api_err("分公司读他组织线 320111", "GET", MP + "/branch?orgId=1&year=%d" % MY, tok_mb, None, 320111)
+    api_err("分公司看版本详情越权(集团版本)320112", "GET", MP + "/versions/%d" % v2, tok_mb, None, 320112)
+    brd = api_ok("分公司看本组织版本详情", "GET", MP + "/versions/%d" % v3, tok_mb)
+    step("本组织版本详情可读", (brd or {}).get("id") == v3, brd)
+    api_err("版本不存在 320113", "GET", MP + "/versions/999999999", tok_admin, None, 320113)
+    bv = api_ok("分公司发布记录分页", "GET",
+                MP + "/branch/versions?orgId=%d&year=%d&page=1&size=20" % (branch_org, MY), tok_admin)
+    step("分公司记录 total=1", (bv or {}).get("total") == 1, bv)
+    co2 = api_ok("进度复查 COMPLETED", "GET", MP + "/company-options?year=%d" % MY, tok_admin)
+    co2_row = next((r for r in (co2 or {}).get("rows", []) if r["orgId"] == branch_org), {})
+    step("发布后进度 COMPLETED", co2_row.get("configStatus") == "COMPLETED", co2_row)
 
     return finish()
 
