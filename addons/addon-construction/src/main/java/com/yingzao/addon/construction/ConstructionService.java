@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.yingzao.addons.api.DecorationApi;
+import com.yingzao.addons.api.NormApi;
 import com.yingzao.addons.api.PaymentApi;
 import com.yingzao.addons.api.QuotationApi;
 import com.yingzao.addons.api.event.ConstructionAcceptedEvent;
@@ -108,12 +109,13 @@ public class ConstructionService {
     private final QuotationApi quotations;
     private final PaymentApi payments;
     private final com.yingzao.addons.api.SalesApi sales;
+    private final NormApi norms;
     private final ConstructionTeamService teams;
     private final ConstructionProfileService profiles;
 
     public ConstructionService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
             DecorationApi decorations, QuotationApi quotations, PaymentApi payments,
-            com.yingzao.addons.api.SalesApi sales,
+            com.yingzao.addons.api.SalesApi sales, NormApi norms,
             ConstructionTeamService teams, ConstructionProfileService profiles) {
         this.jdbc = jdbc;
         this.messages = messages;
@@ -122,6 +124,7 @@ public class ConstructionService {
         this.quotations = quotations;
         this.payments = payments;
         this.sales = sales;
+        this.norms = norms;
         this.teams = teams;
         this.profiles = profiles;
     }
@@ -612,12 +615,21 @@ public class ConstructionService {
     public Map<String, Object> detail(long orgId, long orderId) {
         Map<String, Object> order = new LinkedHashMap<>(loadConstructionMap(orgId, orderId));
         long constructionOrderId = ((Number) order.remove("id")).longValue();
-        order.put("schedules", jdbc.queryForList("""
-                select id, node_name, sort, process, status, checkout, checkout_reason, checkout_operator,
-                       work_status, plan_start, plan_end, start_time, end_time,
+        List<Map<String, Object>> schedules = jdbc.queryForList("""
+                select id, node_id, node_name, sort, process, status, checkout, checkout_reason, checkout_operator,
+                       work_status, additem_status, plan_start, plan_end, start_time, end_time,
                        precheck, postcheck, time_limit, salary_limit, accessory_limit
                 from construction_schedule where org_id = ? and order_id = ? order by sort
-                """, orgId, orderId));
+                """, orgId, orderId);
+        // 节点工费/工日列(NormApi 契约,定额子域 R3):读取期聚合零落库;无定额实例=0
+        for (Map<String, Object> schedule : schedules) {
+            if (schedule.get("node_id") != null) {
+                long nodeId = ((Number) schedule.get("node_id")).longValue();
+                schedule.put("labor_fee", norms.laborFeeByNode(orgId, orderId, nodeId));
+                schedule.put("workdays", norms.workdaysByNode(orgId, orderId, nodeId));
+            }
+        }
+        order.put("schedules", schedules);
         order.put("drawlines", jdbc.queryForList("""
                 select id, status, group_name, plan_start, plan_end, finish_time, is_retroactive,
                        operator_name, remark, created_at

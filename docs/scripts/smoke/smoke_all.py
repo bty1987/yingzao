@@ -5854,7 +5854,9 @@ def main():
                      {"name": "烟测定额乳胶漆" + stamp_n, "pinyin": "yctc" + stamp_n,
                       "categoryId": cat_child, "brandId": brand_id, "unit": "桶",
                       "purchase": 88000, "selling": 128000})
-    NODE_N = 101  # 人工档案节点 V1 存快照不跨域校验,任意 id
+    # 真实施工节点(R3:节点 V1 存快照不跨域校验,但徽章回写/工费列按 node_id 联结排期——取组织最小 sort 启用节点)
+    NODE_N = norm_q("select id from construction_node where org_id = 1 and status = 1"
+                    " order by sort limit 1")[0][0]
     # 档案守卫族
     api_err("材料档案缺商品 231204", "POST", MP2 + "/archives", tok_admin,
             {"kind": 0, "catalogItemId": cat_n, "name": "缺商品", "normNum": 500}, 231204)
@@ -5988,6 +5990,48 @@ def main():
     step("驳回行工费不变", sum3["summary"]["1"]["laborFee"] == sum2["summary"]["1"]["laborFee"], None)
     api_err("确认行删除拒绝 231201", "DELETE", MP2 + "/orders/%s/items/%s" % (order_n, add1),
             tok_admin, None, 231201)
+
+    # ---- R3:NormApi 施工消费方(点火→徽章回写/节点工费列/材料汇总) ----
+    dl_n = api_ok("R3 放线申请", "POST", "/api/construction/drawlines", tok_admin,
+                  {"orderId": order_n})
+    api_ok("R3 放线排期", "POST", "/api/construction/drawlines/%s/schedule" % dl_n, tok_admin,
+           {"groupName": "定额放线组" + stamp_n, "planStart": day2 + "T14:00:00",
+            "planEnd": day2 + "T18:00:00"})
+    api_ok("R3 放线成功(点火:施工单+排期快照)", "POST",
+           "/api/construction/drawlines/%s/success" % dl_n, tok_admin)
+    event_consumed("ConstructionDrawnEvent", "drawline:%s:drawn" % dl_n,
+                   "R3 放线事件消费(定额全量重算幂等)")
+
+    def r3_sched():
+        d = api_ok("R3 施工详情", "GET", "/api/construction/orders/%s" % order_n, tok_admin)
+        return next((s for s in (d or {}).get("schedules") or []
+                     if s.get("node_id") == NODE_N), {})
+
+    row_n = r3_sched()
+    step("节点工费列精确到厘(报价45000×100+差量×20+确认附加×2=NormApi.laborFeeByNode)",
+         row_n.get("labor_fee") == 7000000, row_n)
+    step("节点工日列=Σ工时行(报价80+差量80)", row_n.get("workdays") == 160, row_n)
+    step("无待审附加=徽章0", row_n.get("additem_status") == 0, row_n)
+
+    add3 = api_ok("R3 登记徽章附加行(待审+1)", "POST", MP2 + "/orders/%s/additions" % order_n,
+                  tok_admin, {"name": "R3徽章" + stamp_n, "constructionNodeId": NODE_N,
+                              "nodeName": "徽章", "num": 1000, "salary": 100000})
+    event_consumed("NormAdditionPendingChangedEvent",
+                   "norm:addition:%s:%s:pending" % (order_n, NODE_N), "R3 徽章事件(置1)已消费")
+    row_b = r3_sched()
+    step("待审徽章=1(additem_status 事件回写)", row_b.get("additem_status") == 1, row_b)
+    api_ok("R3 驳回徽章行(待审归零)", "POST",
+           MP2 + "/orders/%s/items/%s/reject" % (order_n, add3), tok_admin)
+    event_consumed("NormAdditionPendingChangedEvent",
+                   "norm:addition:%s:%s:pending" % (order_n, NODE_N), "R3 徽章事件(归零)已消费")
+    row_c = r3_sched()
+    step("徽章归零(驳回后回0)", row_c.get("additem_status") == 0, row_c)
+    step("驳回行不计工费(拍板5)", row_c.get("labor_fee") == 7000000, row_c)
+
+    mats = api_ok("R3 材料定额汇总", "GET", MP2 + "/orders/%s/materials" % order_n, tok_admin)
+    m_row = next((m for m in (mats or []) if m.get("goodsId") == goods_n), None)
+    step("材料汇总=Σ±num×norm_num÷1000(档案行+套餐成员×报价/差量,HALF_UP)",
+         m_row and m_row.get("quantity") == 84000 and m_row.get("rowCount") == 4, m_row)
 
     # 完工固化:sealed=1 后拒再生成(onAccepted 事件链随验收事件真实发生,此处直测守卫面)
     norm_x("update quotation_norm set sealed = 1, sealed_at = now() where org_id = 1 and order_id = %s",

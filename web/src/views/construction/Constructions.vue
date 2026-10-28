@@ -510,7 +510,12 @@
           <div class="section-title">节点排期(‰天单一口径)</div>
           <el-table :data="detail.schedules" border size="small">
             <el-table-column prop="sort" label="序" width="46" />
-            <el-table-column prop="node_name" label="节点" width="90" />
+            <el-table-column label="节点" width="120">
+              <template #default="{ row }">
+                {{ row.node_name }}
+                <el-tag v-if="row.additem_status === 1" size="small" type="danger" effect="plain">待审</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" width="90">
               <template #default="{ row }">
                 <el-tag :type="{ 0: 'info', 1: 'warning', 2: 'success', 3: 'warning' }[row.status]" effect="plain">
@@ -532,6 +537,18 @@
                 <el-tooltip v-if="row.checkout === 1" :content="row.checkout_reason">
                   <span class="default-mark">免</span>
                 </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column label="工费" width="90" align="right">
+              <template #default="{ row }">
+                <span v-if="row.node_id != null">¥{{ yuan(row.labor_fee) }}</span>
+                <span v-else class="tip">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="工日" width="70" align="right">
+              <template #default="{ row }">
+                <span v-if="row.node_id != null">{{ days(row.workdays) }}</span>
+                <span v-else class="tip">—</span>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="240">

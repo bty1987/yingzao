@@ -1,7 +1,7 @@
 addon:
   id: construction
   name: 施工管理
-  version: 0.3.0
+  version: 0.4.0
   error-code-segment: 240000
   menus:
     - path: /construction/constructions

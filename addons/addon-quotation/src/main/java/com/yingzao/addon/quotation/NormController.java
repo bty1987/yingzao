@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.yingzao.addons.api.NormApi;
 import com.yingzao.core.web.ApiResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,10 +31,12 @@ public class NormController {
 
     private final NormArchiveService archives;
     private final NormService norms;
+    private final NormApi normApi;
 
-    public NormController(NormArchiveService archives, NormService norms) {
+    public NormController(NormArchiveService archives, NormService norms, NormApi normApi) {
         this.archives = archives;
         this.norms = norms;
+        this.normApi = normApi;
     }
 
     private long orgId(HttpServletRequest request) {
@@ -173,6 +176,12 @@ public class NormController {
             HttpServletRequest request) {
         return ApiResponse.ok(norms.items(orgId(request), orderId, sourceType, kind, status, page,
                 size));
+    }
+
+    /** 材料定额汇总(NormApi 契约的 HTTP 投影;领料对账/预算对照;quantity 千分位量纲) */
+    @GetMapping("/api/quotation/norms/orders/{orderId}/materials")
+    public ApiResponse<Object> materials(@PathVariable long orderId, HttpServletRequest request) {
+        return ApiResponse.ok(normApi.materialSummaryByOrder(orgId(request), orderId));
     }
 
     /** 手动重新生成(arId 空=全量;管理动作,老 NormtionAction 收敛) */

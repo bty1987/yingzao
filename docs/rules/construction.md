@@ -222,6 +222,11 @@
 - 工程辅料额度=consume/refund 契约+ledger append-only(第 23 次,修老额度双侧口径漂移与零审计;inventory 领料闸经 ConstructionAccessoryApi 协作);
 - 验收=可配置检查项(mount 模板快照)+整改分支+收款比例门槛组织级配置(240011);决算六项检查(第 47 次,B 类#6 兑现)=ConstructionApi.accountNodes 只读快照+SalesApi.countUnfinishedOrders,选材子项预留 UNCHECK。
 
+### 14.2 定额消费方接入(第 98 次,R3)
+
+- **construction_schedule.additem_status(V604)**:老 additemStatus(节点下存在待确认附加人工行=1,仅查询过滤无操作接口)回归——老由 quotation 域**跨域直写本表(违例)**,营造改事件回写:addon-quotation 附加确认线发布 NormAdditionPendingChangedEvent,本域 NormPendingConsumer 消费自写(pendingCount>0→1,绝对值幂等;未点火单/模板外节点零行命中=空转);老 countNormriceItem 注释「普通报价行不得计入待审判定,否则确认/驳回后无法归零」的口径由发布方按 source_type=3 天然满足;
+- **节点工费/工日列**:施工详情排期行读取期经 NormApi 契约聚合(laborFeeByNode/workdaysByNode,零落库零冗余列——对齐「冗余合计不迁」定案);无定额实例=0。
+
 ## 15. 待业务方确认清单
 
 1. **放线是否保留"点火"语义**:申请放线即创建施工单+初始化限额,还是拆成"开工准备"与"放线排期"两个用例?(建议拆分)
