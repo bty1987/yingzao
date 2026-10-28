@@ -303,6 +303,7 @@ cd web-mp && npm install && npm run dev:h5
 | [docs/02-插件框架RFC.md](docs/02-插件框架RFC.md) | 插件机制六点设计 + spike 结论(含三个工程坑) |
 | [docs/10-插件开发指南.md](docs/10-插件开发指南.md) | **第三方开发者从零到上架**:军规速览/抄作业路径表/验收清单(addon-example 示范工程配套) |
 | [docs/11-延后项开发计划.md](docs/11-延后项开发计划.md) | 延后项全台账(21 项四批次)+插件版本真实性核对表 |
+| [docs/15-完整开发计划.md](docs/15-完整开发计划.md) | **逐轮开发计划**:整体 review 漏项清单(文件存储/Redis 认证/审计日志/单测/CI/发布包)+E0~E5 六阶段 ≈41 轮排期 |
 | [docs/12-钉钉端内部应用盘点与员工端小程序开发需求反哺.md](docs/12-钉钉端内部应用盘点与员工端小程序开发需求反哺.md) | 方林钉钉端员工应用反哺归档:10 功能域盘点/判断法过堂/**员工端 app/ P0-P2 开发需求**/企微钉钉适配器设计输入(C4) |
 | [docs/13-微信端产品矩阵归纳PRD.md](docs/13-微信端产品矩阵归纳PRD.md) | 方林微信侧全家桶(4 小程序+公众号 H5)归纳 PRD:端矩阵/九大业务闭环/平台能力依赖/web-mp 客户端门户 V2 增补需求 |
 | [docs/prd/](docs/prd) | 各 addon 与端的 PRD(业务闭环),含模板;两端规划见 [app-employee](docs/prd/app-employee.md)(对内)/ [webmp-portal](docs/prd/webmp-portal.md)(对外) |
@@ -336,7 +337,7 @@ cd web-mp && npm install && npm run dev:h5
 - 不接受 AGPL-3.0 的商业使用(如闭源二开、深度定制交付),可另行购买商业授权;
 - 商业插件族(财务对接/电子签/支付等)闭源,单独授权。
 
-LICENSE 文件随首个公开版本一同发布。
+LICENSE(AGPL-3.0 全文)已随仓库发布;首个公开 release 版本将附带演示数据与一键体验环境。
 
 ---
 
