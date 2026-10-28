@@ -19,6 +19,7 @@ import com.yingzao.addons.api.PaymentApi;
 import com.yingzao.addons.api.QuotationApi;
 import com.yingzao.addons.api.event.ConstructionAcceptedEvent;
 import com.yingzao.addons.api.event.ConstructionDrawlineFailedEvent;
+import com.yingzao.addons.api.event.ConstructionDrawnEvent;
 import com.yingzao.addons.api.event.ConstructionScheduleStatusChangedEvent;
 import com.yingzao.addons.api.event.ConstructionStartedEvent;
 import com.yingzao.core.eventbus.YzEventBus;
@@ -302,7 +303,11 @@ public class ConstructionService {
         jdbc.update(
                 "update construction_drawline set status = ?, finish_time = now() where id = ? and status = ?",
                 DL_SUCCESS, drawlineId, DL_SCHEDULED);
-        ignite(orgId, ((Number) row.get("order_id")).longValue(), operatorId, false, null);
+        long orderId = ((Number) row.get("order_id")).longValue();
+        ignite(orgId, orderId, operatorId, false, null);
+        // 放线成功事件(定额子域重算触发点;核对清单 1——成功路径此前无事件)
+        eventBus.publish(new ConstructionDrawnEvent(drawlineId, orgId, orderId, false, operatorId),
+                "drawline:" + drawlineId + ":drawn");
     }
 
     /** 失败:0/1 → 3(已成功 2 为终态不回败,收紧老「任意状态可置败」);事件通知设计师。 */
@@ -336,6 +341,8 @@ public class ConstructionService {
                 """, orgId, orderId, DL_SUCCESS, groupName.trim(), start, end, operatorId,
                 displayName(operatorId), blankToNull(remark));
         ignite(orgId, orderId, operatorId, true, blankToNull(remark));
+        eventBus.publish(new ConstructionDrawnEvent(null, orgId, orderId, true, operatorId),
+                "drawline:order:" + orderId + ":retroactive");
     }
 
     // ---- 点火:施工单 1:1 + 节点排期快照(计划时间按工期 ‰天正向累加) ----

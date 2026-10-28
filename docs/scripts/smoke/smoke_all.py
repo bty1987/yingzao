@@ -1378,10 +1378,10 @@ def main():
                 _crows = _cur.fetchall()
         finally:
             _conn.close()
-        step("消费完成登记行=全部订阅消费者(装饰/示范/销售三家)",
-             len(_crows) == 3
+        step("消费完成登记行=全部订阅消费者(装饰/示范/销售/定额四家)",
+             len(_crows) == 4
              and {r[0] for r in _crows} == {"PaymentEventDemoConsumer", "DecorationPaymentConsumer",
-                                            "SalesPaymentConsumer"},
+                                            "SalesPaymentConsumer", "NormEventConsumer"},
              _crows)
         # requeue 已消费任务:登记表使双消费者全部跳过 → 通知零新增(以前=重放多一条)
         api_ok("requeue 已消费任务(跳过语义)", "POST", "/api/events/%s/requeue" % _task_id, tok_admin)
@@ -1409,7 +1409,7 @@ def main():
                 _crows2 = _cur.fetchall()
         finally:
             _conn.close()
-        step("登记行不因重投递增长", len(_crows2) == 3, _crows2)
+        step("登记行不因重投递增长", len(_crows2) == 4, _crows2)
     else:
         step("收款事件 task id 缺失,exactly-once 段跳过", True)
 
@@ -5823,6 +5823,184 @@ def main():
     co2 = api_ok("进度复查 COMPLETED", "GET", MP + "/company-options?year=%d" % MY, tok_admin)
     co2_row = next((r for r in (co2 or {}).get("rows", []) if r["orgId"] == branch_org), {})
     step("发布后进度 COMPLETED", co2_row.get("configStatus") == "COMPLETED", co2_row)
+
+    # ---- 定额子域(D7,addon-quotation V405;自建专用单链;段首定向清理) ----
+    print("== 定额子域(addon-quotation D7:档案层+生成引擎三路径+附加确认线) ==")
+    stamp_n = str(int(time.time() % 100000))
+    MP2 = "/api/quotation/norms"
+
+    def norm_q(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                return cur.fetchall()
+        finally:
+            conn.close()
+
+    def norm_x(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                conn.commit()
+                return cur.rowcount
+        finally:
+            conn.close()
+
+    cat_n = api_ok("建专用报价项(定额挂接锚)", "POST", "/api/quotation/catalog", tok_admin,
+                   {"name": "烟测定额项" + stamp_n, "unit": "m²", "subtype": 0, "price": 25000})
+    goods_n = api_ok("建专用商品(材料定额)", "POST", "/api/basedata/goods", tok_admin,
+                     {"name": "烟测定额乳胶漆" + stamp_n, "pinyin": "yctc" + stamp_n,
+                      "categoryId": cat_child, "brandId": brand_id, "unit": "桶",
+                      "purchase": 88000, "selling": 128000})
+    NODE_N = 101  # 人工档案节点 V1 存快照不跨域校验,任意 id
+    # 档案守卫族
+    api_err("材料档案缺商品 231204", "POST", MP2 + "/archives", tok_admin,
+            {"kind": 0, "catalogItemId": cat_n, "name": "缺商品", "normNum": 500}, 231204)
+    api_err("人工档案缺节点 231205", "POST", MP2 + "/archives", tok_admin,
+            {"kind": 1, "catalogItemId": cat_n, "name": "缺节点"}, 231205)
+    arc_m = api_ok("建材料档案(每 m² 0.35 桶)", "POST", MP2 + "/archives", tok_admin,
+                   {"kind": 0, "catalogItemId": cat_n, "name": "乳胶漆定额" + stamp_n,
+                    "goodsId": goods_n, "normUnit": "桶", "normNum": 350,
+                    "storeUnit": "桶", "storeNum": 350})
+    arc_l = api_ok("建人工档案(油工 45 元/m²)", "POST", MP2 + "/archives", tok_admin,
+                   {"kind": 1, "catalogItemId": cat_n, "name": "油工定额" + stamp_n,
+                    "constructionNodeId": NODE_N, "nodeName": "油工", "unit": "m²",
+                    "trannum": 1000, "salary": 45000})
+    arc_t = api_ok("建工时档案(0.08 工日/m²)", "POST", MP2 + "/archives", tok_admin,
+                   {"kind": 2, "catalogItemId": cat_n, "name": "油工工时" + stamp_n,
+                    "constructionNodeId": NODE_N, "nodeName": "油工", "unit": "m²",
+                    "trannum": 1000, "workdays": 80})
+    api_err("同名档案拒绝 231211", "POST", MP2 + "/archives", tok_admin,
+            {"kind": 0, "catalogItemId": cat_n, "name": "乳胶漆定额" + stamp_n,
+             "goodsId": goods_n, "normNum": 500}, 231211)
+    tpl_n = api_ok("建附加项档案(砸墙 800 元)", "POST", MP2 + "/additions", tok_admin,
+                   {"name": "砸墙" + stamp_n, "constructionNodeId": NODE_N, "nodeName": "拆除",
+                    "unit": "处", "price": 800000})
+    pack_n = api_ok("建定额套餐", "POST", MP2 + "/packs", tok_admin,
+                    {"name": "基础套餐" + stamp_n, "catalogItemId": cat_n})
+    api_ok("套餐加成员(乳胶漆 0.35)", "POST", MP2 + "/packs/%s/items" % pack_n, tok_admin,
+           {"goodsId": goods_n, "goodsName": "乳胶漆", "normUnit": "桶", "normNum": 350})
+    pack_items = api_ok("套餐成员回读", "GET", MP2 + "/packs/%s/items" % pack_n, tok_admin)
+    step("套餐成员 1 行", len(pack_items or []) == 1, pack_items)
+
+    # 自建专用单链:专用客户/楼盘(共享 fixture 被 order_a 在途占用 250003——B7 教训变体)
+    city_n = api_ok("定额段建城市", "POST", "/api/customerprofile/cities", tok_admin,
+                    {"name": "烟测市N" + stamp_n})
+    proper_n = api_ok("定额段建城区", "POST",
+                      "/api/customerprofile/cities/%s/propers" % city_n, tok_admin,
+                      {"name": "烟测区N"})
+    village_n = api_ok("定额段建楼盘", "POST", "/api/customerprofile/villages", tok_admin,
+                       {"name": "烟测楼盘N" + stamp_n, "cityId": city_n, "properId": proper_n})
+    house_n = api_ok("定额段建房屋", "POST", "/api/customerprofile/houses", tok_admin,
+                     {"villageId": village_n, "number": "N" + stamp_n,
+                      "fields": {"built": "1", "unit": "2", "floorNum": 3, "doorNum": 4}})
+    cust_n = api_ok("定额段建客户", "POST", "/api/customerprofile/customers", tok_admin,
+                    {"name": "烟测客户N" + stamp_n, "phone": "137%08d" % (int(stamp_n) % 100000000)})
+    order_n = api_ok("定额专用装修单", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_n, "houseId": house_n, "type": 2,
+                      "designerId": uid_b, "salesmanId": uid_c, "depositAmount": 10000000})
+    quota_n = api_ok("定额专用报价", "POST", "/api/quotation/quotations", tok_admin,
+                     {"orderId": order_n, "name": "定额烟测报价" + stamp_n, "versionId": q_ver})
+    area_n = api_ok("加功能区", "POST", "/api/quotation/quotations/%s/areas" % quota_n, tok_admin,
+                    {"name": "定额烟测区"})
+    qitem_n = api_ok("加功能项(挂定额报价项 100m²)", "POST",
+                     "/api/quotation/quotations/%s/areas/%s/items" % (quota_n, area_n), tok_admin,
+                     {"name": "墙面工程", "subtype": 0, "unit": "m²", "num": 100000,
+                      "price": 25000, "catalogItemId": cat_n})
+    api_ok("报价锁定", "POST", "/api/quotation/quotations/%s/lock" % quota_n, tok_admin)
+    api_ok("定额报价送审", "POST", "/api/quotation/quotations/%s/submit" % quota_n, tok_admin)
+    api_ok("定额报价审核通过", "POST", "/api/quotation/quotations/%s/audit" % quota_n, tok_admin)
+    api_ok("定额报价审核完成(2→3)", "POST", "/api/quotation/quotations/%s/finish" % quota_n, tok_admin)
+    api_ok("设默认报价", "POST", "/api/quotation/quotations/%s/default" % quota_n, tok_admin)
+
+    # 手动全量生成(来源 0:材料+人工+工时+套餐成员)
+    gen1 = api_ok("手动全量生成", "POST", MP2 + "/orders/%s/generate" % order_n, tok_admin, {})
+    step("生成 inserted>0(材料+人工+工时+套餐成员)", (gen1 or {}).get("inserted", 0) >= 4, gen1)
+    its1 = api_ok("实例行回读", "GET",
+                  MP2 + "/orders/%s/items?page=1&size=50" % order_n, tok_admin)
+    rows1 = (its1 or {}).get("rows", [])
+    mat = next((r for r in rows1 if r["kind"] == 0 and r["source_type"] == 0 and r["pack_item_id"] == 0), None)
+    lab = next((r for r in rows1 if r["kind"] == 1), None)
+    tim = next((r for r in rows1 if r["kind"] == 2), None)
+    pmem = next((r for r in rows1 if r["pack_item_id"] > 0), None)
+    step("材料行 num=明细量拷贝 norm_num=定额快照", mat and mat["num"] == 100000
+         and mat["norm_num"] == 350, mat)
+    step("人工行 salary 快照", lab and lab["salary"] == 45000 and lab["node_id"] == NODE_N, lab)
+    step("工时行 workdays 快照", tim and tim["workdays"] == 80, tim)
+    step("套餐成员行 archive_id=0+pack_item_id>0(自引用解题)",
+         pmem and pmem["archive_id"] == 0 and pmem["kind"] == 0, pmem)
+
+    # 幂等重跑:禁用→复用,零新增
+    gen2 = api_ok("幂等重跑生成", "POST", MP2 + "/orders/%s/generate" % order_n, tok_admin, {})
+    step("重跑零新增全复用", (gen2 or {}).get("inserted") == 0
+         and (gen2 or {}).get("reused", 0) >= 4, gen2)
+
+    # 差量单前置=签约(230102):order_n 走完整签约链(定金收款→预签→方案确认→签约)
+    bills_n = api_ok("定额单款项单反查", "GET",
+                     "/api/payment/bills?bizAddon=decoration&bizType=order&bizId=%s" % order_n,
+                     tok_admin)
+    dep_n = next((b for b in (bills_n or {}).get("rows", []) if b.get("status") == 0), None)
+    api_ok("定额单定金收款", "POST", "/api/payment/bills/%s/collect" % dep_n["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 10000000}]})
+    time.sleep(2)
+    api_ok("定额单预签", "POST", "/api/decoration/orders/%s/presign" % order_n, tok_admin)
+    api_ok("定额单方案确认", "POST", "/api/decoration/orders/%s/design-confirm" % order_n, tok_admin,
+           {"variant": 2})
+    api_ok("定额单签约", "POST", "/api/decoration/orders/%s/sign" % order_n, tok_admin,
+           {"contractAmount": 25000000})
+
+    # 差量单源重算:order_n 开差量单(ref 指向功能项)→提交→单源 generate
+    ar_n = api_ok("定额单开差量单", "POST", "/api/quotation/ar", tok_admin,
+                  {"orderId": order_n, "remark": "定额烟测差量",
+                   "items": [{"itemType": 0, "refQiid": qitem_n, "goodsName": "增量墙面",
+                              "unitPrice": 25000, "num": 20000}]})
+    api_ok("差量单提交", "POST", "/api/quotation/ar/%s/submit" % ar_n, tok_admin)
+    gen3 = api_ok("差量单源重算", "POST", MP2 + "/orders/%s/generate" % order_n, tok_admin,
+                  {"arId": ar_n})
+    step("差量来源行新增", (gen3 or {}).get("inserted", 0) >= 1, gen3)
+    ars = api_ok("实例含增减来源行", "GET",
+                 MP2 + "/orders/%s/items?sourceType=2&page=1&size=20" % order_n, tok_admin)
+    ar_row = next((r for r in (ars or {}).get("rows", [])), None)
+    step("增减行 num=|差量量| 方向收", ar_row and ar_row["num"] == 20000
+         and ar_row["atttype"] == 0, ar_row)
+
+    # 附加确认线:登记(模板带出)→待审事件→确认计入→驳回不计→删除守卫
+    add1 = api_ok("登记附加人工费(模板带出)", "POST", MP2 + "/orders/%s/additions" % order_n,
+                  tok_admin, {"additionId": tpl_n, "num": 2000})
+    add2 = api_ok("登记第二笔附加(全手工)", "POST", MP2 + "/orders/%s/additions" % order_n,
+                  tok_admin, {"name": "垃圾清运" + stamp_n, "constructionNodeId": NODE_N,
+                              "num": 1000, "salary": 300000})
+    event_consumed("NormAdditionPendingChangedEvent",
+                   "norm:addition:%s:%s:pending" % (order_n, NODE_N), "待审徽章事件已消费")
+    sum1 = api_ok("概览(确认前,附加不计入)", "GET", MP2 + "/orders/%s" % order_n, tok_admin)
+    fee0 = sum1["summary"]["1"]["laborFee"]
+    api_ok("确认第一笔附加", "POST",
+           MP2 + "/orders/%s/items/%s/confirm" % (order_n, add1), tok_admin)
+    sum2 = api_ok("概览(确认后计入,拍板5同权)", "GET", MP2 + "/orders/%s" % order_n, tok_admin)
+    step("确认行计入工费(+price×num/1000×trannum/1000)",
+         sum2["summary"]["1"]["laborFee"] - fee0 == 800000 * (2000 // 1000),
+         (fee0, sum2["summary"]["1"]["laborFee"]))
+    api_ok("驳回第二笔附加", "POST",
+           MP2 + "/orders/%s/items/%s/reject" % (order_n, add2), tok_admin)
+    sum3 = api_ok("概览(驳回不计入)", "GET", MP2 + "/orders/%s" % order_n, tok_admin)
+    step("驳回行工费不变", sum3["summary"]["1"]["laborFee"] == sum2["summary"]["1"]["laborFee"], None)
+    api_err("确认行删除拒绝 231201", "DELETE", MP2 + "/orders/%s/items/%s" % (order_n, add1),
+            tok_admin, None, 231201)
+
+    # 完工固化:sealed=1 后拒再生成(onAccepted 事件链随验收事件真实发生,此处直测守卫面)
+    norm_x("update quotation_norm set sealed = 1, sealed_at = now() where org_id = 1 and order_id = %s",
+           (order_n,))
+    api_err("固化后生成拒绝 231206", "POST", MP2 + "/orders/%s/generate" % order_n, tok_admin,
+            {}, 231206)
+    # 删除被引用档案拒(改停用)
+    api_err("被引用档案删除拒绝 231207", "DELETE", MP2 + "/archives/%s" % arc_m, tok_admin, None, 231207)
+    api_ok("档案停用放行", "POST", MP2 + "/archives/%s/status" % arc_m, tok_admin, {"status": 1})
+
+    # 段尾清理:本单定额数据(单据链跨轮保留与既有段一致)
+    norm_x("delete from quotation_norm_item where org_id = 1 and order_id = %s", (order_n,))
+    norm_x("delete from quotation_norm where org_id = 1 and order_id = %s", (order_n,))
 
     return finish()
 

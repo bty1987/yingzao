@@ -1,6 +1,6 @@
 # PRD - addon-quotation 定额子域(报价定额/工费成本底座)
 
-> 状态:**草案**(2026-10-27 第 90 次运行起草,**待业务方确认;拍板前不写码**——L1 PRD 纪律,同 addon-service 先例)
+> 状态:已确认(2026-10-28 用户拍板「按推荐」七项)+ R2 已实现(第 97 次:V405 六表/生成引擎三路径/附加确认线/两事件+construction 挂点/三触发点消费器/Web Norms.vue;冒烟 2246/2246+enforce 95/95;**余 R3=NormApi 三聚合契约+addon-construction 消费方(待审徽章/工费列)**;实现定案回写 rules/quotation.md §5)
 > 老系统参考:quotation 模块 Normtion 系(Normtion/NormoodItem/NormriceItem/NormtimeItem 实例层)+ data 模块 Normood/Normrice/Normtime/Normadd/Normpack 系(档案层);实现口径见 `docs/rules/quotation.md` §5(本轮已增量回写)
 > 归属:推荐 **addon-quotation V2 子域**(开放问题 1);若拍板独立插件则码段 390000/迁移 1900+
 > 本子域声明:错误码 **231200–231299**(addon-quotation 230000 段内分段);迁移 **V405+**

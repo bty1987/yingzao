@@ -468,6 +468,39 @@ export const pageMarginBranchVersions = (params) =>
   http.get('/api/balance/margin-lines/branch/versions', { params })
 export const fetchMarginVersionDetail = (id) => http.get(`/api/balance/margin-lines/versions/${id}`)
 
+// 定额子域(addon-quotation V2):定额档案/附加项档案/套餐/实例引擎/附加确认线
+export const pageNormArchives = (params) => http.get('/api/quotation/norms/archives', { params })
+export const createNormArchive = (data) => http.post('/api/quotation/norms/archives', data)
+export const updateNormArchive = (id, data) => http.put(`/api/quotation/norms/archives/${id}`, data)
+export const statusNormArchive = (id, status) =>
+  http.post(`/api/quotation/norms/archives/${id}/status`, { status })
+export const deleteNormArchive = (id) => http.delete(`/api/quotation/norms/archives/${id}`)
+export const listNormAdditions = (params) => http.get('/api/quotation/norms/additions', { params })
+export const createNormAddition = (data) => http.post('/api/quotation/norms/additions', data)
+export const updateNormAddition = (id, data) => http.put(`/api/quotation/norms/additions/${id}`, data)
+export const statusNormAddition = (id, status) =>
+  http.post(`/api/quotation/norms/additions/${id}/status`, { status })
+export const deleteNormAddition = (id) => http.delete(`/api/quotation/norms/additions/${id}`)
+export const listNormPacks = () => http.get('/api/quotation/norms/packs')
+export const createNormPack = (data) => http.post('/api/quotation/norms/packs', data)
+export const listNormPackItems = (id) => http.get(`/api/quotation/norms/packs/${id}/items`)
+export const saveNormPackItem = (id, data) => http.post(`/api/quotation/norms/packs/${id}/items`, data)
+export const deleteNormPackItem = (id, itemId) =>
+  http.delete(`/api/quotation/norms/packs/${id}/items/${itemId}`)
+export const fetchNormOrder = (orderId) => http.get(`/api/quotation/norms/orders/${orderId}`)
+export const pageNormItems = (orderId, params) =>
+  http.get(`/api/quotation/norms/orders/${orderId}/items`, { params })
+export const generateNorms = (orderId, data) =>
+  http.post(`/api/quotation/norms/orders/${orderId}/generate`, data || {})
+export const addNormAdditionItem = (orderId, data) =>
+  http.post(`/api/quotation/norms/orders/${orderId}/additions`, data)
+export const confirmNormAddition = (orderId, itemId) =>
+  http.post(`/api/quotation/norms/orders/${orderId}/items/${itemId}/confirm`)
+export const rejectNormAddition = (orderId, itemId) =>
+  http.post(`/api/quotation/norms/orders/${orderId}/items/${itemId}/reject`)
+export const deleteNormAdditionItem = (orderId, itemId) =>
+  http.delete(`/api/quotation/norms/orders/${orderId}/items/${itemId}`)
+
 // 营销获客(addon-market):投放物(活动/渠道/投放源)/进线工作台/获客漏斗/案例库
 export const createCampaign = (data) => http.post('/api/market/campaigns', data)
 export const updateCampaign = (id, data) => http.put(`/api/market/campaigns/${id}`, data)

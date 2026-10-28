@@ -1,7 +1,7 @@
 addon:
   id: quotation
   name: 报价管理
-  version: 0.5.0
+  version: 0.6.0
   error-code-segment: 230000
   menus:
     - path: /quotation/quotations
@@ -10,6 +10,9 @@ addon:
     - path: /quotation/catalog
       title: 报价项库
       icon: goods
+    - path: /quotation/norms
+      title: 定额管理
+      icon: list
   dicts:
     arStatus:
       - { key: '0', label: 草稿 }
@@ -57,6 +60,23 @@ addon:
       - { key: 'setDefault', label: 设为默认 }
       - { key: 'areaSave', label: 明细变更 }
       - { key: 'reprice', label: 保价重算 }
+    normKind:
+      - { key: '0', label: 材料 }
+      - { key: '1', label: 人工 }
+      - { key: '2', label: 工时 }
+    normSourceType:
+      - { key: '0', label: 报价 }
+      - { key: '1', label: 拓展 }
+      - { key: '2', label: 增减 }
+      - { key: '3', label: 附加 }
+    normStatus:
+      - { key: '0', label: 初始 }
+      - { key: '1', label: 禁用 }
+      - { key: '2', label: 已确认 }
+      - { key: '3', label: 已驳回 }
+    normAtttype:
+      - { key: '0', label: 收 }
+      - { key: '1', label: 支 }
   api:
     - prefix: /api/quotation
       require: /quotation/quotations
