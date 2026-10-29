@@ -358,6 +358,23 @@ ENDPOINTS = [
     ("service", "GET", "/api/service/guarantees"), ("service", "POST", "/api/service/guarantees"),
     ("service", "POST", "/api/service/guarantees/1/cancel"),
     ("service", "GET", "/api/service/config"), ("service", "PUT", "/api/service/config"),
+    # target(第 73 次;经营目标+D3 PK 对赌子域第 102 次)
+    ("target", "GET", "/api/target/plans"), ("target", "POST", "/api/target/plans"),
+    ("target", "PUT", "/api/target/plans/1"), ("target", "DELETE", "/api/target/plans/1"),
+    ("target", "POST", "/api/target/plans/1/status"), ("target", "GET", "/api/target/plans/1/records"),
+    ("target", "GET", "/api/target/plans/1/stages"), ("target", "POST", "/api/target/plans/1/stages"),
+    ("target", "PUT", "/api/target/stages/1"), ("target", "POST", "/api/target/stages/1/status"),
+    ("target", "DELETE", "/api/target/stages/1"), ("target", "GET", "/api/target/achievement"),
+    ("target", "GET", "/api/target/board"),
+    ("target", "POST", "/api/target/pk/events"), ("target", "GET", "/api/target/pk/events"),
+    ("target", "GET", "/api/target/pk/events/1"), ("target", "POST", "/api/target/pk/events/1/copy"),
+    ("target", "PUT", "/api/target/pk/events/1/draft"), ("target", "POST", "/api/target/pk/events/1/publish"),
+    ("target", "POST", "/api/target/pk/events/1/confirm"), ("target", "POST", "/api/target/pk/events/1/reset"),
+    ("target", "POST", "/api/target/pk/events/1/void"), ("target", "GET", "/api/target/pk/events/1/snapshots"),
+    ("target", "PUT", "/api/target/pk/events/1/units/1"), ("target", "DELETE", "/api/target/pk/events/1/units/1"),
+    ("target", "POST", "/api/target/pk/events/1/units/1/lock"),
+    ("target", "POST", "/api/target/pk/events/1/units/1/unlock"),
+    ("target", "PUT", "/api/target/pk/events/1/units/1/manual"),
 ]
 
 # 12 插件代表 GET 端点(admin/全授权组用;三条读放开端点返回 200 属预期)
@@ -372,6 +389,8 @@ REP_GETS = [
     ("/api/supplier/suppliers", "厂商"),
     ("/api/member/exchanges", "会员兑换单"),
     ("/api/service/complaints", "售后投诉"),
+    ("/api/target/plans", "经营目标"),
+    ("/api/target/pk/events", "PK 赛事"),
 ]
 
 # 无角色拒绝面:详情/子资源/未放开列表(读放开的三条列表端点不含在内,放开行为在第 4 组断言)
@@ -386,12 +405,14 @@ REP_DENIES = [
     ("/api/supplier/suppliers/1", "厂商详情"),
     ("/api/member/gifts/1", "礼品详情"),
     ("/api/service/visits/1", "回访任务详情"),
+    ("/api/target/plans", "经营目标"),
+    ("/api/target/pk/events", "PK 赛事"),
 ]
 
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(17 插件 62 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 62,
+    step("载入 api 规则(17 插件 63 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 63,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

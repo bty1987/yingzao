@@ -19,7 +19,7 @@
         <el-table-column prop="node_name" label="目标节点" min-width="140" />
         <el-table-column prop="ym" label="目标月" width="100" />
         <el-table-column label="业绩线" width="100">
-          <template #default="{ row }">{{ dicts.targetLine?.[row.line] || row.line }}</template>
+          <template #default="{ row }">{{ dictLabel(dicts.targetLine, row.line) }}</template>
         </el-table-column>
         <el-table-column label="目标" width="130" align="right">
           <template #default="{ row }">{{ row.line === 'channel' ? row.amount + ' 条' : fmt(row.amount) + ' 元' }}</template>
@@ -37,7 +37,7 @@
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.status === 0 ? 'success' : 'info'" size="small">
-              {{ dicts.targetStatus?.[String(row.status)] || row.status }}
+              {{ dictLabel(dicts.targetStatus, row.status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -221,6 +221,10 @@ const flatNodes = computed(() => {
   return out
 })
 
+const dictLabel = (list, v) => {
+  const hit = (list || []).find((d) => String(d.key) === String(v))
+  return hit ? hit.label : v
+}
 const fmt = (li) => (Number(li || 0) / 1000).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 
 async function loadDicts() {

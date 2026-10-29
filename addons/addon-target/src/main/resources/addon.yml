@@ -1,12 +1,15 @@
 addon:
   id: target
   name: 经营目标
-  version: 0.2.0
+  version: 0.3.0
   error-code-segment: 370000
   menus:
     - path: /target/plans
       title: 目标计划
       icon: aim
+    - path: /target/pk
+      title: PK 对赌
+      icon: trophy
   dicts:
     targetLine:
       - { key: 'contract', label: 签约额 }
@@ -14,7 +17,27 @@ addon:
     targetStatus:
       - { key: '0', label: 启用 }
       - { key: '1', label: 停用 }
+    pkStatus:
+      - { key: '0', label: 筹备 }
+      - { key: '1', label: 对赌中 }
+      - { key: '2', label: 进行中 }
+      - { key: '3', label: 已归档 }
+      - { key: '4', label: 已作废 }
+    pkCycle:
+      - { key: '1', label: 月赛 }
+      - { key: '2', label: 季赛 }
+    pkTier:
+      - { key: '2', label: 保底 }
+      - { key: '3', label: 冲刺 }
+      - { key: '4', label: 突破 }
+      - { key: '5', label: 挑战 }
+    pkSource:
+      - { key: '1', label: 自动聚合 }
+      - { key: '2', label: 手工录入 }
   api:
     # 经营目标(docs/08 S3 首个消费方):目标挂树上任一节点,达成率=子树实绩÷节点目标
     - prefix: /api/target
       require: /target/plans
+    # PK 对赌(D3 子域):赛事/锁档/归档快照,独立菜单闸
+    - prefix: /api/target/pk
+      require: /target/pk

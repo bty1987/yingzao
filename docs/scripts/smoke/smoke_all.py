@@ -6342,6 +6342,219 @@ def main():
     card_x("delete from market_card")
     card_x("delete from yz_notification where source_type = 'card.notice'")
 
+    # ========= D3 PK 对赌子域(addon-target V1703,第 102 次;docs/prd/addon-target-pk.md 按推荐拍板)=========
+    print("\n== PK 对赌(D3:五态状态机+锁档=PK金×档位码+快照归档链+手工实绩双轨) ==")
+    import calendar as _cal_pk
+    _ym_pk = time.strftime("%Y-%m")
+    _last_y = time.localtime().tm_year
+    _last_m = time.localtime().tm_mon - 1
+    if _last_m == 0:
+        _last_y, _last_m = _last_y - 1, 12
+    pk_period = "%04d-%02d" % (_last_y, _last_m)
+    pk_start = "%04d-%02d-01" % (_last_y, _last_m)
+    pk_end = "%04d-%02d-%02d" % (_last_y, _last_m, _cal_pk.monthrange(_last_y, _last_m)[1])
+    _cur_end = "%s-%02d" % (_ym_pk, _cal_pk.monthrange(time.localtime().tm_year, time.localtime().tm_mon)[1])
+
+    def pk_x(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+            conn.commit()
+        finally:
+            conn.close()
+
+    # 段首定向清理(PK 三表仅本段写;归档链计划一并清,防跨轮 biz_key 语义漂移)
+    pk_x("delete from target_pk_snapshot")
+    pk_x("delete from target_pk_unit")
+    pk_x("delete from target_pk_event")
+    pk_x("delete from yz_plan where handler = 'target-pk-archive'")
+
+    pk_node = api_ok("PK 前置分区节点", "POST", "/api/orgs", tok_admin,
+                     {"parentId": 1, "name": "PK烟测分区" + stamp + "pk", "levelType": "region"})
+
+    ev1 = api_ok("建上月经赛事(月赛/基准档冲刺)", "POST", "/api/target/pk/events", tok_admin,
+                 {"cycleType": 1, "period": pk_period, "name": "签约对赌赛" + pk_period,
+                  "startDate": pk_start, "endDate": pk_end, "baseTier": 3})
+    if ev1 is None:
+        return finish()
+    api_err("同期同型拒绝 370103", "POST", "/api/target/pk/events", tok_admin,
+            {"cycleType": 1, "period": pk_period, "name": "重复", "startDate": pk_start,
+             "endDate": pk_end}, 370103)
+    api_err("起止越周期拒绝 370114", "POST", "/api/target/pk/events", tok_admin,
+            {"cycleType": 1, "period": pk_period, "name": "越界", "startDate": pk_period + "-20",
+             "endDate": _ym_pk + "-10"}, 370114)
+    api_err("赛事不存在 370101", "GET", "/api/target/pk/events/999999", tok_admin, None, 370101)
+
+    def pk_unit(node, staffs):
+        return {"orgNode": node, "staffs": staffs, "guarantee": 100000000, "base": 200000000,
+                "breakthrough": 300000000, "challenge": 400000000, "pkMoney": 10000000,
+                "bonusPreset": None, "manualEnabled": 1 if node != 1 else 0}
+
+    api_ok("保存整包模板草稿(2 单元)", "PUT", "/api/target/pk/events/%s/draft" % ev1, tok_admin,
+           {"units": [pk_unit(1, ["张三"]), pk_unit(pk_node, ["李四"])]})
+    api_ok("草稿覆盖再存(幂等)", "PUT", "/api/target/pk/events/%s/draft" % ev1, tok_admin,
+           {"units": [pk_unit(1, ["张三"]), pk_unit(pk_node, ["李四"])]})
+    pub = api_ok("发布草稿落行(清草稿)", "POST", "/api/target/pk/events/%s/publish" % ev1, tok_admin)
+    step("发布落行 2 单元", pub == 2, pub)
+    ev1_d = api_ok("全景回读(草稿已清)", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    step("草稿清空+双单元在位", ev1_d and ev1_d.get("hasDraft") is False
+         and ev1_d.get("unitCount") == 2, ev1_d and {k: ev1_d.get(k) for k in ("hasDraft", "unitCount")})
+    api_err("空草稿再发布拒绝 370115", "POST", "/api/target/pk/events/%s/publish" % ev1, tok_admin, None, 370115)
+    api_err("节点不存在 370104", "PUT", "/api/target/pk/events/%s/units/999999" % ev1, tok_admin,
+            {**pk_unit(999999, []), "guarantee": 1}, 370104)
+    api_err("模板金额非法 370105", "PUT", "/api/target/pk/events/%s/units/1" % ev1, tok_admin,
+            {**pk_unit(1, ["张三"]), "guarantee": 0}, 370105)
+    api_ok("单行 upsert(补参赛人)", "PUT", "/api/target/pk/events/%s/units/%s" % (ev1, pk_node),
+           tok_admin, {**pk_unit(pk_node, ["李四"]), "staffs": ["李四", "王五"]})
+    ev1_d = api_ok("单行生效回读", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    u2_row = next((u for u in (ev1_d or {}).get("units", []) if u["org_node"] == pk_node), {})
+    step("单行 staffs 更新生效", u2_row.get("staffs") == '["李四","王五"]', u2_row.get("staffs"))
+
+    api_ok("锁档单元1(冲刺档)", "POST", "/api/target/pk/events/%s/units/1/lock" % ev1, tok_admin,
+           {"tier": 3})
+    ev1_d = api_ok("锁档后全景", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    u1_row = next((u for u in (ev1_d or {}).get("units", []) if u["org_node"] == 1), {})
+    step("首次锁档翻对赌中+目标=档位直配+奖金=PK金×3",
+         ev1_d and ev1_d.get("status") == 1 and u1_row.get("selected_tier") == 3
+         and u1_row.get("target_amount") == 200000000
+         and u1_row.get("bonus_amount") == 30000000,
+         ev1_d and {"status": ev1_d.get("status"), "t": u1_row.get("target_amount"),
+                    "b": u1_row.get("bonus_amount")})
+    api_err("已锁档改模板拒 370113", "PUT", "/api/target/pk/events/%s/units/1" % ev1, tok_admin,
+            pk_unit(1, ["张三"]), 370113)
+    api_ok("重锁换档(突破档)", "POST", "/api/target/pk/events/%s/units/1/lock" % ev1, tok_admin,
+           {"tier": 4})
+    api_err("未锁档解锁拒 370107", "POST", "/api/target/pk/events/%s/units/%s/unlock" % (ev1, pk_node),
+            tok_admin, None, 370107)
+    api_ok("锁档单元2(全自定义)", "POST", "/api/target/pk/events/%s/units/%s/lock" % (ev1, pk_node),
+           tok_admin, {"customTarget": 150000000, "customBonus": 5000000})
+    ev1_d = api_ok("自定义锁档回读", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    u2_row = next((u for u in (ev1_d or {}).get("units", []) if u["org_node"] == pk_node), {})
+    step("自定义目标/奖金在位", u2_row.get("target_amount") == 150000000
+         and u2_row.get("bonus_amount") == 5000000, u2_row)
+    api_ok("解锁单元2", "POST", "/api/target/pk/events/%s/units/%s/unlock" % (ev1, pk_node), tok_admin)
+    ev1_d = api_ok("解锁后回读", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    u2_row = next((u for u in (ev1_d or {}).get("units", []) if u["org_node"] == pk_node), {})
+    step("解锁清空锁档族", u2_row.get("selected_tier") is None and u2_row.get("target_amount") is None, u2_row)
+    api_err("重复解锁拒 370107", "POST", "/api/target/pk/events/%s/units/%s/unlock" % (ev1, pk_node),
+            tok_admin, None, 370107)
+    api_ok("重锁单元2(保底档)", "POST", "/api/target/pk/events/%s/units/%s/lock" % (ev1, pk_node),
+           tok_admin, {"tier": 2})
+    api_err("对赌中存草稿拒 370102", "PUT", "/api/target/pk/events/%s/draft" % ev1, tok_admin,
+            {"units": [pk_unit(1, ["张三"])]}, 370102)
+
+    api_ok("重置(清锁档回筹备,模板保留)", "POST", "/api/target/pk/events/%s/reset" % ev1, tok_admin)
+    ev1_d = api_ok("重置后回读", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    step("重置:状态回 0+双模板在位+零锁档", ev1_d and ev1_d.get("status") == 0
+         and ev1_d.get("unitCount") == 2 and ev1_d.get("lockedCount") == 0,
+         ev1_d and {"s": ev1_d.get("status"), "u": ev1_d.get("unitCount"),
+                    "l": ev1_d.get("lockedCount")})
+    api_err("筹备态确认拒 370102", "POST", "/api/target/pk/events/%s/confirm" % ev1, tok_admin, None, 370102)
+    api_ok("再锁单元1(冲刺档)", "POST", "/api/target/pk/events/%s/units/1/lock" % ev1, tok_admin,
+           {"tier": 3})
+    api_ok("解锁单元1(制造对赌中零锁档)", "POST", "/api/target/pk/events/%s/units/1/unlock" % ev1, tok_admin)
+    api_err("零锁档确认拒 370106", "POST", "/api/target/pk/events/%s/confirm" % ev1, tok_admin, None, 370106)
+    api_ok("锁单元1(冲刺档)", "POST", "/api/target/pk/events/%s/units/1/lock" % ev1, tok_admin, {"tier": 3})
+    api_ok("锁单元2(保底档)", "POST", "/api/target/pk/events/%s/units/%s/lock" % (ev1, pk_node),
+           tok_admin, {"tier": 2})
+    ev1_d = api_ok("开赛前全景(承诺额/奖金池聚合)", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    step("承诺额=30万+奖金池=5万(查询聚合)", ev1_d and ev1_d.get("commitment") == 300000000
+         and ev1_d.get("bonusPool") == 50000000,
+         ev1_d and {"c": ev1_d.get("commitment"), "p": ev1_d.get("bonusPool")})
+    api_ok("确认开赛", "POST", "/api/target/pk/events/%s/confirm" % ev1, tok_admin)
+    api_err("进行中锁档拒 370108", "POST", "/api/target/pk/events/%s/units/1/lock" % ev1, tok_admin,
+            {"tier": 5}, 370108)
+    ev1_d = api_ok("进行中全景(分区节点自动实绩恒0诚实口径)", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    u2_row = next((u for u in (ev1_d or {}).get("units", []) if u["org_node"] == pk_node), {})
+    step("分区自动实绩=0+来源=自动", u2_row.get("final_amount") == 0
+         and u2_row.get("performance_source") == 1, u2_row)
+    api_err("手工实绩未启用 370110", "PUT", "/api/target/pk/events/%s/units/1/manual" % ev1, tok_admin,
+            {"performance": 1}, 370110)
+    api_ok("录手工实绩(分区/12.3456万)", "PUT", "/api/target/pk/events/%s/units/%s/manual" % (ev1, pk_node),
+           tok_admin, {"performance": 123456000, "remark": "烟测手工口径"})
+    ev1_d = api_ok("手工实绩实时生效", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    u2_row = next((u for u in (ev1_d or {}).get("units", []) if u["org_node"] == pk_node), {})
+    step("手工实绩=12.3456万+来源=手工", u2_row.get("final_amount") == 123456000
+         and u2_row.get("performance_source") == 2, u2_row)
+    api_err("进行中作废拒 370102", "POST", "/api/target/pk/events/%s/void" % ev1, tok_admin,
+            {"reason": "冒烟"}, 370102)
+
+    # 归档链:confirm 已挂明日 03:00 计划(biz_key 按日幂等);另提即时计划驱动归档
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select count(*) from yz_plan where handler = 'target-pk-archive' "
+                        "and biz_key like %s and status in (0, 2)",
+                        ("target-pk-archive-1-%%",))
+            chain_cnt = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("确认开赛已挂归档链计划", chain_cnt >= 1, chain_cnt)
+    pk_pid = api_ok("提交即时归档计划", "POST", "/api/plans", tok_admin,
+                    {"handler": "target-pk-archive", "bizKey": "smoke-pk-" + stamp, "maxRetries": 1})
+    pk_plan = None
+    for _ in range(10):
+        time.sleep(1)
+        pk_plan = api_ok("归档计划详情", "GET", "/api/plans/%s" % pk_pid, tok_admin)
+        if (pk_plan or {}).get("status") in (1, 3):
+            break
+    step("即时归档成功(result 带摘要)", (pk_plan or {}).get("status") == 1
+         and "archived=" in str((pk_plan or {}).get("result")), pk_plan)
+
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select coalesce(sum(b.amount), 0) from payment_bill b
+                where b.biz_addon = 'decoration' and b.biz_type = 'order'
+                  and b.direction = 0 and b.status != 4
+                  and b.biz_id in (
+                    select cast(id as char) from decoration_order
+                    where org_id = 1 and status in (3, 4, 7, 8)
+                      and date_format(contract_time, %s) = %s)
+            """, ("%Y-%m", pk_period))
+            pk_expected = cur.fetchone()[0]
+    finally:
+        conn.close()
+    ev1_d = api_ok("归档后全景(读快照)", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+    step("赛事置已归档", ev1_d and ev1_d.get("status") == 3, ev1_d and ev1_d.get("status"))
+    u1_row = next((u for u in (ev1_d or {}).get("units", []) if u["org_node"] == 1), {})
+    step("单元1快照终值=DB 同口径(自动聚合)", u1_row.get("final_amount") == pk_expected
+         and u1_row.get("performance_source") == 1,
+         {"final": u1_row.get("final_amount"), "expected": pk_expected})
+    pk_snaps = api_ok("归档快照列表", "GET", "/api/target/pk/events/%s/snapshots" % ev1, tok_admin)
+    _s1 = next((s for s in (pk_snaps or []) if s["org_node"] == 1), {})
+    _s2 = next((s for s in (pk_snaps or []) if s["org_node"] == pk_node), {})
+    step("快照两行:手工行冻结+SHA256 指纹", len(pk_snaps or []) == 2
+         and _s2.get("final_amount") == 123456000 and _s2.get("performance_source") == 2
+         and len(str(_s1.get("snapshot_hash") or "")) == 64,
+         {"n": len(pk_snaps or []), "s2": _s2.get("final_amount"), "h": _s1.get("snapshot_hash")})
+    api_err("归档后录实绩拒 370109", "PUT", "/api/target/pk/events/%s/units/%s/manual" % (ev1, pk_node),
+            tok_admin, {"performance": 1}, 370109)
+    api_err("归档后锁档拒 370108", "POST", "/api/target/pk/events/%s/units/1/lock" % ev1, tok_admin,
+            {"tier": 2}, 370108)
+    api_ok("读快照与全景一致", "GET", "/api/target/pk/events/%s" % ev1, tok_admin)
+
+    ev2 = api_ok("复制上一届开新赛(本期)", "POST", "/api/target/pk/events/%s/copy" % ev1, tok_admin,
+                 {"cycleType": 1, "period": _ym_pk, "name": "签约对赌赛" + _ym_pk,
+                  "startDate": _ym_pk + "-01", "endDate": _cur_end})
+    ev2_d = api_ok("复制件回读", "GET", "/api/target/pk/events/%s" % ev2, tok_admin)
+    step("复制=筹备态+模板继承+锁档清零", ev2_d and ev2_d.get("status") == 0
+         and ev2_d.get("unitCount") == 2 and ev2_d.get("lockedCount") == 0,
+         ev2_d and {"s": ev2_d.get("status"), "u": ev2_d.get("unitCount")})
+    api_err("复制撞同期 370103", "POST", "/api/target/pk/events/%s/copy" % ev1, tok_admin,
+            {"cycleType": 1, "period": _ym_pk, "name": "重复", "startDate": _ym_pk + "-01",
+             "endDate": _cur_end}, 370103)
+    api_ok("筹备态删模板行", "DELETE", "/api/target/pk/events/%s/units/%s" % (ev2, pk_node), tok_admin)
+    ev2_d = api_ok("删除后回读单单元", "GET", "/api/target/pk/events/%s" % ev2, tok_admin)
+    step("复制件仅剩单元1", ev2_d and ev2_d.get("unitCount") == 1, ev2_d and ev2_d.get("unitCount"))
+    api_ok("作废复制件(终态留痕兼清理)", "POST", "/api/target/pk/events/%s/void" % ev2, tok_admin,
+           {"reason": "冒烟收尾作废"})
+    ev2_d = api_ok("作废后回读", "GET", "/api/target/pk/events/%s" % ev2, tok_admin)
+    step("作废终态+原因留痕", ev2_d and ev2_d.get("status") == 4
+         and ev2_d.get("void_reason") == "冒烟收尾作废", ev2_d and ev2_d.get("status"))
+
     return finish()
 
 

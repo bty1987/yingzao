@@ -1,6 +1,6 @@
 # PRD - addon-target PK 对赌子域(绩效 PK 体系,精简版)
 
-> 状态:**草案**(2026-10-27 第 93 次运行起草,**待业务方确认;拍板前不写码**——L1 PRD 纪律,同 addon-quotation-norm/addon-balance-margin/addon-sales-oales 先例)
+> 状态:**已实现**(2026-10-27 第 93 次起草;2026-10-30 第 102 次按推荐拍板落地——用户既有拍板「后续无特殊说明一律按推荐」延续,六项开放问题全按推荐兑现;冒烟 2456/2456+enforce 101/101 全绿)
 > 老系统参考:**fl-yy 快照(D:\Git\fl-yy,2026-10-20)PerformancePk 域 12 Controller 全量考证**(本文回溯指针在档;fl-yy 域无 rules 文件,考证事实随 PRD);BattleBoard 域 14 Controller 考证作划界依据;docs/07 §2.2/2.3 为二级摘要
 > 归属:推荐 **addon-target V2 子域**(开放问题 1)——PK=经营目标的对赌动作面,与 target_plan 同口径同契约
 > 本子域声明:错误码 **370100–370150 小段**(target 370000 段内,370001–370010 已占用,沿 quotation 231200/sales 300100/balance 320100 子段先例);迁移 **V1703+**;表前缀 `target_pk_`(对齐 target_plan/target_stage,军规 3)
