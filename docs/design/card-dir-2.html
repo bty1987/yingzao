@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向二 · 原生名片工具 — 匿名名片页初稿(营造 C 端)</title>
+<style>
+  /* ============ 展示板(非页面本体) ============ */
+  :root{
+    --paper:#FAF9F5; --paper-deep:#F1EFE8; --ink:#1A1A18;
+    --ink70:rgba(26,26,24,.70); --ink50:rgba(26,26,24,.50); --ink35:rgba(26,26,24,.35);
+    --line:rgba(26,26,24,.12); --line-strong:rgba(26,26,24,.55);
+    --seal:#B03A2E; --ink-soft:rgba(26,26,24,.62); --moss:#5A7247;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#20241F;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px}
+  .board-head h1{font-family:'Songti SC','SimSun','Noto Serif SC',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:12px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.75);font-size:14px;margin-bottom:28px;line-height:1.8}
+  .board-sub b{color:#FAF9F5;font-weight:600}
+  .stage{display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap}
+  .note{max-width:340px;color:rgba(250,249,245,.78);font-size:14px;line-height:2}
+  .note h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:10px}
+  .note p{margin-bottom:10px}
+  .note .k{color:#B7C4A8}
+
+  /* ============ 手机(H5 语境:无设备框,390×844 即 uni-app H5 视口) ============ */
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .screen{height:100%;overflow-y:auto;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+
+  /* ============ 工具名片页本体 ============ */
+  .head{padding:40px 24px 0;text-align:center}
+  .avatar{width:88px;height:88px;background:var(--seal);color:var(--paper);display:flex;align-items:center;
+    justify-content:center;font-family:'Songti SC','SimSun',serif;font-size:42px;margin:0 auto 14px}
+  .nm{font-family:'Songti SC','SimSun',serif;font-size:26px;letter-spacing:5px;color:var(--ink)}
+  .role{font-size:14px;color:var(--ink-soft);margin-top:7px;letter-spacing:1px}
+
+  .acts{display:flex;gap:8px;padding:18px 24px 0}
+  .acts a,.acts button{flex:1;font-size:14px;letter-spacing:2px;padding:11px 0;cursor:pointer;
+    font-family:inherit;border-radius:0;text-align:center;text-decoration:none}
+  .acts .call{background:var(--ink);color:var(--paper);border:1px solid var(--ink)}
+  .acts .ghost{background:var(--paper);color:var(--ink);border:1px solid var(--ink)}
+
+  .grp{padding:6px 24px 0}
+  .grp .row{display:flex;justify-content:space-between;font-size:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .grp .row .k{color:var(--ink-soft);letter-spacing:2px}
+  .grp .row .v{color:var(--ink)}
+
+  .sec{padding:22px 24px 0}
+  .sec .t{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+  .sec .t .tt{font-family:'Songti SC','SimSun',serif;font-size:16px;letter-spacing:4px;color:var(--ink)}
+  .sec .t .s{font-size:12px;color:var(--ink-soft)}
+  .works{border-top:1px solid var(--line)}
+  .wrow{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .wrow .img{width:96px;height:70px;flex-shrink:0;position:relative}
+  .wrow .img i{position:absolute;left:4px;top:4px;font-size:12px;color:#fff;letter-spacing:1px;font-style:normal;
+    text-shadow:0 0 6px rgba(26,26,24,.6)}
+  .wrow .wt{flex:1;min-width:0}
+  .wrow .wt .t{font-size:15px;color:var(--ink);letter-spacing:1px}
+  .wrow .wt .d{font-size:14px;color:var(--ink-soft);margin-top:4px}
+  .wrow .chev{color:var(--ink-soft);font-size:16px;flex-shrink:0}
+  .g1{background:linear-gradient(160deg,#D8D2C4,#B9AE97 60%,#8F8468)}
+  .g2{background:linear-gradient(160deg,#EDE4D3,#CFC0A4 60%,#A8946E)}
+  .g3{background:linear-gradient(160deg,#C9BFA9,#8E8468 60%,#5C553F)}
+  .g4{background:linear-gradient(160deg,#B4ACA0,#7E786C 60%,#4A463D)}
+  .g5{background:linear-gradient(160deg,#D9CFBE,#AE9F83 60%,#77694E)}
+  .g6{background:linear-gradient(160deg,#CFC8B6,#9C9478 60%,#615842)}
+
+  .brief{padding:20px 24px 130px;font-size:14px;line-height:1.9;color:var(--ink70)}
+
+  /* 底部固定主按钮 */
+  .cta{position:absolute;left:0;right:0;bottom:0;background:var(--seal);color:var(--paper);border:none;
+    font-size:15px;letter-spacing:8px;padding:16px 0 16px 8px;cursor:pointer;font-family:inherit;z-index:20}
+  .cta:active{background:var(--seal-deep,#9E2B25)}
+
+  /* 留言 bottom-sheet */
+  .mask{position:absolute;inset:0;background:rgba(26,26,24,.45);opacity:0;pointer-events:none;transition:opacity .25s;z-index:28}
+  .mask.on{opacity:1;pointer-events:auto}
+  .sheet{position:absolute;left:0;right:0;bottom:-100%;background:var(--paper);border-top:1px solid var(--ink);
+    padding:22px 24px 26px;transition:bottom .3s ease;z-index:29}
+  .sheet.on{bottom:0}
+  .sheet .grab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .sheet .grab .t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:4px;color:var(--ink)}
+  .sheet .grab .close{font-size:13px;color:var(--ink-soft);cursor:pointer;letter-spacing:1px}
+  .sheet .field{margin-top:13px}
+  .sheet label{display:block;font-size:12px;letter-spacing:2px;color:var(--ink-soft);margin-bottom:2px}
+  .sheet input,.sheet textarea{width:100%;border:none;border-bottom:1px solid var(--line-strong);
+    background:transparent;font-size:14px;color:var(--ink);padding:7px 0;outline:none;border-radius:0;font-family:inherit}
+  .sheet textarea{height:48px;resize:none;line-height:1.7}
+  .sheet input:focus,.sheet textarea:focus{border-bottom-color:var(--seal)}
+  .sheet .submit{width:100%;margin-top:18px;background:var(--ink);color:var(--paper);border:none;
+    font-size:15px;letter-spacing:8px;padding:13px 0 13px 8px;cursor:pointer;font-family:inherit;border-radius:0}
+  .sheet .privacy{font-size:12px;color:var(--ink-soft);margin-top:10px;text-align:center;letter-spacing:1px}
+
+  /* 大图查看 */
+  .lightbox{position:absolute;inset:0;background:rgba(26,26,24,.92);display:none;align-items:center;
+    justify-content:center;flex-direction:column;z-index:30}
+  .lightbox.on{display:flex}
+  .lightbox .big{width:330px;height:330px}
+  .lightbox .cap{color:rgba(250,249,245,.85);font-size:13px;letter-spacing:2px;margin-top:14px}
+  .lightbox .hint{color:rgba(250,249,245,.4);font-size:12px;margin-top:8px}
+
+  /* toast */
+  .toast{position:absolute;left:50%;top:110px;transform:translate(-50%,0);background:rgba(26,26,24,.92);
+    color:var(--paper);font-size:14px;letter-spacing:1px;padding:12px 22px;border-radius:2px;opacity:0;
+    transition:opacity .25s;pointer-events:none;z-index:40;max-width:300px;text-align:center;line-height:1.7}
+  .toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>方向二 · 原生名片工具</h1>
+  <span class="en">DIRECTION 2 · NATIVE CONTACT CARD</span>
+</div>
+<div class="board-sub"><b>逻辑:现实参照|iOS 通讯录名片页(记忆归纳,未截图)</b> · 功能优先——头像焦点、三键动作行常驻、信息分组、留言 bottom-sheet;胆量=访客 3 秒内可拨号/复制/留言,装饰退到最低。<b>form 来自</b>数字名片的原型=通讯录。</div>
+<div class="stage">
+  <div class="phone">
+    <div class="screen">
+      <div class="head">
+        <div class="avatar">沈</div>
+        <div class="nm">沈知远</div>
+        <div class="role">资深装修顾问|住宅装修</div>
+      </div>
+
+      <div class="acts">
+        <a class="call" href="tel:13800008888">拨打电话</a>
+        <button class="ghost" id="btn-wechat">复制微信</button>
+        <button class="ghost" id="btn-sheet">留言</button>
+      </div>
+
+      <div class="grp">
+        <div class="row"><span class="k">从业</span><span class="v">十二年</span></div>
+        <div class="row"><span class="k">微信</span><span class="v">yz-shenzhiyuan</span></div>
+        <div class="row"><span class="k">城市</span><span class="v">沈阳市 · 和平区</span></div>
+        <div class="row"><span class="k">范围</span><span class="v">沈阳及周边</span></div>
+      </div>
+
+      <div class="sec">
+        <div class="t"><span class="tt">近作</span><span class="s">点击查看</span></div>
+        <div class="works">
+          <div class="wrow" data-cap="原木两居 · 已交付"><div class="img g1"><i>照片位</i></div>
+            <div class="wt"><div class="t">原木两居</div><div class="d">已交付 · 62㎡</div></div><div class="chev">›</div></div>
+          <div class="wrow" data-cap="奶油三居 · 施工中"><div class="img g2"><i>照片位</i></div>
+            <div class="wt"><div class="t">奶油三居</div><div class="d">施工中 · 可约看工地</div></div><div class="chev">›</div></div>
+        </div>
+      </div>
+
+      <p class="brief">老房翻新与全案装修。先看工地,再谈合同;报价单逐项可核对。</p>
+    </div>
+
+    <button class="cta" id="btn-cta">我要留言</button>
+
+    <div class="mask" id="mask"></div>
+    <div class="sheet" id="sheet">
+      <div class="grab"><span class="t">留给沈知远</span><span class="close" id="btn-close">关闭</span></div>
+      <div class="field"><label>姓名</label><input id="f-name" type="text" placeholder="怎么称呼您"></div>
+      <div class="field"><label>电话</label><input id="f-phone" type="tel" maxlength="11" placeholder="11 位手机号"></div>
+      <div class="field"><label>留言(选填)</label><textarea id="f-cmt" placeholder="想了解什么,写在这里"></textarea></div>
+      <button class="submit" id="f-submit">提 交</button>
+      <div class="privacy">手机号仅用于顾问跟进联系</div>
+    </div>
+
+    <div class="lightbox" id="lightbox">
+      <div class="big g1" id="lb-img"></div>
+      <div class="cap" id="lb-cap"></div>
+      <div class="hint">点击任意处关闭</div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="note">
+    <h3>方向卡摘要</h3>
+    <p><span class="k">借的:</span>头像居中为唯一焦点;动作行常驻(拨号/复制/留言);信息按组留白分行;表单 bottom-sheet 呼出。</p>
+    <p><span class="k">主角:</span>朱印字头像+案例列表行。</p>
+    <p><span class="k">骨架:</span>头像区→三键动作行→信息组→案例列表→底部固定「我要留言」。</p>
+    <p><span class="k">胆量:</span>把「工具效率」做到极致——3 秒可联系,装饰退到最低。</p>
+    <p><span class="k">交互:</span>三键动作 / 相册大图 / 留言抽屉(成功/幂等/频次三态)。</p>
+    <p><span class="k">form:</span>名片页的本职是「联系」——通讯录是数字名片的原型。</p>
+  </div>
+</div>
+
+<script>
+  var toastTimer=null;
+  function toast(msg){
+    var t=document.getElementById('toast');
+    t.textContent=msg;t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){t.classList.remove('on')},2200);
+  }
+  var shots=document.querySelectorAll('.wrow');
+  var lightbox=document.getElementById('lightbox');
+  var lbImg=document.getElementById('lb-img');
+  var lbCap=document.getElementById('lb-cap');
+  shots.forEach(function(s){
+    s.addEventListener('click',function(){
+      lbImg.className='big '+s.querySelector('.img').className.replace('img ','');
+      lbCap.textContent=s.getAttribute('data-cap');
+      lightbox.classList.add('on');
+    });
+  });
+  lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
+  document.getElementById('btn-wechat').addEventListener('click',function(){
+    var wx='yz-shenzhiyuan';
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(wx).then(function(){toast('微信号已复制')},function(){toast('微信号 yz-shenzhiyuan')});}
+    else{toast('微信号 yz-shenzhiyuan')}
+  });
+  var mask=document.getElementById('mask'),sheet=document.getElementById('sheet');
+  function openSheet(){mask.classList.add('on');sheet.classList.add('on')}
+  function closeSheet(){mask.classList.remove('on');sheet.classList.remove('on')}
+  document.getElementById('btn-sheet').addEventListener('click',openSheet);
+  document.getElementById('btn-cta').addEventListener('click',openSheet);
+  document.getElementById('btn-close').addEventListener('click',closeSheet);
+  mask.addEventListener('click',closeSheet);
+  var lastPhone=null, lastAt=0;
+  document.getElementById('f-submit').addEventListener('click',function(){
+    var name=document.getElementById('f-name').value.trim();
+    var phone=document.getElementById('f-phone').value.trim();
+    var cmt=document.getElementById('f-cmt').value;
+    if(!name){toast('请填写称呼');return;}
+    if(!/^1\d{10}$/.test(phone)){toast('请填写 11 位手机号');return;}
+    if(cmt.length>500){toast('留言最多 500 字');return;}
+    var now=Date.now();
+    if(lastPhone===phone && now-lastAt<60000){toast('提交太频繁,请稍后再试');return;}
+    if(lastPhone===phone){toast('您已留过资,顾问会尽快联系您');return;}
+    lastPhone=phone;lastAt=now;
+    toast('留资成功,沈知远会尽快联系您');
+    document.getElementById('f-name').value='';document.getElementById('f-phone').value='';document.getElementById('f-cmt').value='';
+    setTimeout(closeSheet,600);
+  });
+</script>
+</body>
+</html>

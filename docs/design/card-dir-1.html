@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向一 · 名帖双框 — 匿名名片页初稿(营造 C 端)</title>
+<style>
+  /* ============ 展示板(非页面本体) ============ */
+  :root{
+    --paper:#FAF9F5; --paper-deep:#F1EFE8; --ink:#1A1A18;
+    --ink70:rgba(26,26,24,.70); --ink50:rgba(26,26,24,.50); --ink35:rgba(26,26,24,.35);
+    --line:rgba(26,26,24,.12); --line-strong:rgba(26,26,24,.55);
+    --seal:#B03A2E; --ink-soft:rgba(26,26,24,.62); --moss:#5A7247;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#242320;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px}
+  .board-head h1{font-family:'Songti SC','SimSun','Noto Serif SC',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:12px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.75);font-size:14px;margin-bottom:28px;line-height:1.8}
+  .board-sub b{color:#FAF9F5;font-weight:600}
+  .stage{display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap}
+  .note{max-width:340px;color:rgba(250,249,245,.78);font-size:14px;line-height:2}
+  .note h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:10px}
+  .note p{margin-bottom:10px}
+  .note .k{color:#D8A08F}
+
+  /* ============ 手机(H5 语境:无设备框,390×844 即 uni-app H5 视口) ============ */
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .screen{height:100%;overflow-y:auto;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+
+  /* ============ 名帖页本体 ============ */
+  .page{padding:18px 16px 108px}
+  .frame{border:2px solid var(--ink);padding:4px;background:var(--paper)}
+  .inner{border:1px solid var(--line-strong);padding:30px 22px 26px;position:relative}
+
+  .head-row{display:flex;gap:16px;align-items:flex-start}
+  .avatar{width:64px;height:64px;background:var(--seal);color:var(--paper);display:flex;align-items:center;
+    justify-content:center;font-family:'Songti SC','SimSun',serif;font-size:32px;flex-shrink:0}
+  .who .nm{font-family:'Songti SC','SimSun',serif;font-size:30px;letter-spacing:8px;color:var(--ink);line-height:1.2}
+  .who .role{font-size:14px;color:var(--ink70);margin-top:8px;letter-spacing:1px}
+  .who .en{font-size:12px;letter-spacing:4px;color:var(--ink-soft);margin-top:5px}
+
+  .rule{border-top:1px solid var(--line);margin:20px 0 14px}
+  .rule.strong{border-top:1px solid var(--ink)}
+
+  .kv{display:flex;font-size:14px;line-height:2.3}
+  .kv .k{width:76px;color:var(--ink-soft);letter-spacing:2px;flex-shrink:0}
+  .kv .v{color:var(--ink);flex:1}
+
+  .intro{font-family:'Songti SC','SimSun',serif;font-size:15px;line-height:2;color:var(--ink);padding:2px 0 0}
+
+  .sec-t{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+  .sec-t .t{font-family:'Songti SC','SimSun',serif;font-size:16px;letter-spacing:6px;color:var(--ink)}
+  .sec-t .s{font-size:12px;color:var(--ink-soft);letter-spacing:1px}
+
+  .album{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -2px;padding-bottom:4px}
+  .album::-webkit-scrollbar{display:none}
+  .shot{width:132px;height:96px;flex-shrink:0;cursor:pointer;position:relative}
+  .shot .img{width:100%;height:100%;display:block}
+  .shot .tag{position:absolute;left:0;right:0;bottom:0;font-size:12px;color:#fff;padding:14px 6px 4px;
+    background:linear-gradient(transparent,rgba(26,26,24,.55));letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .g1{background:linear-gradient(160deg,#D8D2C4,#B9AE97 60%,#8F8468)}
+  .g2{background:linear-gradient(160deg,#EDE4D3,#CFC0A4 60%,#A8946E)}
+  .g3{background:linear-gradient(160deg,#C9BFA9,#8E8468 60%,#5C553F)}
+  .g4{background:linear-gradient(160deg,#B4ACA0,#7E786C 60%,#4A463D)}
+  .g5{background:linear-gradient(160deg,#D9CFBE,#AE9F83 60%,#77694E)}
+  .g6{background:linear-gradient(160deg,#CFC8B6,#9C9478 60%,#615842)}
+
+  /* 留言笺 */
+  .sheet-form .field{margin-top:14px}
+  .sheet-form label{display:block;font-size:12px;letter-spacing:2px;color:var(--ink-soft);margin-bottom:2px}
+  .sheet-form input,.sheet-form textarea{width:100%;border:none;border-bottom:1px solid var(--line-strong);
+    background:transparent;font-size:14px;color:var(--ink);padding:7px 0;outline:none;border-radius:0;font-family:inherit}
+  .sheet-form textarea{height:52px;resize:none;line-height:1.7}
+  .sheet-form input:focus,.sheet-form textarea:focus{border-bottom-color:var(--seal)}
+  .submit{width:100%;margin-top:18px;background:var(--ink);color:var(--paper);border:none;
+    font-size:15px;letter-spacing:8px;padding:13px 0 13px 8px;cursor:pointer;font-family:inherit}
+  .submit:active{background:#000}
+  .privacy{font-size:12px;color:var(--ink-soft);margin-top:10px;text-align:center;letter-spacing:1px}
+
+  .foot{display:flex;justify-content:space-between;align-items:flex-end;margin-top:26px}
+  .foot .motto{font-family:'Songti SC','SimSun',serif;font-size:13px;color:var(--ink-soft);letter-spacing:3px}
+  .foot .seal-end{width:26px;height:26px;background:var(--seal);color:var(--paper);display:flex;align-items:center;
+    justify-content:center;font-family:'Songti SC','SimSun',serif;font-size:13px}
+
+  /* 快捷条(帖外,固定) */
+  .quick{position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;padding:12px 16px 14px;
+    background:var(--paper);border-top:1px solid var(--line);z-index:10}
+  .quick a,.quick button{flex:1;text-decoration:none;font-size:14px;letter-spacing:2px;text-align:center;
+    padding:11px 0;cursor:pointer;font-family:inherit;border-radius:0}
+  .quick .call{background:var(--ink);color:var(--paper);border:1px solid var(--ink)}
+  .quick .copy{background:var(--paper);color:var(--ink);border:1px solid var(--ink)}
+
+  /* 大图查看 */
+  .lightbox{position:absolute;inset:0;background:rgba(26,26,24,.92);display:none;align-items:center;
+    justify-content:center;flex-direction:column;z-index:30}
+  .lightbox.on{display:flex}
+  .lightbox .big{width:330px;height:330px}
+  .lightbox .cap{color:rgba(250,249,245,.85);font-size:13px;letter-spacing:2px;margin-top:14px}
+  .lightbox .hint{color:rgba(250,249,245,.4);font-size:12px;margin-top:8px;letter-spacing:1px}
+
+  /* toast */
+  .toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(26,26,24,.92);
+    color:var(--paper);font-size:14px;letter-spacing:1px;padding:12px 22px;border-radius:2px;opacity:0;
+    transition:opacity .25s;pointer-events:none;z-index:40;max-width:280px;text-align:center;line-height:1.7}
+  .toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>方向一 · 名帖双框</h1>
+  <span class="en">DIRECTION 1 · NAME-CARD FOLIO</span>
+</div>
+<div class="board-sub"><b>逻辑:最佳设计师|陈幼坚(东情西韵)</b> · 整页是一张竖式名帖——双线框锁版、宋体大字、朱印一处、信息全靠墨线与留白分组;胆量=零卡片零圆角。<b>form 来自</b>中国传统递帖见礼。</div>
+<div class="stage">
+  <div class="phone">
+    <div class="screen">
+      <div class="page">
+        <div class="frame"><div class="inner">
+          <div class="head-row">
+            <div class="avatar">沈</div>
+            <div class="who">
+              <div class="nm">沈知远</div>
+              <div class="role">资深装修顾问 · 住宅装修</div>
+              <div class="en">YINGZAO · CLIENT</div>
+            </div>
+          </div>
+
+          <div class="rule"></div>
+          <div class="kv"><span class="k">从业</span><span class="v">十二年</span></div>
+          <div class="kv"><span class="k">城市</span><span class="v">沈阳市 · 和平区</span></div>
+          <div class="kv"><span class="k">范围</span><span class="v">沈阳及周边</span></div>
+          <div class="kv"><span class="k">微信</span><span class="v">yz-shenzhiyuan</span></div>
+
+          <div class="rule"></div>
+          <p class="intro">老房翻新与全案装修。先看工地,再谈合同;报价单逐项可核对。</p>
+
+          <div class="rule"></div>
+          <div class="sec-t"><span class="t">近作</span><span class="s">点击查看</span></div>
+          <div class="album">
+            <div class="shot" data-cap="原木两居 · 已交付"><div class="img g1"></div><div class="tag">原木两居 · 已交付</div></div>
+            <div class="shot" data-cap="奶油三居 · 施工中"><div class="img g2"></div><div class="tag">奶油三居 · 施工中</div></div>
+            <div class="shot" data-cap="中古一居 · 已交付"><div class="img g3"></div><div class="tag">中古一居 · 已交付</div></div>
+            <div class="shot" data-cap="黑白灰顶楼 · 已交付"><div class="img g4"></div><div class="tag">黑白灰顶楼 · 已交付</div></div>
+            <div class="shot" data-cap="日式小屋 · 已交付"><div class="img g5"></div><div class="tag">日式小屋 · 已交付</div></div>
+            <div class="shot" data-cap="学区老房翻新 · 已交付"><div class="img g6"></div><div class="tag">学区老房翻新 · 已交付</div></div>
+          </div>
+
+          <div class="rule strong"></div>
+          <div class="sec-t"><span class="t">留资笺</span><span class="s">留下联系方式,顾问回电</span></div>
+          <div class="sheet-form" id="form">
+            <div class="field"><label>姓名</label><input id="f-name" type="text" placeholder="怎么称呼您"></div>
+            <div class="field"><label>电话</label><input id="f-phone" type="tel" maxlength="11" placeholder="11 位手机号"></div>
+            <div class="field"><label>留言(选填)</label><textarea id="f-cmt" placeholder="想了解什么,写在这里"></textarea></div>
+            <button class="submit" id="f-submit">递 出</button>
+            <div class="privacy">手机号仅用于顾问跟进联系</div>
+          </div>
+
+          <div class="foot">
+            <div class="motto">营造 · 家</div>
+            <div class="seal-end">印</div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="quick">
+      <a class="call" href="tel:13800008888">拨打电话</a>
+      <button class="copy" id="btn-wechat">复制微信</button>
+    </div>
+
+    <div class="lightbox" id="lightbox">
+      <div class="big g1" id="lb-img"></div>
+      <div class="cap" id="lb-cap"></div>
+      <div class="hint">点击任意处关闭</div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="note">
+    <h3>方向卡摘要</h3>
+    <p><span class="k">借的:</span>双线细框锁住整版;宋体大字×无衬线小字混排;一枚朱印收尾;信息分组用细墨线,不用卡片容器。</p>
+    <p><span class="k">主角:</span>朱印字头像(「沈」)+相册图位。</p>
+    <p><span class="k">骨架:</span>整页一张竖式名帖——头像+姓名大字→信息组→近作横滑→留言笺(嵌入帖尾)。</p>
+    <p><span class="k">胆量:</span>零卡片零圆角,整页只有一层「帖面」构图。</p>
+    <p><span class="k">交互:</span>相册点击看大图 / 拨打电话 / 复制微信 / 留资表单(提交后可重放:重复电话=幂等回显,频次限制=委婉拒)。</p>
+    <p><span class="k">form:</span>名片即「帖」——递帖见礼的当代转译。</p>
+  </div>
+</div>
+
+<script>
+  // toast
+  var toastTimer=null;
+  function toast(msg){
+    var t=document.getElementById('toast');
+    t.textContent=msg;t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){t.classList.remove('on')},2200);
+  }
+  // 相册大图
+  var shots=document.querySelectorAll('.shot');
+  var lightbox=document.getElementById('lightbox');
+  var lbImg=document.getElementById('lb-img');
+  var lbCap=document.getElementById('lb-cap');
+  shots.forEach(function(s){
+    s.addEventListener('click',function(){
+      lbImg.className='big '+s.querySelector('.img').className.replace('img ','');
+      lbCap.textContent=s.getAttribute('data-cap');
+      lightbox.classList.add('on');
+    });
+  });
+  lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
+  // 复制微信
+  document.getElementById('btn-wechat').addEventListener('click',function(){
+    var wx='yz-shenzhiyuan';
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(wx).then(function(){toast('微信号已复制')},function(){toast('微信号 yz-shenzhiyuan')});}
+    else{toast('微信号 yz-shenzhiyuan')}
+  });
+  // 留资(模拟后端契约:成功/幂等回显/频次防刷)
+  var lastPhone=null, lastAt=0;
+  document.getElementById('f-submit').addEventListener('click',function(){
+    var name=document.getElementById('f-name').value.trim();
+    var phone=document.getElementById('f-phone').value.trim();
+    var cmt=document.getElementById('f-cmt').value;
+    if(!name){toast('请填写称呼');return;}
+    if(!/^1\d{10}$/.test(phone)){toast('请填写 11 位手机号');return;}
+    if(cmt.length>500){toast('留言最多 500 字');return;}
+    var now=Date.now();
+    if(lastPhone===phone && now-lastAt<60000){toast('提交太频繁,请稍后再试');return;}
+    if(lastPhone===phone){toast('您已留过资,顾问会尽快联系您');return;}
+    lastPhone=phone;lastAt=now;
+    toast('留资成功,沈知远会尽快联系您');
+    document.getElementById('f-name').value='';document.getElementById('f-phone').value='';document.getElementById('f-cmt').value='';
+  });
+</script>
+</body>
+</html>

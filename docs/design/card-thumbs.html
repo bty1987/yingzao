@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>匿名名片页 · 六候选缩略图(营造 C 端)</title>
+<style>
+  :root{
+    --paper:#FAF9F5; --paper-deep:#F1EFE8; --ink:#1A1A18; --ink70:rgba(26,26,24,.7);
+    --ink50:rgba(26,26,24,.5); --ink35:rgba(26,26,24,.35); --line:rgba(26,26,24,.12);
+    --seal:#B03A2E; --moss:#5A7247;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#2E2C28;padding:40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  h1{font-family:'Songti SC','SimSun','Noto Serif SC',serif;color:var(--paper);font-size:22px;margin-bottom:6px}
+  .sub{color:rgba(250,249,245,.5);font-size:12px;letter-spacing:2px;margin-bottom:32px}
+  .grid{display:grid;grid-template-columns:repeat(3,300px);gap:36px 28px}
+  .cell .tag{color:rgba(250,249,245,.75);font-size:12px;margin-bottom:8px}
+  .cell .tag b{font-family:'Songti SC','SimSun',serif;font-size:14px;color:#fff;margin-right:6px}
+  .phone{width:270px;height:585px;background:var(--paper);border:1px solid rgba(0,0,0,.5);border-radius:2px;
+    overflow:hidden;position:relative;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+  .ph{color:var(--ink35);font-size:10px;letter-spacing:2px;display:flex;align-items:center;justify-content:center}
+  .seal{background:var(--seal);color:var(--paper);display:flex;align-items:center;justify-content:center;
+    font-family:'Songti SC','SimSun',serif;flex-shrink:0}
+
+  /* C1 名帖双框 */
+  .c1{padding:18px 16px}
+  .c1 .frame{border:2px solid var(--ink);padding:3px;height:100%}
+  .c1 .inner{border:1px solid var(--line-strong,#8d8a80);height:100%;padding:22px 16px;position:relative}
+  .c1 .row1{display:flex;gap:14px;align-items:flex-start}
+  .c1 .seal{width:52px;height:52px;font-size:26px}
+  .c1 .nm{font-size:26px;letter-spacing:6px;color:var(--ink)}
+  .c1 .rf{font-size:10px;letter-spacing:3px;color:var(--ink50);margin-top:6px}
+  .c1 .ln{border-top:1px solid var(--line);margin:16px 0 12px}
+  .c1 .info{font-size:10.5px;color:var(--ink70);line-height:2}
+  .c1 .alb{display:flex;gap:6px;margin-top:14px}
+  .c1 .alb i{width:64px;height:46px;background:var(--paper-deep);border:1px solid var(--line);display:block}
+  .c1 .form-t{font-size:10px;letter-spacing:2px;color:var(--ink50);margin-top:14px}
+  .c1 .fin{position:absolute;bottom:10px;right:12px;width:20px;height:20px;font-size:11px}
+
+  /* C2 原生工具 */
+  .c2{padding:26px 20px 0;text-align:center}
+  .c2 .seal{width:72px;height:72px;font-size:36px;margin:6px auto 12px}
+  .c2 .nm{font-size:24px;letter-spacing:4px}
+  .c2 .rf{font-size:11px;color:var(--ink50);margin-top:5px}
+  .c2 .acts{display:flex;gap:8px;margin:16px 0 4px}
+  .c2 .acts i{flex:1;font-style:normal;font-size:11px;padding:9px 0;border:1px solid var(--ink);color:var(--ink)}
+  .c2 .acts i:first-child{background:var(--ink);color:var(--paper)}
+  .c2 .grp{text-align:left;margin-top:12px}
+  .c2 .grp p{font-size:11px;color:var(--ink70);padding:8px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+  .c2 .grp p span{color:var(--ink35)}
+  .c2 .alb{display:flex;gap:6px;margin-top:12px}
+  .c2 .alb i{width:70px;height:52px;background:var(--paper-deep);border:1px solid var(--line);display:block}
+  .c2 .cta{position:absolute;bottom:0;left:0;right:0;background:var(--seal);color:var(--paper);
+    font-size:13px;letter-spacing:4px;text-align:center;padding:13px 0}
+
+  /* C3 图纸档案 */
+  .c3{position:relative;padding:20px 16px}
+  .c3 svg.topo{position:absolute;inset:0;width:100%;height:100%;opacity:.5}
+  .c3 .inner{position:relative}
+  .c3 .nm{font-size:22px;letter-spacing:4px}
+  .c3 .rf{font-size:10px;letter-spacing:2px;color:var(--ink50);margin:4px 0 12px}
+  .c3 .panel{background:var(--paper);border:1px solid var(--line);padding:12px;display:flex;gap:10px;box-shadow:0 2px 8px rgba(26,26,24,.06)}
+  .c3 .panel b{display:block;font-size:20px;color:var(--ink)}
+  .c3 .panel em{font-style:normal;font-size:9px;color:var(--ink50);letter-spacing:1px}
+  .c3 .case{margin-top:12px;background:var(--paper);border:1px solid var(--line);padding:8px;display:flex;gap:8px;align-items:center}
+  .c3 .case i{width:44px;height:34px;background:var(--paper-deep);display:block}
+  .c3 .case p{font-size:10.5px;color:var(--ink70)}
+  .c3 .cta{position:absolute;bottom:0;left:0;right:0;background:var(--ink);color:var(--paper);font-size:12.5px;
+    letter-spacing:4px;text-align:center;padding:13px 0}
+  .c3 .cta s{text-decoration:none;color:var(--seal);font-weight:700;margin:0 3px}
+
+  /* C4 作品画册 */
+  .c4{display:flex;flex-direction:column}
+  .c4 .hero{height:400px;background:linear-gradient(160deg,#D8D2C4,#B9AE97 55%,#8F8468);position:relative}
+  .c4 .hero .vt{position:absolute;top:22px;right:18px;writing-mode:vertical-rl;font-size:20px;letter-spacing:8px;color:#fff;
+    text-shadow:0 0 12px rgba(26,26,24,.45)}
+  .c4 .hero .cap{position:absolute;left:16px;bottom:14px;color:#fff;font-size:10px;letter-spacing:2px;text-shadow:0 0 8px rgba(26,26,24,.5)}
+  .c4 .meta{padding:14px 18px 10px}
+  .c4 .meta .t{font-size:15px;letter-spacing:2px}
+  .c4 .meta .d{font-size:10px;color:var(--ink50);margin-top:4px}
+  .c4 .next{flex:1;background:linear-gradient(150deg,#CFC6B2,#A79C82);position:relative}
+  .c4 .next .ph{position:absolute;left:0;right:0;top:8px}
+
+  /* C5 书帖版心 */
+  .c5{padding:24px 20px 0;position:relative}
+  .c5 .vtitle{position:absolute;top:26px;right:24px;writing-mode:vertical-rl;display:flex;gap:10px}
+  .c5 .vtitle .nm{font-size:30px;letter-spacing:12px;color:var(--ink)}
+  .c5 .vtitle .note{font-size:9.5px;color:var(--ink50);letter-spacing:3px;border-right:1px solid var(--line);padding-right:8px}
+  .c5 .seal{width:30px;height:30px;font-size:15px;position:absolute;right:2px;bottom:0}
+  .c5 .vwrap{position:relative;height:220px}
+  .c5 .body{position:absolute;top:260px;left:20px;right:20px}
+  .c5 .body .ln{border-top:1px solid var(--line);padding-top:12px;font-size:10.5px;color:var(--ink70);line-height:2.1}
+  .c5 .alb{display:flex;gap:6px;margin-top:14px}
+  .c5 .alb i{width:64px;height:44px;background:var(--paper-deep);border:1px solid var(--line);display:block}
+
+  /* C6 主材色卡 */
+  .c6{padding:22px 18px 0;position:relative}
+  .c6 .nm{font-size:24px;letter-spacing:5px}
+  .c6 .rf{font-size:10px;letter-spacing:2px;color:var(--ink50);margin:5px 0 14px}
+  .c6 .case{display:flex;gap:9px;margin-bottom:11px;align-items:stretch}
+  .c6 .case i.img{width:64px;height:48px;display:block;background:var(--paper-deep);border:1px solid var(--line)}
+  .c6 .case .inf{flex:1;padding-top:2px}
+  .c6 .case .inf .t{font-size:11.5px;color:var(--ink)}
+  .c6 .case .inf .band{display:flex;height:9px;margin-top:7px;border:1px solid var(--line)}
+  .c6 .case .inf .band s{flex:1;display:block}
+  .c6 .case .inf .cn{font-size:9px;color:var(--ink50);margin-top:4px;letter-spacing:1px}
+  .c6 .strip{position:absolute;right:6px;top:20px;bottom:0;width:10px;display:flex;flex-direction:column}
+  .c6 .strip s{flex:1;display:block}
+  .c6 .form{margin-top:6px;border-top:1px solid var(--ink);padding-top:10px}
+  .c6 .form .ft{font-size:10px;letter-spacing:3px;color:var(--ink50)}
+  .c6 .form .ln2{height:18px;border-bottom:1px solid var(--line);margin-top:10px;width:70%}
+</style>
+</head>
+<body>
+<h1>匿名名片页 · 六候选缩略图</h1>
+<div class="sub">营造 C 端 /pages/card/detail · 品牌语境=东方纸墨极简(已定档) · 第 101 次</div>
+<div class="grid">
+
+  <!-- C1 名帖双框 -->
+  <div class="cell">
+    <div class="tag"><b>C1 名帖双框</b>最佳设计师|陈幼坚 · 东情西韵</div>
+    <div class="phone c1">
+      <div class="frame"><div class="inner">
+        <div class="row1">
+          <div class="seal">沈</div>
+          <div><div class="nm serif">沈知远</div><div class="rf">资深装修顾问 · YINGZAO</div></div>
+        </div>
+        <div class="ln"></div>
+        <div class="info">住宅装修 · 从业十二年<br>沈阳市 · 和平区<br>服务范围 沈阳及周边</div>
+        <div class="alb"><i></i><i></i><i></i></div>
+        <div class="form-t">留 资 笺</div>
+        <div class="ln" style="margin:10px 0 0"></div>
+        <div class="fin seal">印</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- C2 原生工具 -->
+  <div class="cell">
+    <div class="tag"><b>C2 原生名片工具</b>现实参照|iOS 通讯录名片页</div>
+    <div class="phone c2">
+      <div class="seal">沈</div>
+      <div class="nm serif">沈知远</div>
+      <div class="rf">资深装修顾问 · 住宅装修</div>
+      <div class="acts"><i>拨打电话</i><i>复制微信</i><i>留言</i></div>
+      <div class="grp">
+        <p>从 业<span>十二年</span></p>
+        <p>服务范围<span>沈阳及周边</span></p>
+        <p>微 信<span>yz-shenzhiyuan</span></p>
+      </div>
+      <div class="alb"><i></i><i></i><i></i></div>
+      <div class="cta">我要留言</div>
+    </div>
+  </div>
+
+  <!-- C3 图纸档案 -->
+  <div class="cell">
+    <div class="tag"><b>C3 图纸档案</b>轮盘|App 6 号 Topo→等高线诠释</div>
+    <div class="phone c3">
+      <svg class="topo" viewBox="0 0 270 585" fill="none">
+        <path d="M-20 120 C 60 60, 140 160, 300 90" stroke="#B03A2E" stroke-width="1" opacity=".28"/>
+        <path d="M-20 150 C 70 90, 150 190, 300 120" stroke="#1A1A18" stroke-width=".6" opacity=".14"/>
+        <path d="M-20 185 C 80 125, 160 225, 300 155" stroke="#1A1A18" stroke-width=".6" opacity=".12"/>
+        <path d="M-20 470 C 60 520, 180 430, 300 500" stroke="#1A1A18" stroke-width=".6" opacity=".13"/>
+        <path d="M-20 505 C 70 555, 190 465, 300 535" stroke="#1A1A18" stroke-width=".6" opacity=".11"/>
+        <rect x="150" y="30" width="70" height="52" stroke="#1A1A18" stroke-width=".7" opacity=".16" fill="none"/>
+        <rect x="150" y="30" width="34" height="52" stroke="#1A1A18" stroke-width=".7" opacity=".16" fill="none"/>
+      </svg>
+      <div class="inner">
+        <div class="nm serif">沈知远</div>
+        <div class="rf">住宅装修 · 从业档案</div>
+        <div class="panel">
+          <div><b>12</b><em>年 从业</em></div>
+          <div><b>7</b><em>在施工地</em></div>
+          <div><b>126</b><em>交付家庭</em></div>
+        </div>
+        <div class="case"><i></i><p>原木两居 · 已交付</p></div>
+        <div class="case"><i></i><p>奶油三居 · 施工中</p></div>
+        <div class="cta">留资 沈知远<s>·</s>1小时内回复</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C4 作品画册 -->
+  <div class="cell">
+    <div class="tag"><b>C4 作品画册</b>最佳设计师|原研哉×观夏参照</div>
+    <div class="phone c4">
+      <div class="hero">
+        <div class="vt serif">沈知远</div>
+        <div class="cap">原木两居 · 已交付 — 照片位</div>
+      </div>
+      <div class="meta">
+        <div class="t serif">作品先于言语</div>
+        <div class="d">住宅装修 · 从业十二年 · 沈阳及周边</div>
+      </div>
+      <div class="next"><div class="ph">下一件作品</div></div>
+    </div>
+  </div>
+
+  <!-- C5 书帖版心 -->
+  <div class="cell">
+    <div class="tag"><b>C5 书帖版心</b>最佳设计师|吕敬人 · 书装版式</div>
+    <div class="phone c5">
+      <div class="vwrap">
+        <div class="vtitle">
+          <div class="note serif">资深装修顾问 · 从业十二年</div>
+          <div class="nm serif">沈知远<span class="seal">印</span></div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="ln">住宅装修 · 沈阳市和平区<br>服务范围 沈阳及周边</div>
+        <div class="alb"><i></i><i></i><i></i></div>
+        <div class="ln" style="margin-top:14px">留言 · 跋</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C6 主材色卡 -->
+  <div class="cell">
+    <div class="tag"><b>C6 主材色卡</b>轮盘|East 7 号节气色谱→色卡诠释</div>
+    <div class="phone c6">
+      <div class="nm serif">沈知远</div>
+      <div class="rf">住宅装修 · 主材色卡</div>
+      <div class="case">
+        <i class="img"></i>
+        <div class="inf"><div class="t">原木两居 · 已交付</div>
+          <div class="band"><s style="background:#D8CBB2"></s><s style="background:#9A8B6F"></s><s style="background:#5A5243"></s></div>
+          <div class="cn">缃叶 · 杏黄 · 墨</div></div>
+      </div>
+      <div class="case">
+        <i class="img"></i>
+        <div class="inf"><div class="t">奶油三居 · 施工中</div>
+          <div class="band"><s style="background:#EDE4D3"></s><s style="background:#C9B79A"></s><s style="background:#8C7B5E"></s></div>
+          <div class="cn">米白 · 藤黄 · 秋香</div></div>
+      </div>
+      <div class="case">
+        <i class="img"></i>
+        <div class="inf"><div class="t">中古一居 · 已交付</div>
+          <div class="band"><s style="background:#B4A488"></s><s style="background:#6E6046"></s><s style="background:#3C352A"></s></div>
+          <div class="cn">琥珀 · 栗壳 · 黛</div></div>
+      </div>
+      <div class="strip">
+        <s style="background:#D8CBB2"></s><s style="background:#9A8B6F"></s><s style="background:#5A5243"></s>
+        <s style="background:#EDE4D3"></s><s style="background:#C9B79A"></s><s style="background:#8C7B5E"></s>
+        <s style="background:#B4A488"></s><s style="background:#6E6046"></s><s style="background:#3C352A"></s>
+      </div>
+      <div class="form">
+        <div class="ft">留 资</div>
+        <div class="ln2"></div>
+        <div class="ln2" style="width:90%"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

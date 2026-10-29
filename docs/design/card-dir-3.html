@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向三 · 作品画册 — 匿名名片页初稿(营造 C 端)</title>
+<style>
+  /* ============ 展示板(非页面本体) ============ */
+  :root{
+    --paper:#FAF9F5; --paper-deep:#F1EFE8; --ink:#1A1A18;
+    --ink70:rgba(26,26,24,.70); --ink50:rgba(26,26,24,.50); --ink35:rgba(26,26,24,.35);
+    --line:rgba(26,26,24,.12); --line-strong:rgba(26,26,24,.55);
+    --seal:#B03A2E; --ink-soft:rgba(26,26,24,.62); --moss:#5A7247;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#2A2620;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px}
+  .board-head h1{font-family:'Songti SC','SimSun','Noto Serif SC',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:12px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.75);font-size:14px;margin-bottom:28px;line-height:1.8}
+  .board-sub b{color:#FAF9F5;font-weight:600}
+  .stage{display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap}
+  .note{max-width:340px;color:rgba(250,249,245,.78);font-size:14px;line-height:2}
+  .note h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:10px}
+  .note p{margin-bottom:10px}
+  .note .k{color:#D8C08F}
+
+  /* ============ 手机(H5 语境:无设备框,390×844 即 uni-app H5 视口) ============ */
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .screen{height:100%;overflow-y:auto;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+
+  /* ============ 画册页本体 ============ */
+  .work{position:relative}
+  .work .img{width:100%;height:468px;display:block;position:relative}
+  .work .vt{position:absolute;top:26px;right:20px;writing-mode:vertical-rl;font-family:'Songti SC','SimSun',serif;
+    font-size:22px;letter-spacing:10px;color:#fff;text-shadow:0 0 14px rgba(26,26,24,.5)}
+  .work .ph-note{position:absolute;left:0;right:0;bottom:0;padding:30px 16px 8px;font-size:12px;color:#fff;
+    letter-spacing:1px;background:linear-gradient(transparent,rgba(26,26,24,.45))}
+  .work .ph-note .ph-tag{opacity:.75;font-size:12px;letter-spacing:2px;margin-right:8px}
+  .cap{padding:16px 22px 8px}
+  .cap .t{font-family:'Songti SC','SimSun',serif;font-size:18px;letter-spacing:3px;color:var(--ink)}
+  .cap .d{font-size:14px;color:var(--ink-soft);margin-top:5px;letter-spacing:.5px}
+
+  .colophon{padding:26px 22px 30px}
+  .colophon .rule{border-top:1px solid var(--ink);margin-bottom:16px}
+  .colophon .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+  .colophon .nm{font-family:'Songti SC','SimSun',serif;font-size:24px;letter-spacing:6px;color:var(--ink)}
+  .colophon .role{font-size:14px;color:var(--ink-soft);margin-top:6px}
+  .colophon .avatar{width:40px;height:40px;background:var(--seal);color:var(--paper);display:flex;align-items:center;
+    justify-content:center;font-family:'Songti SC','SimSun',serif;font-size:20px;flex-shrink:0}
+  .colophon .lines{font-size:14px;line-height:2.1;color:var(--ink70)}
+  .colophon .lines b{color:var(--ink);font-weight:600}
+  .colophon .intro{font-family:'Songti SC','SimSun',serif;font-size:14.5px;line-height:2;color:var(--ink);margin:10px 0 2px}
+
+  .form-t{display:flex;justify-content:space-between;align-items:baseline;margin:20px 0 4px}
+  .form-t .t{font-family:'Songti SC','SimSun',serif;font-size:16px;letter-spacing:5px;color:var(--ink)}
+  .form-t .s{font-size:12px;color:var(--ink-soft)}
+  .field{margin-top:13px}
+  label{display:block;font-size:12px;letter-spacing:2px;color:var(--ink-soft);margin-bottom:2px}
+  input,textarea{width:100%;border:none;border-bottom:1px solid var(--line-strong);
+    background:transparent;font-size:14px;color:var(--ink);padding:7px 0;outline:none;border-radius:0;font-family:inherit}
+  textarea{height:48px;resize:none;line-height:1.7}
+  input:focus,textarea:focus{border-bottom-color:var(--seal)}
+  .submit{width:100%;margin-top:18px;background:var(--ink);color:var(--paper);border:none;
+    font-size:15px;letter-spacing:8px;padding:13px 0 13px 8px;cursor:pointer;font-family:inherit;border-radius:0}
+  .privacy{font-size:12px;color:var(--ink-soft);margin-top:10px;text-align:center;letter-spacing:1px}
+
+  .acts{display:flex;gap:8px;margin-top:16px}
+  .acts a,.acts button{flex:1;font-size:14px;letter-spacing:2px;padding:11px 0;cursor:pointer;
+    font-family:inherit;border-radius:0;text-align:center;text-decoration:none}
+  .acts .call{background:var(--ink);color:var(--paper);border:1px solid var(--ink)}
+  .acts .ghost{background:var(--paper);color:var(--ink);border:1px solid var(--ink)}
+
+  .g1{background:linear-gradient(160deg,#D8D2C4,#B9AE97 60%,#8F8468)}
+  .g2{background:linear-gradient(160deg,#EDE4D3,#CFC0A4 60%,#A8946E)}
+  .g3{background:linear-gradient(160deg,#C9BFA9,#8E8468 60%,#5C553F)}
+
+  /* 大图查看 */
+  .lightbox{position:absolute;inset:0;background:rgba(26,26,24,.92);display:none;align-items:center;
+    justify-content:center;flex-direction:column;z-index:30}
+  .lightbox.on{display:flex}
+  .lightbox .big{width:330px;height:330px}
+  .lightbox .cap{color:rgba(250,249,245,.85);font-size:13px;letter-spacing:2px;margin-top:14px}
+  .lightbox .hint{color:rgba(250,249,245,.4);font-size:12px;margin-top:8px}
+
+  /* toast */
+  .toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(26,26,24,.92);
+    color:var(--paper);font-size:14px;letter-spacing:1px;padding:12px 22px;border-radius:2px;opacity:0;
+    transition:opacity .25s;pointer-events:none;z-index:40;max-width:300px;text-align:center;line-height:1.7}
+  .toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>方向三 · 作品画册</h1>
+  <span class="en">DIRECTION 3 · WORK PORTFOLIO</span>
+</div>
+<div class="board-sub"><b>逻辑:最佳设计师|原研哉 × 观夏 To Summer 移动端(记忆归纳,未截图)</b> · 作品摄影当主角——满版大图纵向慢节奏,名片信息压缩成图间注脚,落款区收束+留资;胆量=作品 80%、名片 20%。<b>form 来自</b>装修的信任起点=看真实案例。</div>
+<div class="stage">
+  <div class="phone">
+    <div class="screen">
+      <div class="work">
+        <div class="img g1" data-cap="原木两居 · 已交付" role="button" aria-label="查看原木两居大图">
+          <div class="vt">沈知远</div>
+          <div class="ph-note"><span class="ph-tag">照片位</span>原木两居 · 已交付 · 沈阳</div>
+        </div>
+      </div>
+      <div class="cap">
+        <div class="t serif">作品先于言语</div>
+        <div class="d">每一张都是交付后的实拍位 · 点击看大图</div>
+      </div>
+
+      <div class="work">
+        <div class="img g2" data-cap="奶油三居 · 施工中" role="button" aria-label="查看奶油三居大图">
+          <div class="ph-note"><span class="ph-tag">照片位</span>奶油三居 · 施工中 · 沈阳</div>
+        </div>
+      </div>
+      <div class="cap">
+        <div class="t serif">开工前,先看工地</div>
+        <div class="d">施工中的工地也开放参观 · 提前约</div>
+      </div>
+
+      <div class="work">
+        <div class="img g3" data-cap="中古一居 · 已交付" role="button" aria-label="查看中古一居大图">
+          <div class="ph-note"><span class="ph-tag">照片位</span>中古一居 · 已交付 · 沈阳</div>
+        </div>
+      </div>
+
+      <div class="colophon">
+        <div class="rule"></div>
+        <div class="head">
+          <div>
+            <div class="nm">沈知远</div>
+            <div class="role">资深装修顾问 · 住宅装修</div>
+          </div>
+          <div class="avatar">沈</div>
+        </div>
+        <p class="intro">老房翻新与全案装修。先看工地,再谈合同;报价单逐项可核对。</p>
+        <div class="lines">
+          <b>从业</b> 十二年 · <b>城市</b> 沈阳市和平区<br>
+          <b>范围</b> 沈阳及周边 · <b>微信</b> yz-shenzhiyuan
+        </div>
+
+        <div class="acts">
+          <a class="call" href="tel:13800008888">拨打电话</a>
+          <button class="ghost" id="btn-wechat">复制微信</button>
+        </div>
+
+        <div class="form-t"><span class="t serif">留言</span><span class="s">留下联系方式,顾问回电</span></div>
+        <div class="field"><label>姓名</label><input id="f-name" type="text" placeholder="怎么称呼您"></div>
+        <div class="field"><label>电话</label><input id="f-phone" type="tel" maxlength="11" placeholder="11 位手机号"></div>
+        <div class="field"><label>留言(选填)</label><textarea id="f-cmt" placeholder="想了解哪套案例,写在这里"></textarea></div>
+        <button class="submit" id="f-submit">递 出</button>
+        <div class="privacy">手机号仅用于顾问跟进联系</div>
+      </div>
+    </div>
+
+    <div class="lightbox" id="lightbox">
+      <div class="big g1" id="lb-img"></div>
+      <div class="cap" id="lb-cap" style="color:rgba(250,249,245,.85);font-size:13px;letter-spacing:2px;margin-top:14px;text-align:center"></div>
+      <div class="hint">点击任意处关闭</div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="note">
+    <h3>方向卡摘要</h3>
+    <p><span class="k">借的:</span>满版作品图呼吸感;竖排题签浮于首图;衬线小标题+无衬线注脚;内容>容器——图就是结构。</p>
+    <p><span class="k">主角:</span>作品大图(占屏 55%+/张),名片信息压缩为「落款」区。</p>
+    <p><span class="k">骨架:</span>画册式纵滚——图→注脚→图→注脚→落款(名片+联系+留资笺)。</p>
+    <p><span class="k">胆量:</span>作品占 80% 篇幅,名片只占 20%——「看作品再决定」的信任逻辑。</p>
+    <p><span class="k">交互:</span>任一图点击看大图 / 拨号 / 复制微信 / 页尾留资(三态)。</p>
+    <p><span class="k">form:</span>装修的信任起点=看真实案例,作品即名片主体。</p>
+  </div>
+</div>
+
+<script>
+  var toastTimer=null;
+  function toast(msg){
+    var t=document.getElementById('toast');
+    t.textContent=msg;t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){t.classList.remove('on')},2200);
+  }
+  var works=document.querySelectorAll('.work .img');
+  var lightbox=document.getElementById('lightbox');
+  var lbImg=document.getElementById('lb-img');
+  var lbCap=document.getElementById('lb-cap');
+  works.forEach(function(s){
+    s.addEventListener('click',function(){
+      lbImg.className='big '+s.className.replace('img ','');
+      lbCap.textContent=s.getAttribute('data-cap');
+      lightbox.classList.add('on');
+    });
+  });
+  lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
+  document.getElementById('btn-wechat').addEventListener('click',function(){
+    var wx='yz-shenzhiyuan';
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(wx).then(function(){toast('微信号已复制')},function(){toast('微信号 yz-shenzhiyuan')});}
+    else{toast('微信号 yz-shenzhiyuan')}
+  });
+  var lastPhone=null, lastAt=0;
+  document.getElementById('f-submit').addEventListener('click',function(){
+    var name=document.getElementById('f-name').value.trim();
+    var phone=document.getElementById('f-phone').value.trim();
+    var cmt=document.getElementById('f-cmt').value;
+    if(!name){toast('请填写称呼');return;}
+    if(!/^1\d{10}$/.test(phone)){toast('请填写 11 位手机号');return;}
+    if(cmt.length>500){toast('留言最多 500 字');return;}
+    var now=Date.now();
+    if(lastPhone===phone && now-lastAt<60000){toast('提交太频繁,请稍后再试');return;}
+    if(lastPhone===phone){toast('您已留过资,顾问会尽快联系您');return;}
+    lastPhone=phone;lastAt=now;
+    toast('留资成功,沈知远会尽快联系您');
+    document.getElementById('f-name').value='';document.getElementById('f-phone').value='';document.getElementById('f-cmt').value='';
+  });
+</script>
+</body>
+</html>

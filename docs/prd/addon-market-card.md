@@ -1,6 +1,6 @@
 # PRD - addon-market 名片子域(电子名片+留资,精简版)
 
-> 状态:**已确认(2026-10-28 用户拍板「后续无特殊说明一律按推荐」五项全按推荐)+ R6 已实现(第 100 次:V1002 四表/名片 CRUD+share_token/匿名留资 AES+hash+幂等回显+频次防刷/CardNoticeCreatedEvent 零网络出事务+通知中心消费/已读守卫/管理端+Web Cards.vue;实现定案回写 rules/market.md §5;余 R7=web-mp 匿名名片页,huashu-design 三方向初稿先行)**
+> 状态:**已确认(2026-10-28 用户拍板「后续无特殊说明一律按推荐」五项全按推荐)+ R6 已实现(第 100 次:V1002 四表/名片 CRUD+share_token/匿名留资 AES+hash+幂等回显+频次防刷/CardNoticeCreatedEvent 零网络出事务+通知中心消费/已读守卫/管理端+Web Cards.vue;实现定案回写 rules/market.md §5;余 R7=web-mp 匿名名片页——三方向初稿已出(第 101 次,docs/design/card-dir-1/2/3.html,待拍板)**
 > 老系统参考:market 模块名片族(card/cuser/cardPhoto/cnotice 四 PO + CardServiceImpl/CuserServiceImpl/CardPhotoServiceImpl/CnoticeServiceImpl);实现口径见 `docs/rules/market.md` §5(已深读在档);老前台在**外部 ISV 白标平台**(代码不在本仓库)
 > 归属:**addon-market V2 子域**(V1 PRD 非目标已预留:「名片族——V2,重做要点已沉淀 rules §5」)
 > 本子域声明:错误码 **280100–280150 小段**(addon-market 280000 段内分段,280026 已占用);迁移 **V1002+**;表前缀 `market_card_`
