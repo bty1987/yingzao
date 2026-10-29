@@ -92,7 +92,8 @@ isAffirm 客户确认轴(0→1;affirmSales :740,验证码+手机号三重校验,
 - 🔴 **paytran 断链(与 payment.md 断言互证)**:collectOalesPayment 形参 ptids 全方法零引用(OalesPaymentServiceImpl.java:184,其余 9 个 collect* 均置 USED)→外销渠道支付停在 SUCCESS 可重复核销;makePayment case8 金额不符**静默 return** 吞款(PaytranServiceImpl.java:1330);
 - **oalesitem 明细链疑似全断**:前端提交 oalesItem.oales.oid 而 VO 无 oales 属性→oid 恒空必抛 400001;total=price×num 未除缩放,千倍虚增嫌疑;OalesItemPO 注释自称"分"实为厘;
 - **oalespay 付款登记无状态机**:addOalesPay 镜像创建 payment.oalespayment(不查重),而 payment 侧入口强制一单一款(150029)——**两入口规则冲突可堆多款**;改 money 不同步镜像款→对账漂移;oalespay.payTime 死列;
-- oalesrecord 15 type 操作流水(2026-03 AI 增量),deleteOales 先删单再补记录→孤儿记录。
+- oalesrecord 15 type 操作流水(2026-03 AI 增量),deleteOales 先删单再补记录→孤儿记录;
+- 【实现定案 2026-10-29,第 99 次(R4)】**外销精简版落地:V1103 两表一留痕**(sales_oales 单头/明细/track;PRD addon-sales-oales.md 七项开放问题全按推荐拍板):状态机老 7 态收敛 **6 态**(0 草稿/1 待确认/2 已确认/3 已收款/4 已完结/8 已废弃——驳回态消亡=驳回回草稿+原因留 track;复核档消亡=PaymentCollectedEvent 回程置 3,**修老 collectOalesPayment ptids 断链可重复核销**);**确认建款翻转**(confirm 事务内 PaymentApi.createBill typeCode=sales_oales 懒预置 sort=91,金额=total,回写 dp_id)——修老「先手工付款登记再确认」双入口可堆款根源,oalespay 不迁;**废弃守卫收紧**(仅 0/1/2 可废 300109;自 2 废=同事务 cancelBill 未收款+SettlementItemWithdrawnEvent 撤结算);**退货跳态出生保留**(type=1+foid=原单,明细默认复制可改,创建即 2,profit 手填正存负计快照——balance 快照行 income/payment 取负);**结算接入零新基建**(status→2 发 SettlementItemReadyEvent,settlement_type=sales:oales 即 V1301 预留键;income=±total/payment=±(total−profit)——balance 桶 profit=差值语义吻合老 if(type=0,profit,−profit));明细 oid 断链/total 千倍虚增消灭=服务端算(行 total=price×num÷1000 HALF_UP 本域 milliMul);金额守卫 0≤profit≤total 300104(开放问题 3:老明细自由文本无成本数据源,「服务端算利润」落为手填+守卫,成本列不建);品牌默认厂商=SupplierApi.queryBrandSuppliers 首家快照落列禁前端传名(300105/300106 两态);装修单活单守卫经 DecorationApi(300107);单号 WX/WR 前缀走 sales_counter;Web Oales.vue+/sales/oales 菜单;oalesrecord 15 type 收敛 track 惯例,atttype/award/cost+threshold/isScale 全不迁(PRD 划界)。
 
 ## 7. 活动族(salesactivity 三兄弟)= 积分兑换链
 

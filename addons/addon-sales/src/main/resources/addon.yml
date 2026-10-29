@@ -1,7 +1,7 @@
 addon:
   id: sales
   name: 主材销售
-  version: 0.2.0
+  version: 0.3.0
   error-code-segment: 300000
   menus:
     - path: /sales/orders
@@ -13,6 +13,9 @@ addon:
     - path: /sales/deliveries
       title: 配送履约
       icon: van
+    - path: /sales/oales
+      title: 外销单
+      icon: sell
   dicts:
     orderStatus:
       - { key: '0', label: 初始 }
@@ -57,6 +60,16 @@ addon:
       - { key: '2', label: 已审核 }
       - { key: '3', label: 已确认 }
       - { key: '4', label: 已完结 }
+    oalesStatus:
+      - { key: '0', label: 草稿 }
+      - { key: '1', label: 待确认 }
+      - { key: '2', label: 已确认 }
+      - { key: '3', label: 已收款 }
+      - { key: '4', label: 已完结 }
+      - { key: '8', label: 已废弃 }
+    oalesType:
+      - { key: '0', label: 购货 }
+      - { key: '1', label: 退货 }
   api:
     # 结算驳回端点路径挂 /orders 前缀(历史路径),归销售单菜单;结算工作台角色建议连带授权销售单菜单
     - prefix: /api/sales/orders
@@ -69,3 +82,5 @@ addon:
       require: /sales/deliveries
     - prefix: /api/sales/delivery-items
       require: /sales/deliveries
+    - prefix: /api/sales/oales
+      require: /sales/oales

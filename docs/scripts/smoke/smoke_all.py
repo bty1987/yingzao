@@ -1378,10 +1378,11 @@ def main():
                 _crows = _cur.fetchall()
         finally:
             _conn.close()
-        step("消费完成登记行=全部订阅消费者(装饰/示范/销售/定额四家)",
-             len(_crows) == 4
+        step("消费完成登记行=全部订阅消费者(装饰/示范/销售/定额/外销五家)",
+             len(_crows) == 5
              and {r[0] for r in _crows} == {"PaymentEventDemoConsumer", "DecorationPaymentConsumer",
-                                            "SalesPaymentConsumer", "NormEventConsumer"},
+                                            "SalesPaymentConsumer", "NormEventConsumer",
+                                            "OalesPaymentConsumer"},
              _crows)
         # requeue 已消费任务:登记表使双消费者全部跳过 → 通知零新增(以前=重放多一条)
         api_ok("requeue 已消费任务(跳过语义)", "POST", "/api/events/%s/requeue" % _task_id, tok_admin)
@@ -1409,7 +1410,7 @@ def main():
                 _crows2 = _cur.fetchall()
         finally:
             _conn.close()
-        step("登记行不因重投递增长", len(_crows2) == 4, _crows2)
+        step("登记行不因重投递增长", len(_crows2) == 5, _crows2)
     else:
         step("收款事件 task id 缺失,exactly-once 段跳过", True)
 
@@ -3322,9 +3323,9 @@ def main():
     # 插件下发 + 协议键类型前置
     addons_sale = api_ok("admin 插件下发复查(sales)", "GET", "/api/addons", tok_admin)
     sale_addon = next((a for a in (addons_sale or []) if a.get("id") == "sales"), None)
-    step("sales 三菜单动态下发", bool(sale_addon)
+    step("sales 四菜单动态下发(含外销单)", bool(sale_addon)
          and sorted(m.get("path") for m in sale_addon.get("menus") or []) == [
-             "/sales/deliveries", "/sales/orders", "/sales/settlements"],
+             "/sales/deliveries", "/sales/oales", "/sales/orders", "/sales/settlements"],
          sale_addon and sale_addon.get("menus"))
     all_types_s = api_ok("类型字典全量(sales_full 前置)", "GET",
                          "/api/payment/bill-types?includeDisabled=true", tok_admin)
@@ -6045,6 +6046,177 @@ def main():
     # 段尾清理:本单定额数据(单据链跨轮保留与既有段一致)
     norm_x("delete from quotation_norm_item where org_id = 1 and order_id = %s", (order_n,))
     norm_x("delete from quotation_norm where org_id = 1 and order_id = %s", (order_n,))
+
+    # ---- 外销子域(D6a,addon-sales V1103;自建专用单链;段首定向清理) ----
+    print("== 外销子域(addon-sales D6a:六态状态机+确认建款+结算事件+退货跳态) ==")
+    stamp_o = str(int(time.time() % 100000))
+    MO = "/api/sales/oales"
+
+    def oales_q(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                return cur.fetchall()
+        finally:
+            conn.close()
+
+    def oales_x(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                conn.commit()
+                return cur.rowcount
+        finally:
+            conn.close()
+
+    # 段首定向清理:历史轮 oales 段残留(本域专用 fixture 逐轮重建,旧单直接清表保计数器)
+    oales_x("delete from sales_oales_track where oid in (select id from (select id from sales_oales where org_id=1) t)")
+    oales_x("delete from sales_oales_item where oid in (select id from (select id from sales_oales where org_id=1) t)")
+    oales_x("delete from sales_oales where org_id = 1")
+
+    # 专用 fixture:品牌+厂商挂接(supplier_brand)+装修单
+    brand_o = api_ok("外销段建品牌", "POST", "/api/basedata/brands", tok_admin,
+                     {"name": "烟测外销品牌" + stamp_o})
+    sup_o = api_ok("外销段建厂商", "POST", "/api/supplier/suppliers", tok_admin,
+                   {"name": "烟测外销厂商" + stamp_o, "phone": "139%08d" % (int(stamp_o) % 100000000)})
+    api_ok("厂商挂品牌", "POST", "/api/supplier/suppliers/%s/brands" % sup_o, tok_admin,
+           {"brandId": brand_o, "isPrimary": 1})
+    city_o = api_ok("外销段建城市", "POST", "/api/customerprofile/cities", tok_admin,
+                    {"name": "烟测市O" + stamp_o})
+    proper_o = api_ok("外销段建城区", "POST",
+                      "/api/customerprofile/cities/%s/propers" % city_o, tok_admin, {"name": "烟测区O"})
+    village_o = api_ok("外销段建楼盘", "POST", "/api/customerprofile/villages", tok_admin,
+                       {"name": "烟测楼盘O" + stamp_o, "cityId": city_o, "properId": proper_o})
+    house_o = api_ok("外销段建房屋", "POST", "/api/customerprofile/houses", tok_admin,
+                     {"villageId": village_o, "number": "O" + stamp_o,
+                      "fields": {"built": "1", "unit": "2", "floorNum": 3, "doorNum": 4}})
+    cust_o = api_ok("外销段建客户", "POST", "/api/customerprofile/customers", tok_admin,
+                    {"name": "烟测客户O" + stamp_o, "phone": "138%08d" % (int(stamp_o) % 100000000)})
+    order_o = api_ok("外销专用装修单", "POST", "/api/decoration/orders", tok_admin,
+                     {"customerId": cust_o, "houseId": house_o, "type": 2,
+                      "designerId": uid_b, "salesmanId": uid_c})
+
+    ITEMS_O = [{"name": "外销砖" + stamp_o, "format": "800x800", "price": 300000, "num": 50000},
+               {"name": "外销配件" + stamp_o, "price": 120000, "num": 1000}]
+    # 守卫族
+    api_err("外销单品牌不存在 300105", "POST", MO, tok_admin,
+            {"orderId": order_o, "brandId": 999999999, "profit": 0, "items": ITEMS_O}, 300105)
+    api_err("无品牌开单拒绝 300105", "POST", MO, tok_admin,
+            {"orderId": order_o, "profit": 0, "items": ITEMS_O}, 300105)
+    api_err("明细缺数量 300103", "POST", MO, tok_admin,
+            {"orderId": order_o, "brandId": brand_o, "profit": 0,
+             "items": [{"name": "x", "price": 100}]}, 300103)
+    api_err("利润超货款 300104", "POST", MO, tok_admin,
+            {"orderId": order_o, "brandId": brand_o, "profit": 999999999, "items": ITEMS_O}, 300104)
+    api_err("挂不存在装修单 300107", "POST", MO, tok_admin,
+            {"orderId": 99999999, "brandId": brand_o, "profit": 0, "items": ITEMS_O}, 300107)
+
+    # 草稿:total=300000×50+120000×1=15120000,profit=1200000
+    oa1 = api_ok("购货开单(草稿)", "POST", MO, tok_admin,
+                 {"orderId": order_o, "brandId": brand_o, "profit": 1200000, "items": ITEMS_O})
+    det1 = api_ok("外销详情回读", "GET", "%s/%s" % (MO, oa1), tok_admin)
+    step("单号 WX 前缀+快照列(品牌默认厂商首家)", str((det1 or {}).get("no", "")).startswith("WX")
+         and (det1 or {}).get("supplier_id") == sup_o and (det1 or {}).get("status") == 0, det1)
+    step("total 服务端重算=15120000 厘", (det1 or {}).get("total") == 15120000,
+         (det1 or {}).get("total"))
+    step("明细 total=price×num÷1000(300000×50=15000000)", len((det1 or {}).get("items") or []) == 2
+         and (det1 or {}).get("items")[0]["total"] == 15000000, (det1 or {}).get("items", [{}])[0])
+
+    # 草稿编辑全量替换重算
+    upd = api_ok("草稿改单(明细+利润)", "PUT", "%s/%s" % (MO, oa1), tok_admin,
+                 {"profit": 1500000, "items": [{"name": "外销砖" + stamp_o, "price": 300000,
+                                                "num": 60000}]})
+    det2 = api_ok("改单回读 total 重算", "GET", "%s/%s" % (MO, oa1), tok_admin)
+    step("改单后 total=18000000 profit 守卫通过", (det2 or {}).get("total") == 18000000
+         and (det2 or {}).get("profit") == 1500000, det2)
+
+    # 提交→确认建款(懒预置类型行)→结算就绪事件
+    api_ok("提交", "POST", "%s/%s/submit" % (MO, oa1), tok_admin)
+    api_err("重复提交 300102", "POST", "%s/%s/submit" % (MO, oa1), tok_admin, None, 300102)
+    api_ok("确认建款(翻转:确认时 createBill typeCode=sales_oales)", "POST",
+           "%s/%s/confirm" % (MO, oa1), tok_admin)
+    det3 = api_ok("确认回读", "GET", "%s/%s" % (MO, oa1), tok_admin)
+    step("status=2+dp_id 回写", (det3 or {}).get("status") == 2 and (det3 or {}).get("dp_id"), det3)
+    bills_o = api_ok("款项单反查", "GET",
+                     "/api/payment/bills?bizAddon=sales&bizType=oales&bizId=%s" % oa1, tok_admin)
+    step("款项单存在且金额=total", len((bills_o or {}).get("rows") or []) == 1
+         and bills_o["rows"][0]["amount"] == 18000000
+         and bills_o["rows"][0]["type_code"] == "sales_oales", bills_o)
+    event_consumed("SettlementItemReadyEvent",
+                   "settle-item:sales:oales:%s:ready" % oa1, "结算就绪事件已消费(sales:oales)")
+    sb = oales_q("select settlement_type, brand_id, supplier, income, payment, profit from "
+                 "balance_settlement where org_id = 1 and settlement_type = 'sales:oales' order by id desc limit 1")
+    step("balance 桶吸附:sales:oales 桶 income=18000000 payment=16500000 profit=1500000",
+         list(sb) and sb[0][1] == brand_o and sb[0][3] == 18000000 and sb[0][4] == 16500000
+         and sb[0][5] == 1500000, sb)
+
+    # 收款事件回程 2→3(修老 ptids 断链复核档)
+    bill_o = bills_o["rows"][0]
+    api_ok("外销收款", "POST", "/api/payment/bills/%s/collect" % bill_o["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 18000000}]})
+    time.sleep(2)
+    det4 = api_ok("收款回读", "GET", "%s/%s" % (MO, oa1), tok_admin)
+    step("收款回程 status=3(PaymentCollectedEvent typeCode=sales_oales)",
+         (det4 or {}).get("status") == 3, det4)
+    api_err("已收款废弃拒绝 300109", "POST", "%s/%s/abate" % (MO, oa1), tok_admin,
+            {"reason": "测试拒"}, 300109)
+
+    # 退货:复制原单跳态出生 2(负利润进结算聚合)
+    oa2 = api_ok("退货单出生(复制原单明细)", "POST", MO, tok_admin,
+                 {"orderId": order_o, "type": 1, "foid": oa1, "profit": 500000})
+    det5 = api_ok("退货单回读", "GET", "%s/%s" % (MO, oa2), tok_admin)
+    step("退货单 type=1+status=2+no=WR+明细复制原单", (det5 or {}).get("type") == 1
+         and (det5 or {}).get("status") == 2 and str((det5 or {}).get("no", "")).startswith("WR")
+         and len((det5 or {}).get("items") or []) == 1, det5)
+    event_consumed("SettlementItemReadyEvent",
+                   "settle-item:sales:oales:%s:ready" % oa2, "退货结算就绪事件已消费")
+    sr = oales_q("select income, payment from balance_settlement_item "
+                 "where source_addon='sales' and source_type='oales' and source_item_id=%s" % oa2)
+    step("退货行快照负计 income=-18000000 payment=-17500000",
+         list(sr) and sr[0][0] == -18000000 and sr[0][1] == -17500000, sr)
+
+    # 退货完结(2→4 无款线)+ 撤结算/桶重算
+    api_ok("退货完结(确认即可完结)", "POST", "%s/%s/finish" % (MO, oa2), tok_admin)
+    api_err("已完结不可废 300109", "POST", "%s/%s/abate" % (MO, oa2), tok_admin,
+            {"reason": "测试拒"}, 300109)
+    # 自 2 废场景须「确认后未收款」的独立单(oa1 已收款 3 守卫拒——上面 300109 已断言)
+    oa4 = api_ok("第三单开单(撤结算场景)", "POST", MO, tok_admin,
+                 {"orderId": order_o, "brandId": brand_o, "profit": 100000, "items": ITEMS_O})
+    api_ok("提交", "POST", "%s/%s/submit" % (MO, oa4), tok_admin)
+    api_ok("确认建款(未收)", "POST", "%s/%s/confirm" % (MO, oa4), tok_admin)
+    api_ok("已确认单废弃(撤结算+作废未收款)", "POST", "%s/%s/abate" % (MO, oa4), tok_admin,
+           {"reason": "烟测废弃"})
+    event_consumed("SettlementItemWithdrawnEvent",
+                   "settle-item:sales:oales:%s:withdrawn" % oa4, "撤结算事件已消费")
+    da = api_ok("废弃回读", "GET", "%s/%s" % (MO, oa4), tok_admin)
+    step("status=8+abate_reason 留痕", (da or {}).get("status") == 8
+         and da.get("abate_reason") == "烟测废弃", da)
+    cw = oales_q("select count(*) from balance_settlement_item "
+                 "where source_addon='sales' and source_type='oales' and source_item_id=%s" % oa4)
+    step("撤结算后快照行已摘除", list(cw) and cw[0][0] == 0, cw)
+    db4 = api_ok("废弃单款项单反查(应已作废)", "GET",
+                 "/api/payment/bills?bizAddon=sales&bizType=oales&bizId=%s" % oa4, tok_admin)
+    step("未收款项单已作废(status=4)", len((db4 or {}).get("rows") or []) == 1
+         and db4["rows"][0]["status"] == 4, db4)
+
+    # 驳回回草稿(驳回态消亡)+ 草稿物理删零孤儿
+    oa3 = api_ok("第二单开单", "POST", MO, tok_admin,
+                 {"orderId": order_o, "brandId": brand_o, "profit": 100000, "items": ITEMS_O})
+    api_ok("提交", "POST", "%s/%s/submit" % (MO, oa3), tok_admin)
+    api_ok("驳回回草稿(原因留痕)", "POST", "%s/%s/reject" % (MO, oa3), tok_admin,
+           {"reason": "利润口径待核"})
+    d3 = api_ok("驳回回读", "GET", "%s/%s" % (MO, oa3), tok_admin)
+    step("驳回后 status=0(可改后重提)", (d3 or {}).get("status") == 0, d3)
+    api_ok("草稿物理删", "DELETE", "%s/%s" % (MO, oa3), tok_admin)
+    step("删除零孤儿(track 与单同清)", oales_q("select count(*) from sales_oales_track where oid=%s" % oa3)[0][0] == 0
+         and oales_q("select count(*) from sales_oales where id=%s" % oa3)[0][0] == 0)
+
+    # 段尾清理(桶留痕属 balance 既有语义不清;本域表清)
+    oales_x("delete from sales_oales_track where oid in (select id from (select id from sales_oales where org_id=1) t)")
+    oales_x("delete from sales_oales_item where oid in (select id from (select id from sales_oales where org_id=1) t)")
+    oales_x("delete from sales_oales where org_id = 1")
 
     return finish()
 

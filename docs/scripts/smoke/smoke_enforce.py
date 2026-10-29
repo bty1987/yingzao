@@ -267,6 +267,13 @@ ENDPOINTS = [
     ("sales", "GET", "/api/sales/settlements"), ("sales", "PUT", "/api/sales/settlements/1/vbalance"),
     ("sales", "POST", "/api/sales/settlements/1/vpost"), ("sales", "PUT", "/api/sales/settlements/1/pbalance"),
     ("sales", "POST", "/api/sales/settlements/1/post"),
+    # sales oales(D6a 外销子域;/api/sales/oales 菜单闸)
+    ("sales", "GET", "/api/sales/oales"), ("sales", "POST", "/api/sales/oales"),
+    ("sales", "GET", "/api/sales/oales/1"), ("sales", "PUT", "/api/sales/oales/1"),
+    ("sales", "DELETE", "/api/sales/oales/1"), ("sales", "POST", "/api/sales/oales/1/submit"),
+    ("sales", "POST", "/api/sales/oales/1/cancel"), ("sales", "POST", "/api/sales/oales/1/confirm"),
+    ("sales", "POST", "/api/sales/oales/1/reject"), ("sales", "POST", "/api/sales/oales/1/finish"),
+    ("sales", "POST", "/api/sales/oales/1/abate"),
     # balance
     ("balance", "GET", "/api/balance/settlements"), ("balance", "GET", "/api/balance/settlements/1"),
     ("balance", "POST", "/api/balance/settlements/1/lock"), ("balance", "POST", "/api/balance/settlements/1/unlock"),
@@ -377,7 +384,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(17 插件 59 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 59,
+    step("载入 api 规则(17 插件 60 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 60,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

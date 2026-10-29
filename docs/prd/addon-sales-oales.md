@@ -1,6 +1,6 @@
 # PRD - addon-sales 外销子域(厂商品牌外销单,精简版)
 
-> 状态:**草案**(2026-10-27 第 92 次运行起草,**待业务方确认;拍板前不写码**——L1 PRD 纪律,同 addon-quotation-norm/addon-balance-margin 先例)
+> 状态:**已确认(2026-10-28 用户拍板「后续无特殊说明一律按推荐」七项全按推荐)+ R4 已实现(第 99 次:V1103 两表一留痕/六态状态机/确认建款翻转 sales_oales 懒预置/SettlementItemReadyEvent 结算接入零新基建/退货跳态出生负计快照/废弃守卫收紧+撤结算/驳回回草稿/Web Oales.vue+/sales/oales 菜单;冒烟 oales 段 45 步;实现定案回写 rules/sales.md §6)**
 > 老系统参考:sales 模块 Oales 系(OalesPO/OalesItemPO/OalesPayPO/OalesRecordPO + OalesServiceImpl 16 方法)+ payment 模块 OalesPaymentServiceImpl(渠道收款)+ balance 模块 BalanceOales 系(结算线);实现口径见 `docs/rules/sales.md` §6、`docs/rules/balance.md` §5(均已深读在档)
 > 归属:推荐 **addon-sales V2 子域**(开放问题 1;addon-balance PRD 非目标是「上游结算源 addon-sales(销售明细/外销)」,docs/11 D6 同口径);若拍板独立插件则码段/迁移另议
 > 本子域声明:错误码 **300100–300150 小段**(addon-sales 300000 段内分段,300031 已占用,沿 quotation 231200/balance 320100 子段先例);迁移 **V1103+**;表前缀 `sales_oales_`(对齐 sales_counter/sales_order 惯例,军规 3)

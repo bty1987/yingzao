@@ -416,6 +416,19 @@ export const fetchSalesDelivery = (id) => http.get(`/api/sales/deliveries/${id}`
 export const advanceSalesDeliveryItem = (id, data) =>
   http.post(`/api/sales/delivery-items/${id}/advance`, data)
 
+// 外销单(addon-sales D6a):品牌厂商外销线
+export const pageOales = (params) => http.get('/api/sales/oales', { params })
+export const fetchOales = (id) => http.get(`/api/sales/oales/${id}`)
+export const createOales = (data) => http.post('/api/sales/oales', data)
+export const updateOales = (id, data) => http.put(`/api/sales/oales/${id}`, data)
+export const deleteOales = (id) => http.delete(`/api/sales/oales/${id}`)
+export const submitOales = (id) => http.post(`/api/sales/oales/${id}/submit`)
+export const cancelOales = (id) => http.post(`/api/sales/oales/${id}/cancel`)
+export const confirmOales = (id) => http.post(`/api/sales/oales/${id}/confirm`)
+export const rejectOales = (id, data) => http.post(`/api/sales/oales/${id}/reject`, data)
+export const finishOales = (id) => http.post(`/api/sales/oales/${id}/finish`)
+export const abateOales = (id, data) => http.post(`/api/sales/oales/${id}/abate`, data)
+
 // 结算(addon-balance):结算工作台/资金双腿/账户/扣款池
 export const pageBalanceSettlements = (params) => http.get('/api/balance/settlements', { params })
 export const fetchBalanceSettlement = (id) => http.get(`/api/balance/settlements/${id}`)
