@@ -27,7 +27,8 @@ public class AuthWebConfig implements WebMvcConfigurer {
 
     // /api/addons 不在白名单:下发内容按登录人角色过滤(RBAC),菜单前置拉取不存在
     private static final List<String> WHITELIST = List.of(
-            "/api/auth/login", "/api/c/auth/", "/api/c/cases", "/error", "/actuator/health");
+            "/api/auth/login", "/api/c/auth/", "/api/c/cases", "/api/c/cards", "/error",
+            "/actuator/health");
 
     private final TokenStore tokenStore;
     private final MessageSource messages;

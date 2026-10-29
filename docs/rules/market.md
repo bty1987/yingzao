@@ -64,7 +64,8 @@
 - **留资推送**:addCnotice → 读 systemConfig `isv` 当 URL 基址 → **事务内同步 httpGet 把姓名电话明文拼 GET query 外发**(PII 泄漏+未 URL 编码中文名截断+慢响应拖长事务,三重违例);
 - **`isv` 配置键两义**:后端当 URL 基址,前端配置目录登记为"白标开关 int"——同键两义,营造必须拆 `isv.enabled`/`isv.notifyUrl`;
 - card.cuser nullable 但 pageCard 无条件解引用(未绑卡整页 500);"一 unionId 一卡"规则未实现(queryCardByCuid 静默取第一条);cuser upsert 先查后插无唯一索引;
-- **全族零 FLException**:throws 死签名+记录不存在一律静默 return+无操作日志——名片族是安全与工程债务孤岛(对比获客链的新范式)。
+- **全族零 FLException**:throws 死签名+记录不存在一律静默 return+无操作日志——名片族是安全与工程债务孤岛(对比获客链的新范式);
+- 【实现定案 2026-10-29,第 100 次(R6)】**电子名片精简版落地:V1002 四表重做**(market_card 一人一卡 uk(org,user)/market_card_photo 级联/market_card_visitor uk(org,union_id)/market_card_notice 挂卡单义化——suid/ruid 双向语义消亡,notice 直接挂 card_id;PRD addon-market-card.md 五项开放问题全按推荐):手机 AES+hash 双列全域红线(CryptoBox 复用,零新机制);留资链路修老三重违例=**同事务发 CardNoticeCreatedEvent(零网络出事务)+CardNoticeConsumer 经通知中心站内信给名片主人**(事件只携 id,姓名电话零出域);同人同卡重复留资**幂等回显**(phone_hash 锚 duplicate=true 同 noticeId,对齐获客链惯例);频次防刷=同 hash 60s 内 1 条+日 10 条查询期计算零新表(修老无任何闸);已读守卫=名片主人(修老任意写);分享 share_token 重置换串不换卡 id(旧链接失效);C 端匿名端点 /api/c/cards/{token}(内核 AuthWebConfig 白名单+/api/c/cards prefix require:anonymous——path variable 须 prefix,exact 是全 URI 等值);匿名 org 上下文=yingzao.market.card.org-id 配置(portal anonymousOrgId 同款 V1 临时口径);管理端 /api/market/cards 菜单闸+emp_all 授权走「GET 角色回读→PUT /api/roles/{id}/menus 全量替换」(自动逐出 grants 缓存,第 96 次先例);isv 配置键两义拆 enabled/notifyUrl 两键 V1 不启用(扩展点);**web-mp 匿名名片页=R7(huashu-design 三方向初稿先行)**。
 
 ## 6. 金额/数量口径
 

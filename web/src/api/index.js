@@ -429,6 +429,18 @@ export const rejectOales = (id, data) => http.post(`/api/sales/oales/${id}/rejec
 export const finishOales = (id) => http.post(`/api/sales/oales/${id}/finish`)
 export const abateOales = (id, data) => http.post(`/api/sales/oales/${id}/abate`, data)
 
+// 电子名片(addon-market D6b):名片/相册/留资
+export const fetchMyCard = () => http.get('/api/market/cards/mine')
+export const createCard = (data) => http.post('/api/market/cards', data)
+export const updateCard = (id, data) => http.put(`/api/market/cards/${id}`, data)
+export const resetCardToken = (id) => http.post(`/api/market/cards/${id}/token`)
+export const setCardStatus = (id, data) => http.post(`/api/market/cards/${id}/status`, data)
+export const deleteCard = (id) => http.delete(`/api/market/cards/${id}`)
+export const addCardPhoto = (id, data) => http.post(`/api/market/cards/${id}/photos`, data)
+export const deleteCardPhoto = (id, photoId) => http.delete(`/api/market/cards/${id}/photos/${photoId}`)
+export const pageCardNotices = (params) => http.get('/api/market/cards/notices', { params })
+export const readCardNotice = (noticeId) => http.post(`/api/market/cards/notices/${noticeId}/read`)
+
 // 结算(addon-balance):结算工作台/资金双腿/账户/扣款池
 export const pageBalanceSettlements = (params) => http.get('/api/balance/settlements', { params })
 export const fetchBalanceSettlement = (id) => http.get(`/api/balance/settlements/${id}`)

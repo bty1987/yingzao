@@ -4374,9 +4374,10 @@ def main():
     # 插件下发:四菜单
     addons_mkt = api_ok("admin 插件下发复查(market)", "GET", "/api/addons", tok_admin)
     mkt_addon = next((a for a in (addons_mkt or []) if a.get("id") == "market"), None)
-    step("market 四菜单动态下发", bool(mkt_addon)
+    step("market 五菜单动态下发(含电子名片)", bool(mkt_addon)
          and sorted(m.get("path") for m in mkt_addon.get("menus") or []) == [
-             "/market/campaigns", "/market/funnels", "/market/inbounds", "/market/showcase"],
+             "/market/campaigns", "/market/cards", "/market/funnels", "/market/inbounds",
+             "/market/showcase"],
          mkt_addon and mkt_addon.get("menus"))
 
     # ---- 投放物:活动/渠道/投放源 ----
@@ -6071,10 +6072,16 @@ def main():
         finally:
             conn.close()
 
-    # 段首定向清理:历史轮 oales 段残留(本域专用 fixture 逐轮重建,旧单直接清表保计数器)
+    # 段首定向清理:历史轮 oales 段残留(旧单清表;单 id 归 1 复用——payment/balance 侧同 biz 遗留必清,
+    # 否则 confirm 建款撞 270006/结算桶吸附断言取旧桶,第 100 次实锤)
     oales_x("delete from sales_oales_track where oid in (select id from (select id from sales_oales where org_id=1) t)")
     oales_x("delete from sales_oales_item where oid in (select id from (select id from sales_oales where org_id=1) t)")
     oales_x("delete from sales_oales where org_id = 1")
+    oales_x("delete from payment_receipt_channel where receipt_id in (select id from (select id from payment_receipt where bill_id in (select id from (select id from payment_bill where biz_addon='sales' and biz_type='oales') t2)) t1)")
+    oales_x("delete from payment_receipt where bill_id in (select id from (select id from payment_bill where biz_addon='sales' and biz_type='oales') t)")
+    oales_x("delete from payment_bill where biz_addon = 'sales' and biz_type = 'oales'")
+    oales_x("delete from balance_settlement_item where source_type = 'oales'")
+    oales_x("delete from balance_settlement where settlement_type = 'sales:oales'")
 
     # 专用 fixture:品牌+厂商挂接(supplier_brand)+装修单
     brand_o = api_ok("外销段建品牌", "POST", "/api/basedata/brands", tok_admin,
@@ -6217,6 +6224,123 @@ def main():
     oales_x("delete from sales_oales_track where oid in (select id from (select id from sales_oales where org_id=1) t)")
     oales_x("delete from sales_oales_item where oid in (select id from (select id from sales_oales where org_id=1) t)")
     oales_x("delete from sales_oales where org_id = 1")
+
+    # ---- 电子名片子域(D6b,addon-market V1002;匿名留资+通知+幂等+防刷) ----
+    print("== 电子名片(addon-market D6b:一人一卡+匿名留资+事件通知+频次防刷) ==")
+    MC = "/api/market/cards"
+    stamp_c = str(int(time.time() % 100000))[-4:]
+    PHONE_C = "136%08d" % (int(time.time()) % 100000000)
+    VISITOR_PHONE = "1377777%04d" % (int(time.time()) % 10000)
+
+    def card_q(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                return cur.fetchall()
+        finally:
+            conn.close()
+
+    def card_x(sql, args=None):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args or ())
+                conn.commit()
+                return cur.rowcount
+        finally:
+            conn.close()
+
+    # 段首定向清理:名片域自建数据,清全表(跨轮 token 残留)
+    card_x("delete from market_card_notice")
+    card_x("delete from market_card_photo")
+    card_x("delete from market_card")
+    card_x("delete from yz_notification where source_type = 'card.notice'")
+
+    # emp_all 角色补 /market/cards 授权(新菜单,重写触发 grants 缓存逐出——第 96 次先例)
+    emp_all_id = card_q("select id from yz_role where code='emp_all' limit 1")[0][0]
+    cur_menus = api_ok("emp_all 角色回读", "GET", "/api/roles/%s" % emp_all_id, tok_admin)
+    if "/market/cards" not in (cur_menus.get("menus") or []):
+        api_ok("emp_all 补名片菜单授权", "PUT", "/api/roles/%s/menus" % emp_all_id, tok_admin,
+               {"menus": sorted(list((cur_menus.get("menus") or [])) + ["/market/cards"])})
+
+    api_err("名片缺手机 280104", "POST", MC, tok_admin, {"userName": "残缺"}, 280104)
+    api_err("手机格式非法 280104", "POST", MC, tok_admin,
+            {"userName": "格式错", "phone": "12345"}, 280104)
+    card_b = api_ok("example_b 建名片(一人一卡)", "POST", MC, tok_b,
+                    {"userName": "名片贝" + stamp_c, "phone": PHONE_C, "wechat": "wx_b" + stamp_c,
+                     "industry": "装修", "profession": "设计师", "address": "烟测市", "info": "十年设计"})
+    api_err("重复建卡 280102", "POST", MC, tok_b,
+            {"userName": "名片贝2", "phone": PHONE_C}, 280102)
+    mine = api_ok("我的名片回读", "GET", MC + "/mine", tok_b)
+    step("手机 AES 密文非明文落库+hash 在册",
+         card_q("select phone_cipher, phone_hash from market_card where id=%s" % card_b)[0][0] != PHONE_C
+         and card_q("select phone_hash from market_card where id=%s" % card_b)[0][0], None)
+    token_b = mine["share_token"]
+
+    api_ok("相册加两图", "POST", "%s/%s/photos" % (MC, card_b), tok_b,
+           {"url": "https://cdn.example.com/p1.jpg", "sortNo": 0})
+    api_ok("相册加第二图", "POST", "%s/%s/photos" % (MC, card_b), tok_b,
+           {"url": "https://cdn.example.com/p2.jpg", "sortNo": 1})
+    api_err("非本人改卡 280106", "PUT", "%s/%s" % (MC, card_b), tok_admin,
+            {"userName": "越权改"}, 280106)
+
+    # 匿名前台:名片浏览(内核白名单免 token)+ 停用守卫
+    view1 = api_ok("匿名名片浏览(免登录)", "GET",
+                   "/api/c/cards/%s" % token_b, None)
+    step("前台投影含明文电话+相册 2 图", (view1 or {}).get("phone") == PHONE_C
+         and len((view1 or {}).get("photos") or []) == 2, view1)
+    api_err("无效令牌 280109", "GET", "/api/c/cards/deadbeef" + stamp_c, None, None, 280109)
+    api_ok("停用名片", "POST", "%s/%s/status" % (MC, card_b), tok_b, {"status": 1})
+    api_err("停用后前台 280103", "GET", "/api/c/cards/%s" % token_b, None, None, 280103)
+    api_ok("重新启用", "POST", "%s/%s/status" % (MC, card_b), tok_b, {"status": 0})
+
+    # 留资:首次创建→事件通知→幂等回显→频次闸→已读守卫
+    n1 = api_ok("访客匿名留资(免登录)", "POST", "/api/c/cards/%s/notices" % token_b, None,
+                {"name": "访客王" + stamp_c, "phone": VISITOR_PHONE, "comment": "想聊聊装修"})
+    step("留资返回 noticeId 非重复", (n1 or {}).get("noticeId") and n1.get("duplicate") is False, n1)
+    n2 = api_ok("同人同卡重复留资(幂等回显)", "POST",
+                "/api/c/cards/%s/notices" % token_b, None,
+                {"name": "访客王" + stamp_c, "phone": VISITOR_PHONE, "comment": "再留一次"})
+    step("重复留资 duplicate=true 且同 noticeId", (n2 or {}).get("duplicate") is True
+         and n2.get("noticeId") == n1.get("noticeId"), n2)
+    api_ok("不同访客留资放行", "POST", "/api/c/cards/%s/notices" % token_b, None,
+           {"name": "访客李", "phone": "139%08d" % (int(time.time()) % 100000000)})
+    api_err("缺姓名 280104", "POST", "/api/c/cards/%s/notices" % token_b, None,
+            {"phone": "13800000000"}, 280104)
+    event_consumed("CardNoticeCreatedEvent", "card-notice:%s" % n1["noticeId"],
+                   "留资事件已消费(零网络出事务)")
+    step("密文落库(留资手机非明文)",
+         card_q("select phone_cipher from market_card_notice where id=%s" % n1["noticeId"])[0][0]
+         != VISITOR_PHONE, None)
+    notif = api_ok("名片主通知列表", "GET", "/api/notifications?page=1&size=20", tok_b)
+    hit_n = [n for n in (notif or []) if n.get("source_type") == "card.notice"
+             and n.get("source_id") == str(n1["noticeId"])]
+    step("通知中心送达名片主(card.notice 源)", len(hit_n) >= 1, notif and len(notif))
+
+    # 已读守卫:主人可读,重复读拒
+    api_ok("名片主标记已读", "POST", "%s/notices/%s/read" % (MC, n1["noticeId"]), tok_b)
+    api_err("重复已读 280108", "POST", "%s/notices/%s/read" % (MC, n1["noticeId"]), tok_b,
+            None, 280108)
+    notices_b = api_ok("我的留资列表(含已读徽章)", "GET",
+                       "%s/notices?cardId=%s&page=1&size=20" % (MC, card_b), tok_b)
+    read_row = next((r for r in (notices_b or {}).get("rows", []) if r["id"] == n1["noticeId"]), None)
+    step("留资列表 2 行且已读行状态+解密电话", (notices_b or {}).get("total") == 2
+         and read_row and read_row["status"] == 1 and read_row["phone"] == VISITOR_PHONE, notices_b)
+    all_notices = api_ok("主管全员留资列表", "GET", "%s/notices?page=1&size=20" % MC, tok_admin)
+    step("全员视角 total=2", (all_notices or {}).get("total") == 2, all_notices)
+
+    # 重置令牌:旧链接失效
+    api_ok("重置分享令牌", "POST", "%s/%s/token" % (MC, card_b), tok_b)
+    mine2 = api_ok("重置后回读", "GET", MC + "/mine", tok_b)
+    step("令牌已换(旧链接失效)", mine2 and mine2["share_token"] != token_b, None)
+    api_err("旧令牌 280109", "GET", "/api/c/cards/%s" % token_b, None, None, 280109)
+
+    # 段尾清理(通知留痕属通知中心既有语义,card.notice 源随段首清)
+    card_x("delete from market_card_notice")
+    card_x("delete from market_card_photo")
+    card_x("delete from market_card")
+    card_x("delete from yz_notification where source_type = 'card.notice'")
 
     return finish()
 

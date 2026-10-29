@@ -313,6 +313,13 @@ ENDPOINTS = [
     ("market", "GET", "/api/market/showcase/cases/1"), ("market", "PUT", "/api/market/showcase/cases/1"),
     ("market", "POST", "/api/market/showcase/cases/1/status"), ("market", "DELETE", "/api/market/showcase/cases/1"),
     ("market", "POST", "/api/market/showcase/cases/1/pictures"), ("market", "DELETE", "/api/market/showcase/pictures/1"),
+    # market cards(D6b 电子名片;/api/market/cards 菜单闸 + C 端匿名 prefix)
+    ("market", "GET", "/api/market/cards/mine"), ("market", "POST", "/api/market/cards"),
+    ("market", "PUT", "/api/market/cards/1"), ("market", "DELETE", "/api/market/cards/1"),
+    ("market", "POST", "/api/market/cards/1/token"), ("market", "POST", "/api/market/cards/1/status"),
+    ("market", "POST", "/api/market/cards/1/photos"), ("market", "DELETE", "/api/market/cards/1/photos/1"),
+    ("market", "GET", "/api/market/cards/notices"), ("market", "POST", "/api/market/cards/notices/1/read"),
+    ("market", "GET", "/api/c/cards/tok123"), ("market", "POST", "/api/c/cards/tok123/notices"),
     # supplier(第 41 次)
     ("supplier", "POST", "/api/supplier/suppliers"), ("supplier", "GET", "/api/supplier/suppliers"),
     ("supplier", "GET", "/api/supplier/suppliers/1"), ("supplier", "PUT", "/api/supplier/suppliers/1"),
@@ -384,7 +391,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(17 插件 60 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 60,
+    step("载入 api 规则(17 插件 62 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 62,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

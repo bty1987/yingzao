@@ -1,7 +1,7 @@
 addon:
   id: market
   name: 营销获客
-  version: 0.1.0
+  version: 0.2.0
   error-code-segment: 280000
   menus:
     - path: /market/campaigns
@@ -16,6 +16,9 @@ addon:
     - path: /market/showcase
       title: 案例库
       icon: Picture
+    - path: /market/cards
+      title: 电子名片
+      icon: Postcard
   dicts:
     campaignStatus:
       - { key: '0', label: 草稿 }
@@ -50,6 +53,12 @@ addon:
     personType:
       - { key: '0', label: 设计师 }
       - { key: '1', label: 监理 }
+    cardStatus:
+      - { key: '0', label: 启用 }
+      - { key: '1', label: 停用 }
+    noticeStatus:
+      - { key: '0', label: 待跟进 }
+      - { key: '1', label: 已读 }
   api:
     - prefix: /api/market/campaigns
       require: /market/campaigns
@@ -63,3 +72,8 @@ addon:
       require: /market/funnels
     - prefix: /api/market/showcase
       require: /market/showcase
+    - prefix: /api/market/cards
+      require: /market/cards
+    # 名片 C 端(带 share_token path variable,须 prefix;匿名+员工一视同仁放行,白名单在内核 AuthWebConfig)
+    - prefix: /api/c/cards
+      require: anonymous
