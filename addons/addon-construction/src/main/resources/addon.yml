@@ -64,6 +64,18 @@ addon:
       - { key: 'scheduleReset', label: 排期重排 }
       - { key: 'accept', label: 验收竣工 }
       - { key: 'acceptRectify', label: 验收整改 }
+  metrics:
+    # 工单当日达成率(D4 北极星):工程维 ads 表(construction-ads-wo-task-daily 日刷链),98%黄/95%红
+    - key: construction.workload.dailyRate
+      nameKey: construction.metric.dailyRate
+      descKey: construction.metric.dailyRate.desc
+      sourceKey: construction.metric.dailyRate.source
+      frequency: daily
+      compare: targetProgress
+      unit: ppm
+      threshold-warn: 9800
+      threshold-critical: 9500
+      status: confirmed
   api:
     - prefix: /api/construction
       require: /construction/constructions

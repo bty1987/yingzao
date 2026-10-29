@@ -70,6 +70,16 @@ addon:
     oalesType:
       - { key: '0', label: 购货 }
       - { key: '1', label: 退货 }
+  metrics:
+    # 月主材业绩(D4 北极星):当月签单权责额(PRD 开放问题 2 推荐),本域 SQL 查询期直出
+    - key: sales.performance.materialMonthly
+      nameKey: sales.metric.materialMonthly
+      descKey: sales.metric.materialMonthly.desc
+      sourceKey: sales.metric.materialMonthly.source
+      frequency: realtime
+      compare: monthOnMonth
+      unit: cent
+      status: confirmed
   api:
     # 结算驳回端点路径挂 /orders 前缀(历史路径),归销售单菜单;结算工作台角色建议连带授权销售单菜单
     - prefix: /api/sales/orders

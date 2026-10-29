@@ -31,6 +31,7 @@
         <module>addons/addon-portal</module>
         <module>addons/addon-target</module>
         <module>addons/addon-service</module>
+        <module>addons/addon-dashboard</module>
         <module>yingzao-app</module>
     </modules>
 

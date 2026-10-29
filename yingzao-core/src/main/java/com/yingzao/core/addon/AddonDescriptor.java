@@ -14,10 +14,21 @@ public record AddonDescriptor(
         List<Menu> menus,
         List<Mount> mounts,
         List<Api> apis,
+        List<Metric> metrics,
         Map<String, Object> dicts) {
 
     /** 插件菜单声明:前端据此动态注册路由与侧栏菜单项。 */
     public record Menu(String path, String title, String icon) {
+    }
+
+    /**
+     * 指标声明(报表框架 D4):五要素元数据进 addon.yml metrics 段,声明与 MetricProvider
+     * 实现分离——name/desc/source 为 i18n 键,Registry 组装时解析为展示文本;
+     * status=confirmed 须有 provider 在位,pending=口径确认中(灰灯,可无 provider)。
+     */
+    public record Metric(String key, String nameKey, String descKey, String sourceKey,
+            String frequency, String compare, String unit,
+            long thresholdWarn, long thresholdCritical, String status) {
     }
 
     /** 前端槽位挂载声明:component 由插件前端包导出,capability 为渲染所需权限。 */

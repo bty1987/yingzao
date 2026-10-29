@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>营造驾驶舱 · 方向三「夜航指挥舱」</title>
+<style>
+/* ============ 方向三:深色指挥舱(经营作战室大屏) ============
+   参照家族:经营作战室 LED 大屏/控制中心——差异化方向(账本近 5 交付全浅色);
+   克制版深舱:单一青金强调色,不做霓虹渐变堆砌;投屏态对比度≥7:1(docs/06 §5.5 留思想) */
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:1600px; height:900px; overflow:hidden;
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#0b1320; }
+.tabular { font-variant-numeric: tabular-nums; }
+.glow { position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(900px 380px at 22% -8%, rgba(38,110,198,.16), transparent 62%),
+             radial-gradient(760px 340px at 88% 0%, rgba(38,198,180,.07), transparent 60%); }
+.wrap { position:relative; padding:22px 40px; }
+.top { display:flex; align-items:baseline; justify-content:space-between; border-bottom:1px solid #1c2940; padding-bottom:14px; }
+.top h1 { font-size:22px; color:#e8eef8; font-weight:700; letter-spacing:3px; }
+.top h1 b { color:#4cc3ff; }
+.top h1 small { font-size:12px; color:#5f6f8c; font-weight:400; letter-spacing:1px; margin-left:12px; }
+.top .t { font-size:12px; color:#5f6f8c; } .top .t b { color:#4cc3ff; }
+
+/* 结论条:深底横幅+青金左标,警示句独立 */
+.conclusion { margin-top:16px; display:flex; gap:14px; align-items:stretch; }
+.c-main { flex:1.55; background:#101b2e; border:1px solid #1e2c47; border-left:3px solid #4cc3ff;
+  border-radius:8px; padding:13px 20px; display:flex; align-items:center; gap:14px; }
+.c-main .text { font-size:15px; color:#cfdcee; font-weight:600; flex:1; }
+.c-main .text em { font-style:normal; color:#ff8a6b; } .c-main .text i { font-style:normal; color:#4cc3ff; }
+.ckpis { display:flex; gap:22px; }
+.ckpi { text-align:right; } .ckpi .l { font-size:12px; color:#5f6f8c; }
+.ckpi .v { font-size:20px; font-weight:700; color:#e8eef8; }
+.ckpi .d { font-size:12px; color:#ff8a6b; } .ckpi .d.down { color:#37c398; } .ckpi .d.flat { color:#5f6f8c; }
+
+.sec { margin-top:16px; font-size:13px; font-weight:700; color:#8fa3c2; letter-spacing:1px; display:flex; align-items:center; gap:8px; }
+.sec::before { content:""; width:14px; height:2px; background:#4cc3ff; }
+.sec span { font-weight:400; color:#5f6f8c; font-size:12px; letter-spacing:0; margin-left:2px; }
+
+.cards6 { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-top:10px; }
+.dim { background:#101b2e; border:1px solid #1c2940; border-radius:8px; min-height:128px; padding:13px 15px; position:relative; cursor:pointer; }
+.dim::before { content:""; position:absolute; top:0; left:0; right:0; height:2px; border-radius:8px 8px 0 0; }
+.dim.c1::before { background:#4cc3ff; } .dim.c2::before { background:#8f7bff; }
+.dim.c3::before { background:#37c398; } .dim.c4::before { background:#e8b64c; }
+.dim.c5::before { background:#4cc3ff; } .dim.c6::before { background:#3a4a66; }
+.dim .name { font-size:13px; color:#cfdcee; font-weight:600; }
+.dim .badge { position:absolute; top:11px; right:11px; font-size:11px; padding:2px 8px; border-radius:8px; }
+.badge.ok { background:rgba(55,195,152,.14); color:#37c398; }
+.badge.warn { background:rgba(232,182,76,.14); color:#e8b64c; }
+.badge.pend { background:rgba(95,111,140,.16); color:#7b8aa5; }
+.dim .num { font-size:25px; font-weight:700; color:#e8eef8; margin-top:15px; }
+.dim .num small { font-size:12px; font-weight:400; color:#5f6f8c; }
+.dim .sub { font-size:12px; color:#5f6f8c; margin-top:9px; }
+.dim .bar { height:6px; border-radius:3px; background:#16233a; margin-top:10px; position:relative; overflow:visible; }
+.dim .bar i { position:absolute; left:0; top:0; bottom:0; border-radius:3px; }
+.dim .bar s { position:absolute; top:-3px; bottom:-3px; width:2px; background:#8fa3c2; }
+.dim.pending { background:#0e1728; } .dim.pending .num { color:#4a5872; font-size:15px; margin-top:22px; }
+
+.duo { display:grid; grid-template-columns:1.5fr 1fr; gap:12px; margin-top:10px; }
+.panel { background:#101b2e; border:1px solid #1c2940; border-radius:8px; padding:15px 20px; }
+.legend { display:flex; gap:16px; font-size:12px; color:#7b8aa5; }
+.legend i { display:inline-block; width:16px; border-top:2px solid #4cc3ff; vertical-align:middle; margin-right:5px; }
+.legend i.gray { border-top:2px dashed #3a4a66; } .legend i.g2 { border-top:2px solid #37c398; }
+svg text { font-family:inherit; }
+.rank-row { display:flex; align-items:center; gap:10px; margin-top:12px; }
+.rank-row .no { width:20px; height:20px; font-size:11px; color:#5f6f8c; text-align:center; line-height:20px; }
+.rank-row.first .no { color:#06121f; background:#4cc3ff; border-radius:5px; font-weight:700; }
+.rank-row .nm { width:96px; font-size:13px; color:#cfdcee; }
+.rank-row .bar { flex:1; height:12px; background:#16233a; border-radius:6px; overflow:hidden; }
+.rank-row .bar i { display:block; height:100%; background:#2f7fd6; border-radius:6px; }
+.rank-row.first .bar i { background:#4cc3ff; }
+.rank-row .val { width:88px; text-align:right; font-size:12px; color:#cfdcee; }
+.foot { margin-top:12px; font-size:12px; color:#5f6f8c; display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="top">
+      <h1>营造<b>·</b>经营指挥舱<small>YINGZAO ERP — 风格方向三「夜航」· 深色作战室</small></h1>
+      <div class="t">数据时点 <b>2026-10-30 08:00</b> · 签约=权责 回款=收付 · asOf 每卡显式</div>
+    </div>
+
+    <div class="conclusion">
+      <div class="c-main">
+        <div class="text">10 月签约 <em class="tabular">4,128 万</em>,环比 <em>+12.4%</em>——<i>江南大区超额 118% 拉动</i>;工程工单达成 96.2%,低于 98% 预警线,建议跟进在建节点排期。</div>
+        <div class="ckpis">
+          <div class="ckpi"><div class="l">签约额</div><div class="v tabular">4,128万</div><div class="d">▲ 12.4%</div></div>
+          <div class="ckpi"><div class="l">回款额</div><div class="v tabular">3,520万</div><div class="d">▲ 5.1%</div></div>
+          <div class="ckpi"><div class="l">达成率</div><div class="v tabular">82.4%</div><div class="d flat">— 持平</div></div>
+          <div class="ckpi"><div class="l">工单达成</div><div class="v tabular">96.2%</div><div class="d down">▼ 1.8%</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">六维健康卡<span>整卡可点下钻 · 状态=图标+文字双编码 · 红色仅用于偏离阈值</span></div>
+    <div class="cards6">
+      <div class="dim c1"><div class="name">业绩营销</div><div class="badge ok">● 正常</div>
+        <div class="num tabular">4,128<small> 万</small></div><div class="sub">月签约合同额 · 环比 +12.4%</div></div>
+      <div class="dim c2"><div class="name">经营管理</div><div class="badge warn">▲ 预警</div>
+        <div class="num tabular">82.4<small> %</small></div>
+        <div class="bar"><i style="width:82.4%;background:#e8b64c"></i><s style="left:100%"></s></div>
+        <div class="sub">月目标达成率 · 80% 黄线之上</div></div>
+      <div class="dim c3"><div class="name">工程交付</div><div class="badge warn">▲ 预警</div>
+        <div class="num tabular">96.2<small> %</small></div>
+        <div class="bar"><i style="width:96.2%;background:#e8b64c"></i><s style="left:95%"></s></div>
+        <div class="sub">工单当日达成率 · 98% 黄线之下</div></div>
+      <div class="dim c4"><div class="name">供应链</div><div class="badge ok">● 正常</div>
+        <div class="num tabular">2,870<small> 万</small></div><div class="sub">月主材业绩 · 环比 +8.0%</div></div>
+      <div class="dim c5"><div class="name">财务</div><div class="badge ok">● 正常</div>
+        <div class="num tabular">3,520<small> 万</small></div><div class="sub">月经营性回款 · 环比 +5.1%</div></div>
+      <div class="dim c6 pending"><div class="name">客户</div><div class="badge pend">◌ 口径确认中</div>
+        <div class="num">漏斗口径定稿后接入</div><div class="sub">漏斗五段 · R33 前置——宁可空不可错</div></div>
+    </div>
+
+    <div class="duo">
+      <div class="panel">
+        <div class="sec" style="margin-top:0">签约-回款双线<span>(近 6 月,万元)</span>
+          <span class="legend" style="margin-left:auto"><span><i></i>签约(本期)</span><span><i class="gray"></i>签约(上期)</span><span><i class="g2"></i>回款</span></span></div>
+        <svg width="100%" height="188" viewBox="0 0 840 188">
+          <g stroke="#16233a" stroke-width="1">
+            <line x1="46" y1="16" x2="46" y2="156"/><line x1="46" y1="16" x2="820" y2="16"/>
+            <line x1="46" y1="62" x2="820" y2="62"/><line x1="46" y1="108" x2="820" y2="108"/><line x1="46" y1="156" x2="820" y2="156"/>
+          </g>
+          <g fill="#5f6f8c" font-size="11">
+            <text x="40" y="20" text-anchor="end">5,000</text><text x="40" y="66" text-anchor="end">3,750</text>
+            <text x="40" y="112" text-anchor="end">2,500</text><text x="40" y="160" text-anchor="end">1,250</text>
+          </g>
+          <polyline fill="none" stroke="#4cc3ff" stroke-width="2" points="86,112 216,97 346,123 476,82 606,59 736,40"/>
+          <polyline fill="none" stroke="#3a4a66" stroke-width="1.6" stroke-dasharray="5,4" points="86,123 216,116 346,120 476,103 606,86 736,75"/>
+          <polyline fill="none" stroke="#37c398" stroke-width="2" points="86,130 216,123 346,134 476,112 606,101 736,90"/>
+          <g fill="#4cc3ff"><circle cx="86" cy="112" r="3"/><circle cx="736" cy="40" r="3.5"/></g>
+          <g fill="#37c398"><circle cx="736" cy="90" r="3"/></g>
+          <g fill="#e8eef8" font-size="11" font-weight="600">
+            <text x="736" y="30" text-anchor="middle">4,128</text>
+            <text x="86" y="104" text-anchor="middle">2,380</text>
+            <text x="736" y="84" text-anchor="middle" fill="#37c398">3,520</text>
+          </g>
+          <g fill="#5f6f8c" font-size="11" text-anchor="middle">
+            <text x="86" y="176">5月</text><text x="216" y="176">6月</text><text x="346" y="176">7月</text>
+            <text x="476" y="176">8月</text><text x="606" y="176">9月</text><text x="736" y="176">10月</text>
+          </g>
+        </svg>
+      </div>
+      <div class="panel">
+        <div class="sec" style="margin-top:0">大区签约额排名<span>(当月)· 第 1 名高亮</span></div>
+        <div class="rank-row first"><div class="no">1</div><div class="nm">江南大区</div><div class="bar"><i style="width:100%"></i></div><div class="val tabular">1,024 万</div></div>
+        <div class="rank-row"><div class="no">2</div><div class="nm">江北城</div><div class="bar"><i style="width:74%"></i></div><div class="val tabular">758 万</div></div>
+        <div class="rank-row"><div class="no">3</div><div class="nm">铁西</div><div class="bar"><i style="width:61%"></i></div><div class="val tabular">625 万</div></div>
+        <div class="rank-row"><div class="no">4</div><div class="nm">浑南</div><div class="bar"><i style="width:49%"></i></div><div class="val tabular">502 万</div></div>
+        <div class="rank-row"><div class="no">5</div><div class="nm">和平</div><div class="bar"><i style="width:38%"></i></div><div class="val tabular">389 万</div></div>
+        <div class="rank-row"><div class="no">6</div><div class="nm">铁岭</div><div class="bar"><i style="width:27%"></i></div><div class="val tabular">276 万</div></div>
+        <div class="rank-row"><div class="no">7</div><div class="nm">抚顺</div><div class="bar"><i style="width:19%"></i></div><div class="val tabular">194 万</div></div>
+        <div class="rank-row"><div class="no">8</div><div class="nm">鞍山</div><div class="bar"><i style="width:12%"></i></div><div class="val tabular">123 万</div></div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div>指标目录(五要素可点开):6 项 confirmed · 4 项口径确认中(灰灯) · 投屏态对比度已按 7:1 校准</div>
+      <div>契约直出=08:00 · ads 聚合=次日 03:00 批 · 混合时点每卡显式</div>
+    </div>
+  </div>
+</body>
+</html>

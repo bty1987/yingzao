@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>营造驾驶舱 · 方向一「经营蓝调」</title>
+<style>
+/* ============ 方向一:企业蓝渐变+白卡 ============
+   参照家族:阿里云云监控 / 华为云Console —— 用户认可基准(L3「蓝渐变头部+白卡」)
+   布局恒按 docs/06 §4.2 五区块;图表硬规则按 §5(上期灰虚线/排行第1名深藏蓝/状态双编码) */
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:1600px; height:900px; overflow:hidden;
+  font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:#eef2f7; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* 头部:蓝渐变横幅(方向一签名) */
+.hero { height:104px; padding:0 40px; display:flex; align-items:center; justify-content:space-between;
+  background:linear-gradient(135deg,#0f3f8f 0%,#1663c7 58%,#2b8aef 100%); color:#fff; }
+.hero .title h1 { font-size:24px; letter-spacing:2px; font-weight:700; }
+.hero .title p { font-size:12px; opacity:.78; margin-top:5px; letter-spacing:1px; }
+.hero .meta { text-align:right; font-size:12px; line-height:1.9; opacity:.85; }
+.hero .meta b { font-size:14px; }
+
+/* 结论条 */
+.board { padding:18px 40px 0; }
+.conclusion { background:#fff; border-radius:10px; padding:14px 22px; display:flex; align-items:center;
+  gap:18px; box-shadow:0 1px 4px rgba(15,63,143,.08); }
+.conclusion .mark { width:4px; height:34px; background:#1663c7; border-radius:2px; }
+.conclusion .text { font-size:16px; font-weight:600; color:#1a2b4c; flex:1; }
+.conclusion .text em { font-style:normal; color:#c74622; }
+.conclusion .text i { font-style:normal; color:#1663c7; }
+.kpis { display:flex; gap:14px; }
+.kpi { min-width:118px; text-align:right; }
+.kpi .l { font-size:12px; color:#7a8699; }
+.kpi .v { font-size:22px; font-weight:700; color:#12264a; }
+.kpi .d { font-size:12px; color:#c74622; } .kpi .d.down { color:#1d8a5f; } .kpi .d.flat { color:#7a8699; }
+
+/* 六维健康卡 2×3 */
+.section-t { margin:18px 0 10px; font-size:14px; font-weight:700; color:#33415c; display:flex; justify-content:space-between; }
+.section-t span { font-size:12px; font-weight:400; color:#8b97a8; }
+.cards6 { display:grid; grid-template-columns:repeat(6,1fr); gap:14px; }
+.dim { background:#fff; border-radius:10px; min-height:132px; padding:14px 16px; position:relative;
+  box-shadow:0 1px 4px rgba(15,63,143,.08); cursor:pointer; }
+.dim::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; border-radius:10px 10px 0 0; }
+.dim.c1::before { background:#1663c7; } .dim.c2::before { background:#7a5af5; }
+.dim.c3::before { background:#0e9f6e; } .dim.c4::before { background:#d98a00; }
+.dim.c5::before { background:#0f8bb5; } .dim.c6::before { background:#9aa5b5; }
+.dim .name { font-size:13px; color:#33415c; font-weight:600; }
+.dim .badge { position:absolute; top:12px; right:12px; font-size:11px; padding:2px 8px; border-radius:9px;
+  display:flex; align-items:center; gap:4px; }
+.badge.ok  { background:#e5f6ee; color:#1d8a5f; }
+.badge.warn{ background:#fdf3e0; color:#b97a00; }
+.badge.pend{ background:#eef1f6; color:#68758a; }
+.dim .num { font-size:26px; font-weight:700; color:#12264a; margin-top:14px; }
+.dim .num small { font-size:13px; font-weight:400; color:#7a8699; }
+.dim .sub { font-size:12px; color:#8b97a8; margin-top:8px; }
+.dim .bar { height:8px; border-radius:4px; background:#e8edf5; margin-top:10px; overflow:hidden; position:relative; }
+.dim .bar i { position:absolute; left:0; top:0; bottom:0; border-radius:4px; }
+.dim .bar s { position:absolute; top:-2px; bottom:-2px; width:2px; background:#33415c; }
+.dim.pending { background:#f7f9fc; }
+.dim.pending .num { color:#aab3c2; font-size:16px; letter-spacing:1px; margin-top:20px; }
+
+/* 双线 + 大区排名 */
+.duo { display:grid; grid-template-columns:1.5fr 1fr; gap:14px; margin-top:14px; }
+.panel { background:#fff; border-radius:10px; padding:16px 20px; box-shadow:0 1px 4px rgba(15,63,143,.08); }
+.legend { display:flex; gap:18px; font-size:12px; color:#68758a; }
+.legend i { display:inline-block; width:18px; height:0; border-top:2px solid #1663c7; vertical-align:middle; margin-right:5px; }
+.legend i.gray { border-top:2px dashed #b7c0cd; }
+.legend i.g2 { border-top:2px solid #1d8a5f; }
+svg text { font-family:inherit; }
+.rank-row { display:flex; align-items:center; gap:10px; margin-top:11px; }
+.rank-row .no { width:20px; font-size:12px; color:#8b97a8; text-align:center; }
+.rank-row.first .no { color:#fff; background:#0f3f8f; border-radius:4px; font-weight:700; }
+.rank-row .nm { width:96px; font-size:13px; color:#33415c; }
+.rank-row .bar { flex:1; height:14px; background:#eef2f7; border-radius:3px; overflow:hidden; }
+.rank-row .bar i { display:block; height:100%; background:#2b8aef; border-radius:3px; }
+.rank-row.first .bar i { background:#0f3f8f; }
+.rank-row .val { width:88px; text-align:right; font-size:12px; color:#33415c; }
+
+/* 口径脚注 */
+.foot { margin-top:14px; padding:10px 22px 0; font-size:12px; color:#8b97a8; display:flex; justify-content:space-between; }
+.foot .asof b { color:#33415c; }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div class="title"><h1>营造 · 经营驾驶舱</h1><p>YINGZAO ERP · 高管聚合首页 — 风格方向一「经营蓝调」· 企业蓝渐变+白卡</p></div>
+    <div class="meta">数据时点 <b>2026-10-30 08:00</b><br>签约/回款 = 权责/收付双口径 · asOf 每卡显式</div>
+  </div>
+
+  <div class="board">
+    <!-- 区块1 结论条:变化+归因,不复述定义 -->
+    <div class="conclusion">
+      <div class="mark"></div>
+      <div class="text">10 月签约 <em class="tabular">4,128 万</em>,环比 <em>+12.4%</em>——<i>江南大区超额 118% 拉动</i>;工程工单达成 96.2%,低于 98% 预警线,建议跟进在建节点排期。</div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">签约额</div><div class="v tabular">4,128万</div><div class="d">▲ 12.4%</div></div>
+        <div class="kpi"><div class="l">回款额</div><div class="v tabular">3,520万</div><div class="d">▲ 5.1%</div></div>
+        <div class="kpi"><div class="l">达成率</div><div class="v tabular">82.4%</div><div class="d flat">— 持平</div></div>
+        <div class="kpi"><div class="l">工单达成</div><div class="v tabular">96.2%</div><div class="d down">▼ 1.8%</div></div>
+      </div>
+    </div>
+
+    <!-- 区块2 六维健康卡 -->
+    <div class="section-t">六维健康卡 <span>全部可点下钻 · 状态=图标+文字双编码 · 红色仅用于偏离阈值</span></div>
+    <div class="cards6">
+      <div class="dim c1"><div class="name">业绩营销</div><div class="badge ok">● 正常</div>
+        <div class="num tabular">4,128<small> 万</small></div><div class="sub">月签约合同额 · 环比 +12.4%</div></div>
+      <div class="dim c2"><div class="name">经营管理</div><div class="badge warn">▲ 预警</div>
+        <div class="num tabular">82.4<small> %</small></div>
+        <div class="bar"><i style="width:82.4%;background:#d98a00"></i><s style="left:100%"></s></div>
+        <div class="sub">月目标达成率 · 80% 黄线之上</div></div>
+      <div class="dim c3"><div class="name">工程交付</div><div class="badge warn">▲ 预警</div>
+        <div class="num tabular">96.2<small> %</small></div>
+        <div class="bar"><i style="width:96.2%;background:#d98a00"></i><s style="left:95%"></s></div>
+        <div class="sub">工单当日达成率 · 98% 黄线之下</div></div>
+      <div class="dim c4"><div class="name">供应链</div><div class="badge ok">● 正常</div>
+        <div class="num tabular">2,870<small> 万</small></div><div class="sub">月主材业绩 · 环比 +8.0%</div></div>
+      <div class="dim c5"><div class="name">财务</div><div class="badge ok">● 正常</div>
+        <div class="num tabular">3,520<small> 万</small></div><div class="sub">月经营性回款 · 环比 +5.1%</div></div>
+      <div class="dim c6 pending"><div class="name">客户</div><div class="badge pend">◌ 口径确认中</div>
+        <div class="num">漏斗口径定稿后接入</div><div class="sub">漏斗五段 · R33 前置——宁可空不可错</div></div>
+    </div>
+
+    <!-- 区块3+4 双线趋势 + 大区排名 -->
+    <div class="duo">
+      <div class="panel">
+        <div class="section-t" style="margin-top:0">签约-回款双线(近 6 月,万元) <span class="legend"><span><i></i>签约(本期)</span><span><i class="gray"></i>签约(上期,灰虚线)</span><span><i class="g2"></i>回款</span></span></div>
+        <svg width="100%" height="200" viewBox="0 0 840 200">
+          <g stroke="#eef2f7" stroke-width="1">
+            <line x1="46" y1="20" x2="46" y2="168"/><line x1="46" y1="20" x2="820" y2="20"/>
+            <line x1="46" y1="72" x2="820" y2="72"/><line x1="46" y1="120" x2="820" y2="120"/><line x1="46" y1="168" x2="820" y2="168"/>
+          </g>
+          <g fill="#8b97a8" font-size="11">
+            <text x="40" y="24" text-anchor="end">5,000</text><text x="40" y="76" text-anchor="end">3,750</text>
+            <text x="40" y="124" text-anchor="end">2,500</text><text x="40" y="172" text-anchor="end">1,250</text>
+          </g>
+          <!-- 签约本期 实线2px -->
+          <polyline fill="none" stroke="#1663c7" stroke-width="2"
+            points="86,120 216,104 346,132 476,88 606,64 736,44"/>
+          <!-- 签约上期 灰虚线 -->
+          <polyline fill="none" stroke="#b7c0cd" stroke-width="1.6" stroke-dasharray="5,4"
+            points="86,132 216,124 346,128 476,110 606,92 736,80"/>
+          <!-- 回款 实线绿 -->
+          <polyline fill="none" stroke="#1d8a5f" stroke-width="2"
+            points="86,140 216,132 346,144 476,120 606,108 736,96"/>
+          <g fill="#1663c7"><circle cx="86" cy="120" r="3"/><circle cx="736" cy="44" r="3.5"/></g>
+          <g fill="#1d8a5f"><circle cx="736" cy="96" r="3"/></g>
+          <g fill="#33415c" font-size="11" font-weight="600">
+            <text x="736" y="34" text-anchor="middle">4,128</text>
+            <text x="86" y="112" text-anchor="middle">2,380</text>
+            <text x="736" y="90" text-anchor="middle" fill="#1d8a5f">3,520</text>
+          </g>
+          <g fill="#8b97a8" font-size="11" text-anchor="middle">
+            <text x="86" y="188">5月</text><text x="216" y="188">6月</text><text x="346" y="188">7月</text>
+            <text x="476" y="188">8月</text><text x="606" y="188">9月</text><text x="736" y="188">10月</text>
+          </g>
+        </svg>
+      </div>
+      <div class="panel">
+        <div class="section-t" style="margin-top:0">大区签约额排名(当月) <span>第1名深藏蓝 · ≤8名</span></div>
+        <div class="rank-row first"><div class="no">1</div><div class="nm">江南大区</div><div class="bar"><i style="width:100%"></i></div><div class="val tabular">1,024 万</div></div>
+        <div class="rank-row"><div class="no">2</div><div class="nm">江北城</div><div class="bar"><i style="width:74%"></i></div><div class="val tabular">758 万</div></div>
+        <div class="rank-row"><div class="no">3</div><div class="nm">铁西</div><div class="bar"><i style="width:61%"></i></div><div class="val tabular">625 万</div></div>
+        <div class="rank-row"><div class="no">4</div><div class="nm">浑南</div><div class="bar"><i style="width:49%"></i></div><div class="val tabular">502 万</div></div>
+        <div class="rank-row"><div class="no">5</div><div class="nm">和平</div><div class="bar"><i style="width:38%"></i></div><div class="val tabular">389 万</div></div>
+        <div class="rank-row"><div class="no">6</div><div class="nm">铁岭</div><div class="bar"><i style="width:27%"></i></div><div class="val tabular">276 万</div></div>
+        <div class="rank-row"><div class="no">7</div><div class="nm">抚顺</div><div class="bar"><i style="width:19%"></i></div><div class="val tabular">194 万</div></div>
+        <div class="rank-row"><div class="no">8</div><div class="nm">鞍山</div><div class="bar"><i style="width:12%"></i></div><div class="val tabular">123 万</div></div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div>指标目录(五要素可点开):月签约合同额 / 月目标达成率 / 工单当日达成率 / 月主材业绩 / 月经营性回款 / 大区排名 · 漏斗五段等 4 项<b style="color:#68758a">口径确认中</b>(灰灯,不以估算出图)</div>
+      <div class="asof">混合时点:契约直出=08:00 · ads 聚合=次日 03:00 批 <b>更新于 08:00</b></div>
+    </div>
+  </div>
+</body>
+</html>

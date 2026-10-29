@@ -6555,6 +6555,220 @@ def main():
     step("作废终态+原因留痕", ev2_d and ev2_d.get("status") == 4
          and ev2_d.get("void_reason") == "冒烟收尾作废", ev2_d and ev2_d.get("status"))
 
+
+    print("\n== 驾驶舱与报表框架(D4:内核 report 最小面+addon-dashboard 骨架,第 104 次) ==")
+    _ym_dash = time.strftime("%Y-%m")
+    _yday_dash = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+
+    # -- 指标目录:10 指标(6 confirmed + 4 pending 灰灯),五要素非空 --
+    mets = api_ok("指标目录(五要素+口径状态)", "GET", "/api/report/metrics", tok_admin)
+    mkeys = {m["key"]: m for m in (mets or [])}
+    _m_conf = [k for k, m in mkeys.items() if m.get("status") == "confirmed"]
+    _m_pend = [k for k, m in mkeys.items() if m.get("status") == "pending"]
+    step("目录 10 指标:6 confirmed+4 pending", len(mkeys) == 10 and len(_m_conf) == 6
+         and len(_m_pend) == 4, {"confirmed": _m_conf, "pending": _m_pend})
+    _m_sig = mkeys.get("decoration.contract.signedMonthly") or {}
+    step("签约额指标五要素齐(name/desc/source/frequency/unit)",
+         _m_sig.get("name") and _m_sig.get("description") and _m_sig.get("source")
+         and _m_sig.get("frequency") == "realtime" and _m_sig.get("unit") == "cent", _m_sig)
+    step("漏斗卡 pending(口径确认中灰灯)",
+         (mkeys.get("customer.funnel.stages") or {}).get("status") == "pending",
+         mkeys.get("customer.funnel.stages"))
+
+    # -- pending 数据端点=灰灯空态(宁可空不可错,不冒充 0%) --
+    pnd = api_ok("pending 指标数据=灰灯空态", "GET",
+                 "/api/report/metrics/customer.funnel.stages/data?yearMonth=" + _ym_dash, tok_admin)
+    step("pending 结构(status=pending 无 value)", (pnd or {}).get("status") == "pending"
+         and pnd.get("value") is None, pnd)
+    api_err("未声明指标 124001", "GET", "/api/report/metrics/nope.unknown/data", tok_admin, None, 124001)
+    api_err("时间窗非法 124003", "GET",
+            "/api/report/metrics/decoration.contract.signedMonthly/data?yearMonth=2026-13", tok_admin, None, 124003)
+    api_err("数据范围越权 124002", "GET",
+            "/api/report/metrics/decoration.contract.signedMonthly/data?orgId=900001", tok_admin, None, 124002)
+
+    # -- 北极星:签约额唯一口径对账(DecorationApi 契约=DB 同源,target/PK/驾驶舱三消费方) --
+    sig = api_ok("签约额数据(契约直出)", "GET",
+                 "/api/report/metrics/decoration.contract.signedMonthly/data?yearMonth=" + _ym_dash,
+                 tok_admin)
+    _exp_dash = expected_actual_71()
+    step("签约额=唯一口径(DB 同源)", (sig or {}).get("value") == _exp_dash and sig.get("asOf"),
+         {"value": (sig or {}).get("value"), "expected": _exp_dash})
+    ach = api_ok("达成率数据(target 同口径)", "GET",
+                 "/api/report/metrics/target.achievement.monthly/data?yearMonth=" + _ym_dash, tok_admin)
+    step("达成率=实绩÷目标(千分比)",
+         (ach or {}).get("value") == int(min(_exp_dash * 1000 // 120000000, 999999)),
+         {"value": (ach or {}).get("value"), "expected": _exp_dash})
+    col = api_ok("回款数据(payment 收据口径)", "GET",
+                 "/api/report/metrics/payment.collection.operatingMonthly/data?yearMonth=" + _ym_dash,
+                 tok_admin)
+    step("回款=非负整数", isinstance((col or {}).get("value"), int) and col["value"] >= 0, col)
+    mat = api_ok("主材业绩数据(sales 权责口径)", "GET",
+                 "/api/report/metrics/sales.performance.materialMonthly/data?yearMonth=" + _ym_dash,
+                 tok_admin)
+    step("主材业绩=非负整数", isinstance((mat or {}).get("value"), int) and mat["value"] >= 0, mat)
+
+    # -- 工单达成率:ads 空态 → 烟测行驱动阈值/黄红/stale → 日刷对账 --
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from construction_ads_wo_task_daily "
+                        "where org_id = 1 and stat_date = %s", (_yday_dash,))
+        conn.commit()
+    finally:
+        conn.close()
+    wo = api_ok("工单达成率(ads 未产出空态)", "GET",
+                "/api/report/metrics/construction.workload.dailyRate/data", tok_admin)
+    step("空态 no_data(不冒充 0%)", (wo or {}).get("status") == "no_data", wo)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("replace into construction_ads_wo_task_daily "
+                        "(stat_date, org_id, due_cnt, done_cnt, done_rate, batch_time) "
+                        "values (%s, 1, 100, 50, 5000, now())", (_yday_dash,))
+        conn.commit()
+    finally:
+        conn.close()
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("update construction_ads_wo_task_daily set done_rate = 9600 "
+                        "where stat_date = %s and org_id = 1", (_yday_dash,))
+        conn.commit()
+    finally:
+        conn.close()
+    wo = api_ok("工单达成率(烟测行 9600=黄)", "GET",
+                "/api/report/metrics/construction.workload.dailyRate/data?beginDay=" + _yday_dash,
+                tok_admin)
+    step("9600 万分比∈[9500,9800)=黄(level=1)", (wo or {}).get("value") == 9600
+         and (wo or {}).get("level") == 1 and wo.get("asOf"), wo)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("update construction_ads_wo_task_daily set done_rate = 5000 "
+                        "where stat_date = %s and org_id = 1", (_yday_dash,))
+        conn.commit()
+    finally:
+        conn.close()
+    wo = api_ok("工单达成率(烟测行 5000=红)", "GET",
+                "/api/report/metrics/construction.workload.dailyRate/data?beginDay=" + _yday_dash,
+                tok_admin)
+    step("5000 万分比<9500=红(level=2)", (wo or {}).get("value") == 5000
+         and (wo or {}).get("level") == 2, wo)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("replace into construction_ads_wo_task_daily "
+                        "(stat_date, org_id, due_cnt, done_cnt, done_rate, batch_time) "
+                        "values (%s, 1, 100, 90, 9000, date_sub(now(), interval 30 hour))", (_yday_dash,))
+        conn.commit()
+    finally:
+        conn.close()
+    wo = api_ok("批次超 26h=stale 黄条(不以旧数冒充)", "GET",
+                "/api/report/metrics/construction.workload.dailyRate/data?beginDay=" + _yday_dash,
+                tok_admin)
+    step("stale 结构", (wo or {}).get("status") == "stale" and wo.get("asOf"), wo)
+    # -- 聚合首页:六维卡+结论条+双线+大区排名 --
+    home = api_ok("驾驶舱聚合首页", "GET", "/api/dashboard/home", tok_admin)
+    step("六维卡+结论条+双线+排名结构", len((home or {}).get("cards", [])) == 6
+         and len(home.get("conclusion", [])) >= 1
+         and len((home.get("dualLines") or {}).get("months", [])) == 6
+         and len((home.get("dualLines") or {}).get("sign", [])) == 6
+         and len((home.get("dualLines") or {}).get("collection", [])) == 6
+         and "regionRank" in home, list((home or {}).keys()))
+    step("双线当月签约=唯一口径", ((home.get("dualLines") or {}).get("sign") or [{}])[-1].get("value") == _exp_dash,
+         (home.get("dualLines") or {}).get("sign"))
+    step("工程卡黄灯进结论条", any((c or {}).get("level", 0) >= 1 for c in home.get("conclusion", [])),
+         home.get("conclusion"))
+
+    # 日刷链:提交立即计划 → 执行近 90 天滚动重刷 → ads 与明细对账(明细行驱动;烟测行 stat_date
+    # 无排期行,REPLACE 不触碰,对账时排除该行)
+    _plan_d = api_ok("提交日刷计划(立即)", "POST", "/api/plans", tok_admin,
+                     {"handler": "construction-ads-wo-task-daily",
+                      "bizKey": "construction-ads-wo-task-daily-1-smoke" + stamp_t,
+                      "maxRetries": 3})
+    _done_d = False
+    _st = None
+    for _ in range(30):
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("select status from yz_plan where id = %s", (_plan_d,))
+                _st = cur.fetchone()
+        finally:
+            conn.close()
+        if _st and _st[0] == 1:
+            _done_d = True
+            break
+        time.sleep(1)
+    step("日刷执行成功(近90天滚动)", _done_d, _st)
+    if _done_d:
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("select date_sub(curdate(), interval 90 day), date_sub(curdate(), interval 1 day)")
+                _win = cur.fetchone()
+                cur.execute("""
+                    select count(*), coalesce(sum(case when s.end_time is not null
+                              and s.end_time <= s.plan_end then 1 else 0 end), 0)
+                    from construction_schedule s
+                    where s.org_id = 1 and s.plan_end is not null
+                      and date(s.plan_end) between %s and %s
+                """, (_win[0], _win[1]))
+                _due, _done = cur.fetchone()
+                cur.execute("select due_cnt, done_cnt from construction_ads_wo_task_daily "
+                            "where org_id = 1 and stat_date between %s and %s", (_win[0], _win[1]))
+                _rows = cur.fetchall()
+                _ads_due = sum(r[0] for r in _rows)
+                _ads_done = sum(r[1] for r in _rows)
+                _ads_ok = (_ads_due == _due and _ads_done == _done)
+        finally:
+            conn.close()
+        step("ads 与明细对账(90 天窗,due/done 同口径)", _ads_ok,
+             {"due": _due, "done": _done, "ads_due": _ads_due, "ads_done": _ads_done})
+
+    # -- 埋点:5 类落库 + 非法类型拒 --
+    for _et in ["pageview", "dimension_switch", "card_exposure", "card_click", "dwell"]:
+        api_ok("埋点 %s" % _et, "POST", "/api/report/events", tok_admin,
+               {"eventType": _et, "metricKey": "decoration.contract.signedMonthly", "payload": "smoke"})
+    api_err("埋点非法类型 124006", "POST", "/api/report/events", tok_admin,
+            {"eventType": "hack"}, 124006)
+    _ev_n = 0
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select count(*) from yz_report_event where event_type in "
+                        "('pageview','dimension_switch','card_exposure','card_click','dwell')")
+            _ev_n = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("埋点 5 类落库", _ev_n >= 5, _ev_n)
+
+
+
+    # -- 按角色默认落地页(V1 最小配置) --
+    api_ok("保存落地页(admin)", "POST", "/api/dashboard/home-config", tok_admin,
+           {"roleId": 1, "homePath": "/dashboard/home"})
+    cfg1 = api_ok("回读落地页", "GET", "/api/dashboard/home-config", tok_admin)
+    _r1 = next((r for r in (cfg1 or []) if r.get("role_id") == 1), {})
+    step("角色1落地页已置", _r1.get("home_path") == "/dashboard/home", _r1)
+    api_ok("覆盖同角色落地页(幂等)", "POST", "/api/dashboard/home-config", tok_admin,
+           {"roleId": 1, "homePath": "/target/plans"})
+    cfg2 = api_ok("覆盖后回读", "GET", "/api/dashboard/home-config", tok_admin)
+    _r2 = next((r for r in (cfg2 or []) if r.get("role_id") == 1), {})
+    step("覆盖生效(on duplicate)", _r2.get("home_path") == "/target/plans", _r2)
+    api_err("路径不合规 390001", "POST", "/api/dashboard/home-config", tok_admin,
+            {"roleId": 1, "homePath": "dashboard/home"}, 390001)
+    api_err("角色不存在 390001", "POST", "/api/dashboard/home-config", tok_admin,
+            {"roleId": 999999, "homePath": "/dashboard/home"}, 390001)
+    api_err("非管理员保存 390002", "POST", "/api/dashboard/home-config", tok_b,
+            {"roleId": 1, "homePath": "/dashboard/home"}, 390002)
+    api_ok("删除落地页(清理)", "DELETE", "/api/dashboard/home-config/1", tok_admin)
+    cfg3 = api_ok("删除后回读空", "GET", "/api/dashboard/home-config", tok_admin)
+    _r3 = next((r for r in (cfg3 or []) if r.get("role_id") == 1), {})
+    step("角色1落地页已清", not _r3.get("home_path"), _r3)
+
+    return finish()
+
     return finish()
 
 

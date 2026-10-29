@@ -67,6 +67,16 @@ public class AddonRegistry {
                         r.get("methods") == null ? List.of()
                                 : ((List<Object>) r.get("methods")).stream().map(String::valueOf).toList()))
                 .toList();
+        List<Map<String, Object>> metrics = (List<Map<String, Object>>) a.getOrDefault("metrics", List.of());
+        List<AddonDescriptor.Metric> parsedMetrics = metrics.stream()
+                .map(m -> new AddonDescriptor.Metric((String) m.get("key"), (String) m.get("nameKey"),
+                        (String) m.get("descKey"), (String) m.get("sourceKey"),
+                        (String) m.get("frequency"), (String) m.get("compare"), (String) m.get("unit"),
+                        m.get("threshold-warn") == null ? 0 : ((Number) m.get("threshold-warn")).longValue(),
+                        m.get("threshold-critical") == null ? 0
+                                : ((Number) m.get("threshold-critical")).longValue(),
+                        (String) m.getOrDefault("status", "pending")))
+                .toList();
         return new AddonDescriptor(
                 (String) a.get("id"),
                 (String) a.get("name"),
@@ -75,6 +85,7 @@ public class AddonRegistry {
                 parsedMenus,
                 parsedMounts,
                 parsedApis,
+                parsedMetrics,
                 (Map<String, Object>) a.getOrDefault("dicts", Map.of()));
     }
 

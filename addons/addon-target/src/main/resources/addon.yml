@@ -34,6 +34,18 @@ addon:
     pkSource:
       - { key: '1', label: 自动聚合 }
       - { key: '2', label: 手工录入 }
+  metrics:
+    # 月目标达成率(D4 北极星):包装 TargetService.achievement 签约线,实绩口径与达成率同源
+    - key: target.achievement.monthly
+      nameKey: target.metric.achievement
+      descKey: target.metric.achievement.desc
+      sourceKey: target.metric.achievement.source
+      frequency: realtime
+      compare: targetProgress
+      unit: permille
+      threshold-warn: 800
+      threshold-critical: 600
+      status: confirmed
   api:
     # 经营目标(docs/08 S3 首个消费方):目标挂树上任一节点,达成率=子树实绩÷节点目标
     - prefix: /api/target

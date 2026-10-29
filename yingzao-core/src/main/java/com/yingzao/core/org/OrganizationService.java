@@ -99,6 +99,15 @@ public class OrganizationService {
                 Long.class, path + "%");
     }
 
+    /** 直接下级组织(仅启用;大区排名等维度聚合用,懒建根兜底)。 */
+    public List<Map<String, Object>> childrenOf(long orgId) {
+        ensureRoot(orgId);
+        return jdbc.queryForList("""
+                select id, parent_id, name, level_type, status
+                from organization where parent_id = ? and status = 0 order by id
+                """, orgId);
+    }
+
     // ---- 管理 ----
 
     public record CreateBody(Long parentId, String name, String levelType) {

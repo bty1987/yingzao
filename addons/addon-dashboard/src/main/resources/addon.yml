@@ -1,0 +1,62 @@
+addon:
+  id: dashboard
+  name: 驾驶舱
+  version: 0.1.0
+  error-code-segment: 390000
+  menus:
+    - path: /dashboard/home
+      title: 驾驶舱
+      icon: odometer
+  dicts:
+    cardLevel:
+      - { key: '0', label: 正常 }
+      - { key: '1', label: 预警 }
+      - { key: '2', label: 告急 }
+  metrics:
+    # 大区签约额排名(dashboard 自有 provider:经内核 organization 子组织逐个走 DecorationApi 契约聚合)
+    - key: dashboard.regionSignRank
+      nameKey: dashboard.metric.regionSignRank
+      descKey: dashboard.metric.regionSignRank.desc
+      sourceKey: dashboard.metric.regionSignRank.source
+      frequency: realtime
+      compare: none
+      unit: cent
+      status: confirmed
+    # ---- 漏斗族四卡:R33 前置缺口实证(customer_lead 无甄别态/无到店时间戳),V1 转口径确认中灰灯 ----
+    # R33 落地时 provider+声明迁回 customer/market 域,dashboard 侧声明同时删除
+    - key: customer.funnel.stages
+      nameKey: dashboard.metric.funnelStages
+      descKey: dashboard.metric.funnelStages.desc
+      sourceKey: dashboard.metric.funnelStages.source
+      frequency: daily
+      compare: none
+      unit: count
+      status: pending
+    - key: market.source.distribution
+      nameKey: dashboard.metric.sourceDist
+      descKey: dashboard.metric.sourceDist.desc
+      sourceKey: dashboard.metric.sourceDist.source
+      frequency: daily
+      compare: none
+      unit: count
+      status: pending
+    - key: market.conversion.sevenDay
+      nameKey: dashboard.metric.sevenDay
+      descKey: dashboard.metric.sevenDay.desc
+      sourceKey: dashboard.metric.sevenDay.source
+      frequency: daily
+      compare: none
+      unit: ppm
+      status: pending
+    - key: market.roi.monthly
+      nameKey: dashboard.metric.roi
+      descKey: dashboard.metric.roi.desc
+      sourceKey: dashboard.metric.roi.source
+      frequency: daily
+      compare: none
+      unit: ppm
+      status: pending
+  api:
+    # 驾驶舱聚合首页与默认落地页配置(菜单闸)
+    - prefix: /api/dashboard
+      require: /dashboard/home

@@ -375,6 +375,10 @@ ENDPOINTS = [
     ("target", "POST", "/api/target/pk/events/1/units/1/lock"),
     ("target", "POST", "/api/target/pk/events/1/units/1/unlock"),
     ("target", "PUT", "/api/target/pk/events/1/units/1/manual"),
+    # dashboard(D4 第 104 次:聚合首页+落地页配置;/api/report 系内核端点自带守卫豁免,不进样例表)
+    ("dashboard", "GET", "/api/dashboard/home"), ("dashboard", "GET", "/api/dashboard/home-config"),
+    ("dashboard", "POST", "/api/dashboard/home-config"),
+    ("dashboard", "DELETE", "/api/dashboard/home-config/1"),
 ]
 
 # 12 插件代表 GET 端点(admin/全授权组用;三条读放开端点返回 200 属预期)
@@ -412,7 +416,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(17 插件 63 条)", len({r["addon"] for r in rules}) == 17 and len(rules) == 63,
+    step("载入 api 规则(18 插件 64 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 64,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

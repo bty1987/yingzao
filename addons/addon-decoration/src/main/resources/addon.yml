@@ -71,6 +71,16 @@ addon:
       - { key: 'measureFail', label: 量房失败 }
       - { key: 'profileSave', label: 补充信息 }
       - { key: 'belongTransfer', label: 转归属 }
+  metrics:
+    # 月签约合同额(D4 北极星):包装 DecorationApi 契约唯一口径,provider=DecorationMetricProvider
+    - key: decoration.contract.signedMonthly
+      nameKey: decoration.metric.signedMonthly
+      descKey: decoration.metric.signedMonthly.desc
+      sourceKey: decoration.metric.signedMonthly.source
+      frequency: realtime
+      compare: monthOnMonth
+      unit: cent
+      status: confirmed
   api:
     # 列表搜索端点(exact 仅 /orders 列表)authenticated:quotation/construction/sales/inventory
     # 挂装修单选择器跨页引用;详情与全部业务操作收装修单菜单
