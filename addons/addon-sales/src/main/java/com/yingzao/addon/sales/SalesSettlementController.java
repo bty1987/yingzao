@@ -1,5 +1,6 @@
 package com.yingzao.addon.sales;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,9 +30,12 @@ public class SalesSettlementController {
     }
 
     private final SalesSettlementService settlements;
+    private final SalesDeliveryFlowService flows;
 
-    public SalesSettlementController(SalesSettlementService settlements) {
+    public SalesSettlementController(SalesSettlementService settlements,
+            SalesDeliveryFlowService flows) {
         this.settlements = settlements;
+        this.flows = flows;
     }
 
     @GetMapping("/settlements")
@@ -79,6 +83,14 @@ public class SalesSettlementController {
         long userId = (Long) request.getAttribute("yz.userId");
         settlements.post(orgId, id, userId);
         return ApiResponse.ok();
+    }
+
+    /** B2 里程碑分批计划视图(结算详情:该品牌结算总额按里程碑的拆分)。 */
+    @GetMapping("/settlements/{id}/batches")
+    public ApiResponse<List<Map<String, Object>>> batches(@PathVariable long id,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(flows.batches(orgId, id));
     }
 
     @PostMapping("/orders/{id}/settlement-reject")

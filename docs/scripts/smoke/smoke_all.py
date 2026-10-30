@@ -3541,6 +3541,188 @@ def main():
     step("超卖事件未确认(重试/死信在途,300008 留痕)",
          os_row is not None and os_row[0] in (0, 2, 3), os_row)
 
+    # ===== B2 配送域 V2:品牌配送流程模板+里程碑分批(第 107 次;PRD 按推荐拍板兑现) =====
+    # 守卫族(300200-300205;分段错误码与 PRD §错误码段一致)
+    api_err("流程模板Σ≠10000拒绝 300201", "PUT", "/api/sales/delivery-flows/%s" % brand2, tok_admin,
+            {"autoTran": 0, "autoCheck": 0, "autoConfirm": 0,
+             "rates": [{"milestone": 2, "rate": 4000}, {"milestone": 4, "rate": 5999}]}, 300201)
+    api_err("免人工位非法拒绝 300202", "PUT", "/api/sales/delivery-flows/%s" % brand2, tok_admin,
+            {"autoTran": 2}, 300202)
+    api_err("里程碑非法拒绝 300203", "PUT", "/api/sales/delivery-flows/%s" % brand2, tok_admin,
+            {"rates": [{"milestone": 5, "rate": 10000}]}, 300203)
+    api_err("分成比例非法拒绝 300205", "PUT", "/api/sales/delivery-flows/%s" % brand2, tok_admin,
+            {"rates": [{"milestone": 2, "rate": 0}]}, 300205)
+    api_err("品牌不存在拒绝 300200", "PUT", "/api/sales/delivery-flows/99999999", tok_admin,
+            {"autoTran": 1}, 300200)
+
+    # 正确保存:审核级免人工 + 分成(审核 40%/完结 60%)
+    api_ok("保存品牌2流程模板(auto_check+4/6分成)", "PUT", "/api/sales/delivery-flows/%s" % brand2,
+           tok_admin, {"autoTran": 0, "autoCheck": 1, "autoConfirm": 0,
+                       "rates": [{"milestone": 2, "rate": 4000}, {"milestone": 4, "rate": 6000}]})
+    flows_list = api_ok("流程模板列表", "GET", "/api/sales/delivery-flows", tok_admin)
+    f2 = next((f for f in (flows_list or []) if f.get("brand_id") == brand2), None)
+    step("品牌2模板在册(免人工+启用分成)", bool(f2) and f2.get("auto_check") == 1
+         and f2.get("enabled") is True, f2)
+
+    # B2 主链单:品牌2 商品 ×2(160 元);款付未确认(fs=1)即可配送
+    sale_b2 = api_ok("开B2单(地板2片160元)", "POST", "/api/sales/orders", tok_admin,
+                     {"orderId": order_s, "items": [{"goodsId": goods_sale2, "num": 2000}]})
+    s_b2_det = api_ok("B2单详情取明细", "GET", "/api/sales/orders/%s" % sale_b2, tok_admin)
+    item_b2 = (s_b2_det.get("items") or [{}])[0].get("id")
+    api_ok("B2单生成款项单", "POST", "/api/sales/orders/%s/bill" % sale_b2, tok_admin)
+    bb2 = api_ok("B2单款项反查", "GET",
+                 "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale_b2, tok_admin)
+    bill_b2 = [b for b in (bb2 or {}).get("rows", []) if b.get("direction") == 0]
+    api_ok("B2单收款(未确认)", "POST", "/api/payment/bills/%s/collect" % bill_b2[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 160000}]})
+    time.sleep(1)
+    s_b2_det = api_ok("B2单复查(款已付未确认)", "GET", "/api/sales/orders/%s" % sale_b2, tok_admin)
+    step("款项轴1已付(预结未生成)", s_b2_det.get("fullpay_status") == 1
+         and s_b2_det.get("balance_status") == 0, s_b2_det)
+
+    # 配送1:手工配送→审核级自动通过(0→1→2);预结未生成→分批行计划缓存(零行)
+    dlv_b2 = api_ok("生成B2配送批次(1片)", "POST", "/api/sales/orders/%s/deliveries" % sale_b2,
+                    tok_admin, {"items": [{"saleItemId": item_b2, "num": 1000}]})
+    dlv_b2_det = api_ok("B2配送详情", "GET", "/api/sales/deliveries/%s" % dlv_b2, tok_admin)
+    ditem_b2 = ((dlv_b2_det.get("items") or [{}])[0]).get("id")
+    api_ok("B2手工配送(tran)", "POST", "/api/sales/delivery-items/%s/advance" % ditem_b2,
+           tok_admin, {"action": "tran"})
+    dlv_b2_det = api_ok("自动推进复查", "GET", "/api/sales/deliveries/%s" % dlv_b2, tok_admin)
+    step("审核级免人工自动通过(0→1→2)", dlv_b2_det["items"][0].get("status") == 2, dlv_b2_det)
+    conn_b2 = db_conn()
+    try:
+        with conn_b2.cursor() as cur:
+            cur.execute("select count(*) from sales_track where sale_id=%s and action='autocheck'",
+                        (sale_b2,))
+            auto_track = cur.fetchone()[0]
+            cur.execute("select count(*) from sales_settlement_batch b "
+                        "join sales_settlement s on s.id=b.settle_id "
+                        "where s.sale_id=%s and s.brand_id=%s and s.type=0", (sale_b2, brand2))
+            b2_batch_cnt = cur.fetchone()[0]
+    finally:
+        conn_b2.close()
+    step("免人工留痕(track autocheck)", auto_track >= 1, auto_track)
+    step("预结未生成→分批行计划缓存(零行)", b2_batch_cnt == 0, b2_batch_cnt)
+
+    # 确认收款 → 预结生成+补扫(里程碑2已达成 → 40% 分批行)
+    api_ok("B2确认全款", "POST", "/api/payment/bills/%s/confirm" % bill_b2[0]["id"], tok_admin)
+    time.sleep(2)
+    s_b2_det = api_ok("B2确认后复查", "GET", "/api/sales/orders/%s" % sale_b2, tok_admin)
+    st_b2 = next((s for s in (s_b2_det.get("settlements") or []) if s.get("brand_id") == brand2), None)
+    step("预结行生成(160元)", bool(st_b2) and st_b2.get("total") == 160000, st_b2)
+    b2_batches = api_ok("分批计划(预结补扫里程碑2)", "GET",
+                        "/api/sales/settlements/%s/batches" % st_b2["id"], tok_admin)
+    step("补扫生成审核批(40%=64元)", len(b2_batches) == 1 and b2_batches[0].get("milestone") == 2
+         and b2_batches[0].get("total") == 64000 and b2_batches[0].get("status") == 0, b2_batches)
+
+    # 完结推进 → 末批补尾差(160−64=96 元);Σ 分批 = 预结总额
+    api_ok("B2手工确认(confirm)", "POST", "/api/sales/delivery-items/%s/advance" % ditem_b2,
+           tok_admin, {"action": "confirm"})
+    api_ok("B2手工完结(finish)", "POST", "/api/sales/delivery-items/%s/advance" % ditem_b2,
+           tok_admin, {"action": "finish"})
+    b2_batches = api_ok("分批计划(里程碑4达成)", "GET",
+                        "/api/sales/settlements/%s/batches" % st_b2["id"], tok_admin)
+    step("末批=总额−已批补尾差(96元,Σ=160元)", len(b2_batches) == 2
+         and {b["milestone"]: b["total"] for b in b2_batches} == {2: 64000, 4: 96000}, b2_batches)
+
+    # 幂等:第二配送批同品牌再达里程碑2 → 重算零新增零漂移;人工越级纪律不变
+    dlv_b2b = api_ok("生成B2第二配送批(1片)", "POST", "/api/sales/orders/%s/deliveries" % sale_b2,
+                     tok_admin, {"items": [{"saleItemId": item_b2, "num": 1000}]})
+    dlv_b2b_det = api_ok("B2第二批详情", "GET", "/api/sales/deliveries/%s" % dlv_b2b, tok_admin)
+    ditem_b2b = ((dlv_b2b_det.get("items") or [{}])[0]).get("id")
+    api_ok("B2b手工配送(tran,复审核免人工)", "POST",
+           "/api/sales/delivery-items/%s/advance" % ditem_b2b, tok_admin, {"action": "tran"})
+    b2_batches = api_ok("重复里程碑幂等复查", "GET",
+                        "/api/sales/settlements/%s/batches" % st_b2["id"], tok_admin)
+    step("幂等重算:仍2行且金额不变", len(b2_batches) == 2
+         and {b["milestone"]: b["total"] for b in b2_batches} == {2: 64000, 4: 96000}, b2_batches)
+    api_err("人工越级仍拒绝 300022(系统代打不豁免人工守卫)", "POST",
+            "/api/sales/delivery-items/%s/advance" % ditem_b2b, tok_admin, {"action": "finish"}, 300022)
+
+    # 计划变更(未认领重算):改为配送 25% + 完结 75%
+    api_ok("计划变更(配送25%/完结75%)", "PUT", "/api/sales/delivery-flows/%s" % brand2, tok_admin,
+           {"autoTran": 0, "autoCheck": 0, "autoConfirm": 0,
+            "rates": [{"milestone": 1, "rate": 2500}, {"milestone": 4, "rate": 7500}]})
+    b2_batches = api_ok("计划变更复查", "GET", "/api/sales/settlements/%s/batches" % st_b2["id"],
+                        tok_admin)
+    step("未认领重算:{1:40元,4:120元} Σ=160元", len(b2_batches) == 2
+         and {b["milestone"]: b["total"] for b in b2_batches} == {1: 40000, 4: 120000}, b2_batches)
+
+    # 厂结 → 认领回写 status=1
+    api_ok("B2厂结", "POST", "/api/sales/settlements/%s/vpost" % st_b2["id"], tok_admin)
+    b2_batches = api_ok("厂结后分批复查", "GET", "/api/sales/settlements/%s/batches" % st_b2["id"],
+                        tok_admin)
+    step("认领回写 status=1", len(b2_batches) == 2
+         and all(b.get("status") == 1 for b in b2_batches), b2_batches)
+
+    # 计划变更不回溯已认领(已厂结行整体不动,连补登也不做)
+    api_ok("计划再变更(审核100%,不回溯面)", "PUT", "/api/sales/delivery-flows/%s" % brand2,
+           tok_admin, {"rates": [{"milestone": 2, "rate": 10000}]})
+    b2_batches = api_ok("已认领不回溯复查", "GET", "/api/sales/settlements/%s/batches" % st_b2["id"],
+                        tok_admin)
+    step("认领行原样(不回溯不双计)", len(b2_batches) == 2
+         and {b["milestone"]: b["total"] for b in b2_batches} == {1: 40000, 4: 120000}
+         and all(b.get("status") == 1 for b in b2_batches), b2_batches)
+
+    # 只配流程不配分成合法(brand1 全自动位+零分成;sale1 已结算行不回溯)
+    api_ok("只配流程(brand1全自动零分成)", "PUT", "/api/sales/delivery-flows/%s" % brand_id,
+           tok_admin, {"autoTran": 1, "autoCheck": 1, "autoConfirm": 1})
+    flows_list = api_ok("流程列表复查", "GET", "/api/sales/delivery-flows", tok_admin)
+    f1 = next((f for f in (flows_list or []) if f.get("brand_id") == brand_id), None)
+    step("brand1模板在册且分成未启用", bool(f1) and f1.get("enabled") is False, f1)
+
+    # 补扫场景:款付未确认先行配送(品牌B2:建单即自动配送[auto_tran],审核级到 2)
+    brand_b2 = api_ok("建品牌B2(补扫场景)", "POST", "/api/basedata/brands", tok_admin,
+                      {"name": "烟测品牌B2" + stamp_sale, "pinyin": "ycppb2" + stamp_sale[-6:]})
+    goods_b2 = api_ok("建B2商品(120元)", "POST", "/api/basedata/goods", tok_admin,
+                      {"name": "烟测B2瓷砖" + stamp_sale, "categoryId": cat_child,
+                       "brandId": brand_b2, "unit": "片", "selling": 120000})
+    api_ok("保存品牌B2流程(配送免人工+审核100%)", "PUT", "/api/sales/delivery-flows/%s" % brand_b2,
+           tok_admin, {"autoTran": 1, "rates": [{"milestone": 2, "rate": 10000}]})
+    sale_b3 = api_ok("开B3单(B2瓷砖1片)", "POST", "/api/sales/orders", tok_admin,
+                     {"orderId": order_s, "items": [{"goodsId": goods_b2, "num": 1000}]})
+    s_b3_det = api_ok("B3单详情取明细", "GET", "/api/sales/orders/%s" % sale_b3, tok_admin)
+    item_b3 = (s_b3_det.get("items") or [{}])[0].get("id")
+    api_ok("B3单生成款项单", "POST", "/api/sales/orders/%s/bill" % sale_b3, tok_admin)
+    bb3 = api_ok("B3单款项反查", "GET",
+                 "/api/payment/bills?bizAddon=sales&bizType=order&bizId=%s" % sale_b3, tok_admin)
+    bill_b3 = [b for b in (bb3 or {}).get("rows", []) if b.get("direction") == 0]
+    api_ok("B3单收款(未确认)", "POST", "/api/payment/bills/%s/collect" % bill_b3[0]["id"], tok_admin,
+           {"channels": [{"channelCode": "cash", "amount": 120000}]})
+    time.sleep(1)
+    dlv_b3 = api_ok("生成B3配送批(1片)", "POST", "/api/sales/orders/%s/deliveries" % sale_b3,
+                    tok_admin, {"items": [{"saleItemId": item_b3, "num": 1000}]})
+    dlv_b3_det = api_ok("B3配送详情(建单即自动配送)", "GET", "/api/sales/deliveries/%s" % dlv_b3,
+                        tok_admin)
+    step("配送级免人工建单点火(0→1)", dlv_b3_det["items"][0].get("status") == 1, dlv_b3_det)
+    ditem_b3 = dlv_b3_det["items"][0].get("id")
+    api_ok("B3手工审核(check)", "POST", "/api/sales/delivery-items/%s/advance" % ditem_b3,
+           tok_admin, {"action": "check"})
+    conn_b3 = db_conn()
+    try:
+        with conn_b3.cursor() as cur:
+            cur.execute("select count(*) from sales_settlement where sale_id=%s and brand_id=%s "
+                        "and type=0", (sale_b3, brand_b2))
+            b3_settle_cnt = cur.fetchone()[0]
+            cur.execute("select count(*) from sales_settlement_batch b "
+                        "join sales_settlement s on s.id=b.settle_id "
+                        "where s.sale_id=%s and s.brand_id=%s", (sale_b3, brand_b2))
+            b3_batch_cnt = cur.fetchone()[0]
+    finally:
+        conn_b3.close()
+    step("预结未生成分批零行(计划缓存)", b3_settle_cnt == 0 and b3_batch_cnt == 0,
+         (b3_settle_cnt, b3_batch_cnt))
+    api_ok("B3确认全款(触发补扫)", "POST", "/api/payment/bills/%s/confirm" % bill_b3[0]["id"],
+           tok_admin)
+    time.sleep(2)
+    s_b3_det = api_ok("B3确认后复查", "GET", "/api/sales/orders/%s" % sale_b3, tok_admin)
+    st_b3 = next((s for s in (s_b3_det.get("settlements") or []) if s.get("brand_id") == brand_b2),
+                 None)
+    b3_batches = api_ok("B3分批计划(补扫)", "GET", "/api/sales/settlements/%s/batches" % st_b3["id"],
+                        tok_admin)
+    step("补扫生成审核批(100%=120元,末批余差)", len(b3_batches) == 1
+         and b3_batches[0].get("milestone") == 2 and b3_batches[0].get("total") == 120000, b3_batches)
+
     # 退货链(sale1 部分退货:type=2 全退类型但数量部分 → 金额不符不自动退款)
     refund1 = api_ok("发起退货(瓷砖1片)", "POST", "/api/sales/orders/%s/refunds" % sale1,
                      tok_admin, {"type": 2, "items": [{"saleItemId": item1, "num": 1000}],

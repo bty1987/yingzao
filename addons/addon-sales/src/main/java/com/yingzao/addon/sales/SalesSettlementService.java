@@ -46,11 +46,14 @@ public class SalesSettlementService {
     private final JdbcTemplate jdbc;
     private final SalesOrderService orders;
     private final YzEventBus eventBus;
+    private final SalesDeliveryFlowService flows;
 
-    public SalesSettlementService(JdbcTemplate jdbc, SalesOrderService orders, YzEventBus eventBus) {
+    public SalesSettlementService(JdbcTemplate jdbc, SalesOrderService orders, YzEventBus eventBus,
+            SalesDeliveryFlowService flows) {
         this.jdbc = jdbc;
         this.orders = orders;
         this.eventBus = eventBus;
+        this.flows = flows;
     }
 
     public Map<String, Object> page(long orgId, String saleCode, Integer status, Integer type,
@@ -114,6 +117,8 @@ public class SalesSettlementService {
             throw new BizException(CODE_BAD_STATE, orders.msg("sales.state.illegal"));
         }
         recomputeBalanceStatus(orgId, ((Number) row.get("sale_id")).longValue());
+        // B2 里程碑分批:厂结完成 → 该行分批计划标记已认领(只做标记不参与守卫)
+        flows.claimBatches(orgId, ((Number) row.get("id")).longValue());
         trackSale(row, "vpost", "厂结", operatorId);
     }
 
@@ -141,6 +146,8 @@ public class SalesSettlementService {
             throw new BizException(CODE_BAD_STATE, orders.msg("sales.state.illegal"));
         }
         recomputeBalanceStatus(orgId, ((Number) row.get("sale_id")).longValue());
+        // B2 里程碑分批:结算完成 → 该行分批计划标记已认领(幂等:厂结已认领零重复)
+        flows.claimBatches(orgId, ((Number) row.get("id")).longValue());
         trackSale(row, "post", "结算", operatorId);
         publishReady(orgId, row, operatorId);
     }
@@ -175,8 +182,13 @@ public class SalesSettlementService {
         if (rows == null || rows == 0) {
             throw new BizException(CODE_REJECT_GUARD, orders.msg("sales.settle.rejectGuard"));
         }
+        // B2 里程碑分批:预继行删除级联清其分批行(防孤儿;新预继行新 id 自然零残留)
+        List<Long> dropped = jdbc.queryForList(
+                "select id from sales_settlement where org_id = ? and sale_id = ? and status = 0",
+                Long.class, orgId, saleId);
         jdbc.update("delete from sales_settlement where org_id = ? and sale_id = ? and status = 0",
                 orgId, saleId);
+        flows.dropBatches(orgId, dropped);
         jdbc.update("update sales_order set balance_status = 0 where id = ? and balance_status = 1",
                 saleId);
         orders.track(orgId, saleId, "rejectSettle",

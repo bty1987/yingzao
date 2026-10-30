@@ -90,10 +90,11 @@ public class SalesOrderService {
     private final GoodsApi goods;
     private final PaymentApi payments;
     private final NotificationService notifications;
+    private final SalesDeliveryFlowService flows;
 
     public SalesOrderService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
             DecorationApi decorations, GoodsApi goods, PaymentApi payments,
-            NotificationService notifications) {
+            NotificationService notifications, SalesDeliveryFlowService flows) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.eventBus = eventBus;
@@ -101,6 +102,7 @@ public class SalesOrderService {
         this.goods = goods;
         this.payments = payments;
         this.notifications = notifications;
+        this.flows = flows;
     }
 
     // ---- 开单 ----
@@ -609,6 +611,9 @@ public class SalesOrderService {
                     values (?,?,?,?,?,0,0,?,?,?,?,0,0,?)
                     """, orgId, saleId, brandId, brandName == null ? "" : brandName, 0,
                     amount, amount, amount, amount, operatorId);
+            // B2 里程碑分批:预结生成时补扫该品牌已达成的里程碑(配送先于收款确认的场景,
+            // 分批行计划缓存至此补齐;幂等,重复生成零新增)
+            flows.backfillForSaleBrand(orgId, saleId, brandId);
         }
     }
 

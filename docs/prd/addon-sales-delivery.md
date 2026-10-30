@@ -1,6 +1,7 @@
 # PRD - B2 配送域 V2:品牌流程模板 + 里程碑分批结算(行业中性化)
 
-> 状态:**PRD 已出,待拍板(可整体「按推荐」)**(2026-10-31 第 106 次;docs/11 B2 兑现「若要先出 PRD」)
+> 状态:**已实现(按推荐拍板,2026-10-31 第 107 次写码兑现)**;PRD 出品 2026-10-31 第 106 次(docs/11 B2 兑现「若要先出 PRD」)
+> 实现口径增补(写码期细化):①分成比例作用于预结行全额(无认领时),末批=总额−已批合计补尾差保 Σ=预结总额;②已认领不回溯落地为两层:计划变更跳过已厂结/结算行整体+更晚里程碑已认领冻结更早补生(防双计);③auto_tran(配送级免人工)在建单时点火(推进链唯一够不到的级),auto_check/auto_confirm 由人工推进链式代打;④厂结/结算后到达的里程碑生成分批行出生即认领(保 Σ 随进度收敛);⑤Web 并入既有页(推荐 7):Deliveries.vue 模板配置弹窗+Settlements.vue 分批计划抽屉,零新页零 huashu 三方向流程。
 > 口径输入:docs/rules/sales.md §3(配送履约)/§4(结算三段式)/§11-12(方林嫌疑判定与落地映射);docs/prd/addon-sales.md(V1 已建域,§第 45 行「品牌跳级权限与按配送批次分成克隆:【方林嫌疑】待拍板,默认 V1 砍」即本 PRD 解除项)
 > 老系统参考(只读考证 2026-10-31):`Rhadamanthus src/com/fanglin/sales/service/impl/SalesDeliveryServiceImpl.java`(递归连打 :451-504 + 分成克隆 balanceSalesDeliveryItem :506-540)+ `right/po/SalesDeliveryStatusRightPO.java`(品牌×级配置)+ `sales/po/SalesBalancePO.java`(type/onetype/deliver_schedule/rate)
 > 归属:**addon-sales V2 子域**(错误码 **300200–300250** 小段,oales 3001xx 之后顺延;迁移 **V1104+**;沿用 /api/sales 既有 prefix 零新增闸)

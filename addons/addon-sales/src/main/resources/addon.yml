@@ -1,7 +1,7 @@
 addon:
   id: sales
   name: 主材销售
-  version: 0.3.0
+  version: 0.4.0
   error-code-segment: 300000
   menus:
     - path: /sales/orders
@@ -60,6 +60,14 @@ addon:
       - { key: '2', label: 已审核 }
       - { key: '3', label: 已确认 }
       - { key: '4', label: 已完结 }
+    deliveryMilestone:
+      - { key: '1', label: 配送 }
+      - { key: '2', label: 审核 }
+      - { key: '3', label: 确认 }
+      - { key: '4', label: 完结 }
+    batchStatus:
+      - { key: '0', label: 计划 }
+      - { key: '1', label: 已认领 }
     oalesStatus:
       - { key: '0', label: 草稿 }
       - { key: '1', label: 待确认 }
@@ -91,6 +99,8 @@ addon:
     - prefix: /api/sales/deliveries
       require: /sales/deliveries
     - prefix: /api/sales/delivery-items
+      require: /sales/deliveries
+    - prefix: /api/sales/delivery-flows
       require: /sales/deliveries
     - prefix: /api/sales/oales
       require: /sales/oales

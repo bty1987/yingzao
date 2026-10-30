@@ -264,6 +264,8 @@ ENDPOINTS = [
     ("sales", "POST", "/api/sales/refunds/1/verify-code"), ("sales", "POST", "/api/sales/refunds/1/confirm"),
     ("sales", "GET", "/api/sales/deliveries"), ("sales", "GET", "/api/sales/deliveries/1"),
     ("sales", "POST", "/api/sales/delivery-items/1/advance"),
+    ("sales", "GET", "/api/sales/delivery-flows"), ("sales", "PUT", "/api/sales/delivery-flows/1"),
+    ("sales", "GET", "/api/sales/settlements/1/batches"),
     ("sales", "GET", "/api/sales/settlements"), ("sales", "PUT", "/api/sales/settlements/1/vbalance"),
     ("sales", "POST", "/api/sales/settlements/1/vpost"), ("sales", "PUT", "/api/sales/settlements/1/pbalance"),
     ("sales", "POST", "/api/sales/settlements/1/post"),
@@ -416,7 +418,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(18 插件 64 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 64,
+    step("载入 api 规则(18 插件 65 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 65,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====

@@ -35,10 +35,13 @@ public class SalesDeliveryService {
 
     private final JdbcTemplate jdbc;
     private final SalesOrderService orders;
+    private final SalesDeliveryFlowService flows;
 
-    public SalesDeliveryService(JdbcTemplate jdbc, SalesOrderService orders) {
+    public SalesDeliveryService(JdbcTemplate jdbc, SalesOrderService orders,
+            SalesDeliveryFlowService flows) {
         this.jdbc = jdbc;
         this.orders = orders;
+        this.flows = flows;
     }
 
     @Transactional
@@ -60,6 +63,8 @@ public class SalesDeliveryService {
                 """, orgId, saleId, ((Number) sale.get("order_id")).longValue(),
                 SalesOrderService.blankToNull(remark), operatorId, orders.displayName(operatorId));
         long deliveryId = jdbc.queryForObject("select last_insert_id()", Long.class);
+        List<long[]> inserted = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
         for (DeliveryItemCmd cmd : items) {
             require(cmd != null && cmd.saleItemId() != null && cmd.num() != null && cmd.num() > 0,
                     SalesOrderService.CODE_PARAM, "sales.param.invalid");
@@ -78,8 +83,19 @@ public class SalesDeliveryService {
                     values (?,?,?,?,?,?,?,?)
                     """, orgId, deliveryId, cmd.saleItemId(), item.get("goods_name"),
                     item.get("color_name"), item.get("format_name"), cmd.num(), DV_INIT);
+            long itemId = jdbc.queryForObject("select last_insert_id()", Long.class);
+            List<Long> brandIds = jdbc.queryForList(
+                    "select brand_id from sales_order_item where id = ?", Long.class, cmd.saleItemId());
+            inserted.add(new long[]{itemId, brandIds.isEmpty() ? 0L : brandIds.get(0)});
+            labels.add(item.get("goods_name") + " ×" + cmd.num());
         }
         orders.track(orgId, saleId, "deliver", "生成配送批次(" + items.size() + " 行)", operatorId);
+        // B2 品牌流程模板:配送级免人工(auto_tran)在建单点火,后续级仍由推进链代打;
+        // 未配模板=全人工,行为与 V1 完全一致
+        for (int i = 0; i < inserted.size(); i++) {
+            flows.afterAdvance(orgId, saleId, inserted.get(i)[0], labels.get(i), inserted.get(i)[1],
+                    DV_INIT, operatorId);
+        }
         return deliveryId;
     }
 
@@ -120,6 +136,13 @@ public class SalesDeliveryService {
         long saleId = ((Number) delivery.get("sale_id")).longValue();
         orders.track(orgId, saleId, "delivery" + action,
                 item.get("goods_name") + " ×" + item.get("num"), operatorId);
+        // B2 品牌流程模板:免人工级自动通过(track 记 auto_ 前缀)+ 里程碑分批行生成(幂等);
+        // 未配模板=全人工,行为与 V1 完全一致。越级显式报错纪律对人保持,系统按配置代打。
+        List<Long> brandIds = jdbc.queryForList(
+                "select brand_id from sales_order_item where id = ?", Long.class, item.get("sale_item_id"));
+        flows.afterAdvance(orgId, saleId, deliveryItemId,
+                item.get("goods_name") + " ×" + item.get("num"),
+                brandIds.isEmpty() ? 0L : brandIds.get(0), to, operatorId);
     }
 
     public Map<String, Object> page(long orgId, Long saleId, int pageNo, int size) {

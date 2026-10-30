@@ -439,6 +439,11 @@ export const pageSalesDeliveries = (params) => http.get('/api/sales/deliveries',
 export const fetchSalesDelivery = (id) => http.get(`/api/sales/deliveries/${id}`)
 export const advanceSalesDeliveryItem = (id, data) =>
   http.post(`/api/sales/delivery-items/${id}/advance`, data)
+// B2 配送域 V2:品牌配送流程模板 + 里程碑分批结算
+export const listSalesDeliveryFlows = () => http.get('/api/sales/delivery-flows')
+export const saveSalesDeliveryFlow = (brandId, data) =>
+  http.put(`/api/sales/delivery-flows/${brandId}`, data)
+export const listSalesSettlementBatches = (id) => http.get(`/api/sales/settlements/${id}/batches`)
 
 // 外销单(addon-sales D6a):品牌厂商外销线
 export const pageOales = (params) => http.get('/api/sales/oales', { params })
