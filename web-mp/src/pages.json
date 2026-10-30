@@ -5,7 +5,8 @@
     { "path": "pages/progress/detail", "style": { "navigationBarTitleText": "施工进度" } },
     { "path": "pages/points/index", "style": { "navigationBarTitleText": "我的积分", "enablePullDownRefresh": true } },
     { "path": "pages/mine/index", "style": { "navigationBarTitleText": "我的" } },
-    { "path": "pages/login/index", "style": { "navigationBarTitleText": "登录" } }
+    { "path": "pages/login/index", "style": { "navigationBarTitleText": "登录" } },
+    { "path": "pages/card/detail", "style": { "navigationBarTitleText": "电子名片" } }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
