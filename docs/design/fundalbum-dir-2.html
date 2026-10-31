@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向二 · 票据·讫章 — R20 webmp 两页初稿(资金流水/工地相册)</title>
+<style>
+  :root{--paper:#FAF9F5;--paper-deep:#F1EFE8;--ink:#1A1A18;--ink70:rgba(26,26,24,.70);
+    --ink62:rgba(26,26,24,.62);--ink35:rgba(26,26,24,.35);--line:rgba(26,26,24,.12);
+    --line-strong:rgba(26,26,24,.55);--seal:#B03A2E;--moss:#5A7247;--ochre:#A6864B}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#242320;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;margin-bottom:10px}
+  .board-head h1{font-family:'Songti SC','SimSun','Noto Serif SC',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:14px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.78);font-size:14px;margin-bottom:26px;line-height:1.9;max-width:860px}
+  .board-sub b{color:#FAF9F5}
+  .tok{color:rgba(250,249,245,.55);font-size:14px;margin-bottom:26px}
+  .tok i{font-style:normal;color:#D8A08F}
+  .stage{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap}
+  .colnote{max-width:320px;color:rgba(250,249,245,.78);font-size:14px;line-height:2;padding-top:6px}
+  .colnote h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:12px}
+  .colnote p{margin-bottom:12px}
+  .colnote .k{color:#D8A08F}
+  .colnote .cap{display:block;font-size:12px;color:rgba(250,249,245,.55);letter-spacing:2px;margin:0 0 6px}
+
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+  .page{height:100%;display:flex;flex-direction:column}
+  .nav{padding:14px 16px 12px;border-bottom:1px solid var(--line);flex-shrink:0}
+  .nav .t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:3px;color:var(--ink)}
+  .nav .s{font-size:14px;color:var(--ink62);margin-top:2px;letter-spacing:1px}
+  .body{flex:1;overflow-y:auto;padding:16px 16px 28px}
+
+  /* tab(资金/主材分列) */
+  .tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .tab{flex:1;text-align:center;padding:11px 0;font-size:14px;color:var(--ink70);border-bottom:2px solid transparent}
+  .tab.on{color:var(--seal);font-weight:600;border-bottom-color:var(--seal)}
+
+  /* 票据卡 */
+  .ticket{border:1px solid var(--line-strong);margin-top:14px;position:relative;background:var(--paper)}
+  .tk-head{display:flex;justify-content:space-between;align-items:center;background:var(--paper-deep);
+    padding:7px 12px;border-bottom:1px solid var(--line)}
+  .tk-head .no{font-size:12px;color:var(--ink62);letter-spacing:1px}
+  .tk-head .cat{font-size:12px;color:var(--ink62);letter-spacing:2px}
+  .tk-body{display:flex;align-items:center;gap:14px;padding:14px 14px}
+  .tk-main{flex:1;min-width:0}
+  .tk-name{font-family:'Songti SC','SimSun',serif;font-size:18px;letter-spacing:1px}
+  .tk-meta{font-size:12px;color:var(--ink62);margin-top:5px;line-height:1.7}
+  .tk-amt{font-family:'Songti SC','SimSun',serif;font-size:21px;flex-shrink:0}
+  .tk-amt small{font-size:12px;font-family:-apple-system,'PingFang SC',sans-serif;color:var(--ink62)}
+  /* 状态方章 */
+  .stamp{width:38px;height:38px;border-radius:3px;display:flex;align-items:center;justify-content:center;
+    font-family:'Songti SC','SimSun',serif;font-size:17px;flex-shrink:0}
+  .stamp.ok{border:2px solid var(--moss);color:var(--moss)}
+  .stamp.due{background:var(--seal);color:var(--paper)}
+  .stamp.ref{border:2px solid #7A5E2A;color:#7A5E2A}
+  .tk-due-btn{margin:0 14px 12px;text-align:center;padding:9px 0;background:var(--ink);color:var(--paper);
+    font-size:14px;letter-spacing:3px;border-radius:2px}
+  .tk-sum{display:flex;justify-content:space-between;font-size:13px;color:var(--ink62);
+    border-top:1px solid var(--line-strong);margin-top:16px;padding-top:11px}
+  .tk-sum b{font-family:'Songti SC','SimSun',serif;color:var(--ink);font-size:15px}
+
+  /* 相册:节点票头分组 */
+  .ph-group{border:1px solid var(--line);margin-top:14px}
+  .ph-head{display:flex;justify-content:space-between;align-items:baseline;background:var(--paper-deep);
+    padding:7px 12px;border-bottom:1px solid var(--line)}
+  .ph-head .d{font-family:'Songti SC','SimSun',serif;font-size:14px;letter-spacing:1px}
+  .ph-head .n{font-size:12px;color:var(--ink62)}
+  .ph-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:8px}
+  .ph-grid i{display:block;height:88px;background:linear-gradient(135deg,var(--paper-deep),#E9E5DA);border:1px solid var(--line)}
+  .ph-grid i.fallback{border-style:dashed}
+  .ph-tip{font-size:14px;color:var(--ink62);margin-top:12px;line-height:1.8}
+</style>
+</head>
+<body>
+  <div class="board-head"><h1>方向二 · 票据·讫章</h1><span class="en">WEB-MP · RECEIPTS</span></div>
+  <div class="board-sub">
+    每笔款项=<b>一张收据票</b>:票头(纸深+单号+分类)、宋体金额、状态方章——已付盖<b>墨印「讫」</b>,待付盖<b>朱印「候」</b>并附去付款按钮,退款赭金「退」。
+    工地相册=节点票据式分组(节点名票头+三列照片墙)。单据仪式感最强,待付动作最醒目。
+  </div>
+  <div class="tok">token 锚定 web-mp/src/App.vue(与 portal 同源):<i>纸白 #FAF9F5 / 墨黑 / 朱印红(仅待付「候」章)/ 苔绿=已付讫 / 赭金=退款 / 宋体 display / 方角 / 细墨线</i></div>
+
+  <div class="stage">
+    <div class="colnote">
+      <span class="cap">方向定位</span>
+      <h3>票据·讫章</h3>
+      <p><span class="k">信息焦点:</span>单据与状态——一票一款,「讫/候/退」三印一眼可读;待付票自带去付款按钮。</p>
+      <p><span class="k">版式:</span>票据卡(票头纸深+票身金额+方章)+tab 装修/主材分列;相册=节点票头三列墙。</p>
+      <p><span class="k">朱用量:</span>中——朱只给待付「候」章(=需要你行动的单据),与「异常是唯一红焦点」不冲突(待付即 C 端唯一待办)。</p>
+      <p><span class="k">实现成本:</span>中高(票头/方章为自定义样式族,可与名帖页「讫」印语言共用)。</p>
+      <p><span class="k">数据口径:</span>两稿同数,与 addon-payment 同 service。</p>
+    </div>
+
+    <!-- P1 资金流水 -->
+    <div class="phone">
+      <div class="page">
+        <div class="nav"><div class="t">资金流水</div><div class="s">中海·云麓公馆 3-1-1201 · YZ2610310173</div></div>
+        <div class="body">
+          <div class="tabs"><span class="tab on">装修款</span><span class="tab">主材款</span></div>
+
+          <div class="ticket">
+            <div class="tk-head"><span class="no">尾款 35% · 计划 12-20</span><span class="cat">装修款</span></div>
+            <div class="tk-body">
+              <div class="tk-main"><div class="tk-name">¥135,100</div><div class="tk-meta">签约拆分 · 前置中期款已付讫<br>开票后支持线上支付</div></div>
+              <span class="stamp due">候</span>
+            </div>
+            <div class="tk-due-btn">去付款</div>
+          </div>
+
+          <div class="ticket">
+            <div class="tk-head"><span class="no">10-24 收讫 · 单据 #3107</span><span class="cat">装修款</span></div>
+            <div class="tk-body">
+              <div class="tk-main"><div class="tk-name">¥115,800</div><div class="tk-meta">中期款 30% · 签约拆分<br>渠道 银行转账</div></div>
+              <span class="stamp ok">讫</span>
+            </div>
+          </div>
+
+          <div class="ticket">
+            <div class="tk-head"><span class="no">10-02 收讫 · 单据 #3088</span><span class="cat">装修款</span></div>
+            <div class="tk-body">
+              <div class="tk-main"><div class="tk-name">-¥2,400</div><div class="tk-meta">减项退款 · 瓦工减项差量单<br>原路退回</div></div>
+              <span class="stamp ref">退</span>
+            </div>
+          </div>
+
+          <div class="ticket">
+            <div class="tk-head"><span class="no">09-15 收讫 · 单据 #3019</span><span class="cat">装修款</span></div>
+            <div class="tk-body">
+              <div class="tk-main"><div class="tk-name">¥125,100</div><div class="tk-meta">首期款 35% · 签约拆分(含定金抵扣)</div></div>
+              <span class="stamp ok">讫</span>
+            </div>
+          </div>
+
+          <div class="tk-sum"><span>已付 ¥248,500</span><b>待付 ¥135,100</b></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P2 工地相册 -->
+    <div class="phone">
+      <div class="page">
+        <div class="nav"><div class="t">工地相册</div><div class="s">节点票据式分组 · 时间倒序 · 点按全屏</div></div>
+        <div class="body">
+          <div class="ph-group">
+            <div class="ph-head"><span class="d">10-26 · 瓦工铺贴</span><span class="n">现场板拍 3 张</span></div>
+            <div class="ph-grid"><i></i><i></i><i></i></div>
+          </div>
+          <div class="ph-group">
+            <div class="ph-head"><span class="d">10-25 · 瓦工铺贴</span><span class="n">材料进场 2 张</span></div>
+            <div class="ph-grid"><i></i><i></i><i class="fallback"></i></div>
+          </div>
+          <div class="ph-group">
+            <div class="ph-head"><span class="d">10-24 · 水电验收</span><span class="n">打压测试 1 张</span></div>
+            <div class="ph-grid"><i></i><i class="fallback"></i><i class="fallback"></i></div>
+          </div>
+          <div class="ph-group">
+            <div class="ph-head"><span class="d">09-15 · 放线交底</span><span class="n">现场 2 张</span></div>
+            <div class="ph-grid"><i></i><i></i><i class="fallback"></i></div>
+          </div>
+          <div class="ph-group">
+            <div class="ph-head"><span class="d">08-30 · 效果图</span><span class="n">客厅 1 张</span></div>
+            <div class="ph-grid"><i></i><i class="fallback"></i><i class="fallback"></i></div>
+          </div>
+          <div class="ph-tip">共 9 张;虚线格=加载失败自动兜底品牌默认图,首页永不白屏。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

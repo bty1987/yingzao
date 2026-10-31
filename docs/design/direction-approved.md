@@ -63,3 +63,17 @@
 
 - 方向卡(含实现成本/朱用量/混搭建议/实现口径注记):`docs/design/construction-directions.md`;
 - 图纸域尚无表:三稿按「挂 yz_file 只读投影」示意,实现期落;节点开完工端点(schedules begin/finish)与日记端点(diaries)已就绪。
+
+---
+
+## 附:R20 webmp 两页方向轮(资金流水/工地相册,portal 体系内三诠释)
+
+2026-10-31(第 114 次):docs/15 R20 动手前按军规 5 出三方向初稿(token 锚定 web-mp/src/App.vue,与 portal 同源)。数据两页同数三稿一致(与 addon-payment 同口径),design_lint 红灯全清。**🔴待用户拍板=三方向任选或混搭**:
+
+| 方向 | 文件 | 一句话 |
+|---|---|---|
+| 一·存折·流水 | `fundalbum-dir-1.html` | 家庭存折:装修/主材对折两栏+账目行+月度界行;相册=月带横滑 |
+| 二·票据·讫章 | `fundalbum-dir-2.html` | 一笔一票:墨印「讫」/朱印「候」+去付款/赭金「退」;相册=节点票头三列墙 |
+| 三·家账·简表 | `fundalbum-dir-3.html` | 既有页同族延伸:汇总卡进度条+tag 流水行;相册=九宫格(既有组件) |
+
+- 方向卡:`docs/design/fundalbum-directions.md`;截图:`docs/screenshots/design/fundalbum-dir*-*.png`。

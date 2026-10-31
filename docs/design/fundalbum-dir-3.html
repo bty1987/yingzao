@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向三 · 家账·简表 — R20 webmp 两页初稿(资金流水/工地相册)</title>
+<style>
+  :root{--paper:#FAF9F5;--paper-deep:#F1EFE8;--ink:#1A1A18;--ink70:rgba(26,26,24,.70);
+    --ink62:rgba(26,26,24,.62);--ink35:rgba(26,26,24,.35);--line:rgba(26,26,24,.12);
+    --line-strong:rgba(26,26,24,.55);--seal:#B03A2E;--moss:#5A7247;--ochre:#A6864B}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#242320;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;margin-bottom:10px}
+  .board-head h1{font-family:'Songti SC','SimSun','Noto Serif SC',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:14px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.78);font-size:14px;margin-bottom:26px;line-height:1.9;max-width:860px}
+  .board-sub b{color:#FAF9F5}
+  .tok{color:rgba(250,249,245,.55);font-size:14px;margin-bottom:26px}
+  .tok i{font-style:normal;color:#D8A08F}
+  .stage{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap}
+  .colnote{max-width:320px;color:rgba(250,249,245,.78);font-size:14px;line-height:2;padding-top:6px}
+  .colnote h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:12px}
+  .colnote p{margin-bottom:12px}
+  .colnote .k{color:#D8A08F}
+  .colnote .cap{display:block;font-size:12px;color:rgba(250,249,245,.55);letter-spacing:2px;margin:0 0 6px}
+
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+  .page{height:100%;display:flex;flex-direction:column}
+  .nav{padding:14px 16px 12px;border-bottom:1px solid var(--line);flex-shrink:0}
+  .nav .t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:3px;color:var(--ink)}
+  .nav .s{font-size:14px;color:var(--ink62);margin-top:2px;letter-spacing:1px}
+  .body{flex:1;overflow-y:auto;padding:14px 16px 28px}
+
+  /* 汇总卡(与 progress 既有卡同族) */
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:14px;margin-top:12px}
+  .sumhead{display:flex;align-items:baseline;justify-content:space-between}
+  .sumhead .k{font-size:13px;color:var(--ink62)}
+  .sumhead .v{font-family:'Songti SC','SimSun',serif;font-size:22px}
+  .sumhead .v small{font-size:12px;font-family:-apple-system,'PingFang SC',sans-serif;color:var(--ink62)}
+  .pbar{height:4px;background:var(--paper-deep);margin-top:12px}
+  .pbar i{display:block;height:100%;width:68%;background:var(--moss)}
+  .pcap{display:flex;justify-content:space-between;font-size:12px;color:var(--ink62);margin-top:6px}
+
+  /* tab */
+  .tabs{display:flex;border-bottom:1px solid var(--line);margin-top:8px}
+  .tab{flex:1;text-align:center;padding:11px 0;font-size:14px;color:var(--ink70);border-bottom:2px solid transparent}
+  .tab.on{color:var(--seal);font-weight:600;border-bottom-color:var(--seal)}
+
+  /* 流水行(tag 语言与既有页同) */
+  .row{display:flex;align-items:baseline;gap:10px;padding:13px 2px;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .r-main{flex:1;min-width:0}
+  .r-name{font-size:15px;font-weight:600;color:var(--ink)}
+  .r-meta{font-size:12px;color:var(--ink62);margin-top:4px}
+  .tag{display:inline-block;font-size:12px;padding:3px 8px;border-radius:3px;line-height:1.5;flex-shrink:0;white-space:nowrap}
+  .tag-success{background:rgba(90,114,71,.12);color:var(--moss)}
+  .tag-danger{background:rgba(176,58,46,.10);color:var(--seal)}
+  .tag-warning{background:rgba(166,134,75,.14);color:#7A5E2A}
+  .r-amt{font-family:'Songti SC','SimSun',serif;font-size:16px;flex-shrink:0}
+  .r-amt small{font-size:12px;font-family:-apple-system,'PingFang SC',sans-serif;color:var(--ink62)}
+  .r-amt.due{color:var(--seal)}
+  .r-amt.ref{color:#7A5E2A}
+
+  /* 相册:九宫格(yz-image-grid 语言)+日期组头 */
+  .g-head{display:flex;align-items:baseline;justify-content:space-between;margin:16px 0 8px}
+  .g-head .d{font-family:'Songti SC','SimSun',serif;font-size:15px;letter-spacing:2px}
+  .g-head .n{font-size:12px;color:var(--ink62)}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .grid i{display:block;height:90px;background:linear-gradient(135deg,var(--paper-deep),#E9E5DA);border:1px solid var(--line)}
+  .grid i.fallback{border-style:dashed}
+  .g-tip{font-size:14px;color:var(--ink62);margin-top:12px;line-height:1.8}
+</style>
+</head>
+<body>
+  <div class="board-head"><h1>方向三 · 家账·简表</h1><span class="en">WEB-MP · LEDGER LIST</span></div>
+  <div class="board-sub">
+    与 <b>progress/mine 既有页同族的直接延伸</b>:汇总卡(已付进度条)+tab 分列+流水行(tag 语义色+右对齐宋体金额);相册=<b>九宫格</b>(yz-image-grid 既有组件语言)+日期组头。
+    工具感最强、实现成本最低,与现有 C 端页面一体化最自然。
+  </div>
+  <div class="tok">token 锚定 web-mp/src/App.vue(与 portal 同源):<i>纸白 #FAF9F5 / 墨黑 / 朱印红(仅待付)/ 苔绿=已付+进度条 / 赭金=退款 / 宋体 display / 方角 4px / 细墨线</i></div>
+
+  <div class="stage">
+    <div class="colnote">
+      <span class="cap">方向定位</span>
+      <h3>家账·简表</h3>
+      <p><span class="k">信息焦点:</span>全貌与状态——顶部汇总卡给「付到哪了」一条进度,行级 tag 即状态。</p>
+      <p><span class="k">版式:</span>全局 .card 家族+tab+流水行,相册=三列九宫格(yz-image-grid 既有组件,全屏 uni.previewImage)。</p>
+      <p><span class="k">朱用量:</span>与既有页一致——tag 语义色,朱=待付。</p>
+      <p><span class="k">实现成本:</span><b>最低</b>——全部复用既有卡/tag/九宫格组件习语。</p>
+      <p><span class="k">数据口径:</span>两稿同数,与 addon-payment 同 service。</p>
+    </div>
+
+    <!-- P1 资金流水 -->
+    <div class="phone">
+      <div class="page">
+        <div class="nav"><div class="t">资金流水</div><div class="s">中海·云麓公馆 3-1-1201 · YZ2610310173</div></div>
+        <div class="body">
+          <div class="card">
+            <div class="sumhead"><span class="k">累计已付(含主材)</span><span class="v">¥320,570<small></small></span></div>
+            <div class="pbar"><i></i></div>
+            <div class="pcap"><span>合同 + 主材 ¥471,300</span><span>待付 ¥148,330</span></div>
+          </div>
+
+          <div class="tabs"><span class="tab on">装修款</span><span class="tab">主材款</span></div>
+
+          <div class="row">
+            <div class="r-main"><div class="r-name">尾款 35%</div><div class="r-meta">装修款 · 计划 12-20 · 签约拆分</div></div>
+            <span class="r-amt due">¥135,100<small></small></span><span class="tag tag-danger">待付</span>
+          </div>
+          <div class="row">
+            <div class="r-main"><div class="r-name">中期款 30%</div><div class="r-meta">装修款 · 10-24 · 银行转账</div></div>
+            <span class="r-amt">¥115,800<small></small></span><span class="tag tag-success">已付</span>
+          </div>
+          <div class="row">
+            <div class="r-main"><div class="r-name">减项退款</div><div class="r-meta">瓦工减项 · 10-02 · 原路退回</div></div>
+            <span class="r-amt ref">-¥2,400<small></small></span><span class="tag tag-warning">已退</span>
+          </div>
+          <div class="row">
+            <div class="r-main"><div class="r-name">首期款 35%</div><div class="r-meta">装修款 · 09-15 · 含定金抵扣</div></div>
+            <span class="r-amt">¥125,100<small></small></span><span class="tag tag-success">已付</span>
+          </div>
+          <div class="row">
+            <div class="r-main"><div class="r-name">定金</div><div class="r-meta">装修款 · 09-12 · 抵首期</div></div>
+            <span class="r-amt">¥10,000<small></small></span><span class="tag tag-success">已付</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P2 工地相册 -->
+    <div class="phone">
+      <div class="page">
+        <div class="nav"><div class="t">工地相册</div><div class="s">时间倒序 · 九宫格 · 点按全屏预览</div></div>
+        <div class="body">
+          <div class="g-head"><span class="d">10-26 瓦工铺贴</span><span class="n">现场板拍 3 张</span></div>
+          <div class="grid"><i></i><i></i><i></i></div>
+
+          <div class="g-head"><span class="d">10-25 瓦工铺贴</span><span class="n">材料进场 2 张</span></div>
+          <div class="grid"><i></i><i></i><i class="fallback"></i></div>
+
+          <div class="g-head"><span class="d">10-24 水电验收</span><span class="n">打压测试 1 张</span></div>
+          <div class="grid"><i></i><i class="fallback"></i><i class="fallback"></i></div>
+
+          <div class="g-head"><span class="d">09-15 放线交底</span><span class="n">现场 2 张</span></div>
+          <div class="grid"><i></i><i></i><i class="fallback"></i></div>
+
+          <div class="g-head"><span class="d">08-30 效果图</span><span class="n">客厅 1 张</span></div>
+          <div class="grid"><i></i><i class="fallback"></i><i class="fallback"></i></div>
+
+          <div class="g-tip">共 9 张;虚线格=加载失败自动兜底品牌默认图,首页永不白屏。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

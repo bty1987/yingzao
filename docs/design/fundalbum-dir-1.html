@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向一 · 存折·流水 — R20 webmp 两页初稿(资金流水/工地相册)</title>
+<style>
+  :root{--paper:#FAF9F5;--paper-deep:#F1EFE8;--ink:#1A1A18;--ink70:rgba(26,26,24,.70);
+    --ink62:rgba(26,26,24,.62);--ink35:rgba(26,26,24,.35);--line:rgba(26,26,24,.12);
+    --line-strong:rgba(26,26,24,.55);--seal:#B03A2E;--moss:#5A7247;--ochre:#A6864B}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#242320;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;margin-bottom:10px}
+  .board-head h1{font-family:'Songti SC','SimSun','Noto Serif SC',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:14px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.78);font-size:14px;margin-bottom:26px;line-height:1.9;max-width:860px}
+  .board-sub b{color:#FAF9F5}
+  .tok{color:rgba(250,249,245,.55);font-size:14px;margin-bottom:26px}
+  .tok i{font-style:normal;color:#D8A08F}
+  .stage{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap}
+  .colnote{max-width:320px;color:rgba(250,249,245,.78);font-size:14px;line-height:2;padding-top:6px}
+  .colnote h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:12px}
+  .colnote p{margin-bottom:12px}
+  .colnote .k{color:#D8A08F}
+  .colnote .cap{display:block;font-size:12px;color:rgba(250,249,245,.55);letter-spacing:2px;margin:0 0 6px}
+
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+  .page{height:100%;display:flex;flex-direction:column}
+  .nav{padding:14px 16px 12px;border-bottom:1px solid var(--line);flex-shrink:0}
+  .nav .t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:3px;color:var(--ink)}
+  .nav .s{font-size:14px;color:var(--ink62);margin-top:2px;letter-spacing:1px}
+  .body{flex:1;overflow-y:auto;padding:16px 16px 28px}
+
+  /* 存折头:对折两栏 */
+  .fold{display:flex;border:1px solid var(--line-strong)}
+  .fold .f{flex:1;padding:14px 14px 12px;background:var(--paper)}
+  .fold .f.on{background:var(--paper-deep)}
+  .fold .f .k{font-size:12px;color:var(--ink62);letter-spacing:2px}
+  .fold .f .v{font-family:'Songti SC','SimSun',serif;font-size:19px;margin-top:4px}
+  .fold .f .v small{font-size:12px;color:var(--ink62);font-family:-apple-system,'PingFang SC',sans-serif}
+  .fold .f .s{font-size:12px;color:var(--ink62);margin-top:3px}
+  .fold .f.paid .v{color:var(--moss)}
+  .fold .f.due .v{color:var(--seal)}
+
+  /* 账目行 */
+  .month{font-size:12px;color:var(--ink62);letter-spacing:2px;margin:18px 0 4px}
+  .entry{display:flex;align-items:baseline;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line)}
+  .entry:last-child{border-bottom:0}
+  .e-day{font-size:12px;color:var(--ink62);width:40px;flex-shrink:0}
+  .e-main{flex:1;min-width:0}
+  .e-name{font-size:15px;color:var(--ink);font-weight:600}
+  .e-type{font-size:12px;color:var(--ink62);margin-top:3px}
+  .e-amt{font-family:'Songti SC','SimSun',serif;font-size:17px;flex-shrink:0}
+  .e-amt small{font-size:12px;font-family:-apple-system,'PingFang SC',sans-serif;color:var(--ink62);margin-left:2px}
+  .e-amt.due{color:var(--seal)}
+  .e-amt.ref{color:#7A5E2A}
+  .e-st{font-size:12px;flex-shrink:0;width:34px;text-align:right}
+  .e-st.ok{color:var(--moss)}
+  .e-st.no{color:var(--seal)}
+  .e-st.rf{color:#7A5E2A}
+  .sum{display:flex;justify-content:space-between;font-size:13px;color:var(--ink62);
+    border-top:1px solid var(--line-strong);margin-top:14px;padding-top:11px}
+  .sum b{font-family:'Songti SC','SimSun',serif;color:var(--ink);font-size:15px}
+
+  /* 相册:按月照片带 */
+  .alb{margin-top:16px}
+  .alb .mt{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}
+  .alb .mt .n{font-family:'Songti SC','SimSun',serif;font-size:15px;letter-spacing:2px}
+  .alb .mt .node{font-size:12px;color:var(--ink62)}
+  .strip{display:flex;gap:8px;overflow-x:auto;margin-top:10px;padding-bottom:4px}
+  .strip i{flex-shrink:0;width:104px;height:104px;background:linear-gradient(135deg,var(--paper-deep),#E9E5DA);border:1px solid var(--line);display:block}
+  .strip i.fallback{border-style:dashed}
+  .alb-tip{font-size:14px;color:var(--ink62);margin-top:6px;line-height:1.8}
+</style>
+</head>
+<body>
+  <div class="board-head"><h1>方向一 · 存折·流水</h1><span class="en">WEB-MP · PASSBOOK</span></div>
+  <div class="board-sub">
+    资金流水=<b>一本家庭存折</b>:装修款/主材款对折两栏,每笔一行入折,宋体金额右对齐,月度界行;工地相册=<b>贴相簿</b>,按节点分带横滑。素净对账感,装饰最少。
+  </div>
+  <div class="tok">token 锚定 web-mp/src/App.vue(与 portal 同源):<i>纸白 #FAF9F5 / 墨黑 / 朱印红(仅待付与退款)/ 苔绿=已付 / 赭金=退款 / 宋体 display / 方角 / 细墨线</i></div>
+
+  <div class="stage">
+    <div class="colnote">
+      <span class="cap">方向定位</span>
+      <h3>存折·流水</h3>
+      <p><span class="k">信息焦点:</span>账目本身——一行一笔,金额宋体右对齐,月度小结;装修/主材对折两栏一眼分列。</p>
+      <p><span class="k">版式:</span>存折头(两栏合计)+账目行(日期/科目/金额三段式),无卡片无投影;相册=月份带状横滑。</p>
+      <p><span class="k">朱用量:</span>最省——朱只给「待付」金额与「候」字,退款赭金。</p>
+      <p><span class="k">实现成本:</span>中(账目行/存折头为自定义样式)。</p>
+      <p><span class="k">数据口径:</span>两稿同数(YZ2610310173),与 addon-payment 同 service 口径。</p>
+    </div>
+
+    <!-- P1 资金流水 -->
+    <div class="phone">
+      <div class="page">
+        <div class="nav"><div class="t">资金流水</div><div class="s">中海·云麓公馆 3-1-1201 · YZ2610310173</div></div>
+        <div class="body">
+          <div class="fold">
+            <div class="f paid on"><div class="k">装修款 · 已付</div><div class="v">¥248,500<small></small></div><div class="s">待付 ¥135,100</div></div>
+            <div class="f paid"><div class="k">主材款 · 已付</div><div class="v">¥72,070<small></small></div><div class="s">待付 ¥13,230</div></div>
+          </div>
+
+          <div class="month">2026 年 10 月</div>
+          <div class="entry">
+            <span class="e-day">10-24</span>
+            <div class="e-main"><div class="e-name">中期款 30%</div><div class="e-type">装修款 · 签约拆分</div></div>
+            <span class="e-amt">¥115,800<small></small></span><span class="e-st ok">已付</span>
+          </div>
+          <div class="entry">
+            <span class="e-day">10-20</span>
+            <div class="e-main"><div class="e-name">IMOLA 瓷砖</div><div class="e-type">主材款 · 代购全款</div></div>
+            <span class="e-amt">¥42,600<small></small></span><span class="e-st ok">已付</span>
+          </div>
+          <div class="entry">
+            <span class="e-day">10-08</span>
+            <div class="e-main"><div class="e-name">圣象地板</div><div class="e-type">主材款 · 代购全款</div></div>
+            <span class="e-amt">¥23,800<small></small></span><span class="e-st ok">已付</span>
+          </div>
+          <div class="entry">
+            <span class="e-day">10-02</span>
+            <div class="e-main"><div class="e-name">减项退款</div><div class="e-type">瓦工减项 · 差量单</div></div>
+            <span class="e-amt ref">-¥2,400<small></small></span><span class="e-st rf">已退</span>
+          </div>
+
+          <div class="month">2026 年 9 月</div>
+          <div class="entry">
+            <span class="e-day">09-15</span>
+            <div class="e-main"><div class="e-name">首期款 35%</div><div class="e-type">装修款 · 签约拆分</div></div>
+            <span class="e-amt">¥125,100<small></small></span><span class="e-st ok">已付</span>
+          </div>
+          <div class="entry">
+            <span class="e-day">09-12</span>
+            <div class="e-main"><div class="e-name">定金</div><div class="e-type">装修款 · 抵首期</div></div>
+            <span class="e-amt">¥10,000<small></small></span><span class="e-st ok">已付</span>
+          </div>
+
+          <div class="sum"><span>已付合计</span><b>¥320,570</b></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P2 工地相册 -->
+    <div class="phone">
+      <div class="page">
+        <div class="nav"><div class="t">工地相册</div><div class="s">按时间倒序 · 点按全屏 · 加载失败兜底品牌图</div></div>
+        <div class="body">
+          <div class="alb">
+            <div class="mt"><span class="n">10-26</span><span class="node">瓦工铺贴 · 现场板拍 3 张</span></div>
+            <div class="strip"><i></i><i></i><i></i></div>
+          </div>
+          <div class="alb">
+            <div class="mt"><span class="n">10-25</span><span class="node">瓦工铺贴 · 材料进场 2 张</span></div>
+            <div class="strip"><i></i><i></i></div>
+          </div>
+          <div class="alb">
+            <div class="mt"><span class="n">10-24</span><span class="node">水电验收 · 打压测试 1 张</span></div>
+            <div class="strip"><i></i></div>
+          </div>
+          <div class="alb">
+            <div class="mt"><span class="n">09-15</span><span class="node">放线交底 · 现场 2 张</span></div>
+            <div class="strip"><i></i><i class="fallback"></i></div>
+          </div>
+          <div class="alb">
+            <div class="mt"><span class="n">08-30</span><span class="node">效果图 · 客厅 1 张</span></div>
+            <div class="strip"><i></i></div>
+          </div>
+          <div class="alb-tip">共 9 张,时间倒序;虚线格=加载失败,自动兜底品牌默认图,首页永不白屏。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
