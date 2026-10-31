@@ -21,6 +21,14 @@
       "style": { "navigationBarTitleText": "审批详情" }
     },
     {
+      "path": "pages/approvals/launch",
+      "style": { "navigationBarTitleText": "发起审批" }
+    },
+    {
+      "path": "pages/approvals/create",
+      "style": { "navigationBarTitleText": "填写审批表单" }
+    },
+    {
       "path": "pages/notifications/notifications",
       "style": { "navigationBarTitleText": "通知", "enablePullDownRefresh": true }
     },

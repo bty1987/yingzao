@@ -40,7 +40,26 @@ public class ApprovalService {
     public static final int ACTION_CANCEL = 5;
 
     public record SubmitCmd(long orgId, long applicantId, String title,
-                            String bizAddon, String bizType, String bizId, Long assigneeId) {
+                            String bizAddon, String bizType, String bizId, Long assigneeId,
+                            String formData, String attachments) {
+
+        /**
+         * 兼容构造(既有调用面:系统发起的审批)——form_data/attachments 恒空,行为零变化;
+         * 表单审批(R15)走全参构造,两列为序列化好的 JSON 透传串,内核不解释、随单存快照。
+         */
+        public SubmitCmd(long orgId, long applicantId, String title,
+                         String bizAddon, String bizType, String bizId, Long assigneeId) {
+            this(orgId, applicantId, title, bizAddon, bizType, bizId, assigneeId, null, null);
+        }
+
+        public SubmitCmd {
+            if (formData != null && formData.length() > 60000) {
+                throw new IllegalArgumentException("formData too large");
+            }
+            if (attachments != null && attachments.length() > 2000) {
+                throw new IllegalArgumentException("attachments too large");
+            }
+        }
     }
 
     private record ApprovalRow(long id, long orgId, long applicantId, long assigneeId, int status,
@@ -65,10 +84,11 @@ public class ApprovalService {
         }
         requireOrgUser(cmd.assigneeId(), cmd.orgId());
         jdbc.update("""
-                insert into yz_approval(org_id, title, biz_addon, biz_type, biz_id, applicant_id, assignee_id)
-                values (?,?,?,?,?,?,?)
+                insert into yz_approval(org_id, title, biz_addon, biz_type, biz_id, form_data, attachments,
+                                        applicant_id, assignee_id)
+                values (?,?,?,?,?,?,?,?,?)
                 """, cmd.orgId(), cmd.title(), cmd.bizAddon(), cmd.bizType(), cmd.bizId(),
-                cmd.applicantId(), cmd.assigneeId());
+                cmd.formData(), cmd.attachments(), cmd.applicantId(), cmd.assigneeId());
         long id = jdbc.queryForObject("select last_insert_id()", Long.class);
         insertRecord(id, ACTION_SUBMIT, cmd.applicantId(), null, null);
         // 事件走内核事件总线(outbox 与业务同事务,eventKey=业务幂等锚点),提交后立即投递
@@ -119,6 +139,7 @@ public class ApprovalService {
         requireParty(userId, id);
         Map<String, Object> approval = jdbc.queryForMap("""
                 select a.id, a.org_id, a.title, a.biz_addon, a.biz_type, a.biz_id,
+                       a.form_data, a.attachments,
                        a.applicant_id, ua.display_name as applicant_name,
                        a.assignee_id, ub.display_name as assignee_name,
                        a.status, a.created_at, a.finished_at

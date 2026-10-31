@@ -66,6 +66,15 @@ public class AddonRegistry {
                         (String) m.get("sub"), (String) m.get("page"), (String) m.get("require"),
                         m.get("sort") == null ? 0 : ((Number) m.get("sort")).intValue()))
                 .toList();
+        // 审批表单模板(R15):fields 列表整体透传,内核不解释字段语义
+        List<Map<String, Object>> forms = (List<Map<String, Object>>) a.getOrDefault("approval-forms", List.of());
+        List<AddonDescriptor.ApprovalForm> parsedForms = forms.stream()
+                .map(f -> new AddonDescriptor.ApprovalForm((String) f.get("key"), (String) f.get("title"),
+                        (String) f.get("icon"), (String) f.get("sub"), (String) f.get("submit"),
+                        (String) f.get("require"),
+                        f.get("sort") == null ? 0 : ((Number) f.get("sort")).intValue(),
+                        (List<Map<String, Object>>) f.getOrDefault("fields", List.of())))
+                .toList();
         List<Map<String, Object>> apis = (List<Map<String, Object>>) a.getOrDefault("api", List.of());
         List<AddonDescriptor.Api> parsedApis = apis.stream()
                 .map(r -> new AddonDescriptor.Api((String) r.get("prefix"), (String) r.get("exact"),
@@ -93,6 +102,7 @@ public class AddonRegistry {
                 parsedApis,
                 parsedMetrics,
                 parsedMobile,
+                parsedForms,
                 (Map<String, Object>) a.getOrDefault("dicts", Map.of()));
     }
 

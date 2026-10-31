@@ -16,6 +16,7 @@ public record AddonDescriptor(
         List<Api> apis,
         List<Metric> metrics,
         List<Mobile> mobile,
+        List<ApprovalForm> approvalForms,
         Map<String, Object> dicts) {
 
     /** 插件菜单声明:前端据此动态注册路由与侧栏菜单项。 */
@@ -42,6 +43,16 @@ public record AddonDescriptor(
      * 下发时按当前用户授权过滤,无权限格子不出现。
      */
     public record Mobile(String icon, String title, String sub, String page, String require, int sort) {
+    }
+
+    /**
+     * 审批表单模板声明(docs/15 R15~R16):插件注册「员工可在移动端发起的审批表单」schema——
+     * key=发起时审批单的 biz_type 锚;submit=表单提交端点(插件业务端点,RBAC 自行声明于 api 段);
+     * fields 原样透传(id/label/type/source/fill/required 等),内核不认业务字段,渲染解释全部在移动端。
+     * require 沿 mobile 段语义=菜单 path 或 capability,为空=人人可见;下发时按当前用户授权过滤。
+     */
+    public record ApprovalForm(String key, String title, String icon, String sub, String submit,
+            String require, int sort, List<Map<String, Object>> fields) {
     }
 
     /**

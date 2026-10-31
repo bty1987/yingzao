@@ -1,7 +1,7 @@
 addon:
   id: example
   name: 请假示例
-  version: 0.3.0
+  version: 0.4.0
   error-code-segment: 290000   # 示范工程独占段,与业务 addon 段(210000-260000)保持距离
   menus:
     - path: /example/leaves
@@ -13,6 +13,29 @@ addon:
   api:
     - prefix: /api/example/leaves
       require: /example/leaves
+    # 示范申请(表单审批):发起是全员能力(authenticated);快照列自发起端选中数据
+    - prefix: /api/example/requests
+      require: authenticated
+  # 审批表单模板(docs/15 R15~R16):key=审批 biz_type 锚;submit=表单提交端点(归 api 段闸);
+  # fields 透传内核零解释,渲染解释全在移动端;query 选中后按 fill 用选中对象的键回填表单字段
+  approval-forms:
+    - key: demo-request
+      title: 物料申请示范
+      icon: 请
+      sub: schema 驱动动态表单示范(选单预填+附件)
+      sort: 1
+      require: /example/leaves
+      submit: POST /api/example/requests
+      fields:
+        - { id: orderId, label: 装修单号, type: query, source: /api/decoration/orders/lookup,
+            labelKey: order_no, subKey: house_label,
+            fill: { orderLabel: order_no, village: house_label, customer: customer_name } }
+        - { id: orderLabel, label: 单号, type: filling }
+        - { id: village, label: 楼盘, type: filling }
+        - { id: customer, label: 客户, type: filling }
+        - { id: reason, label: 申请事由, type: textarea, required: true }
+        - { id: amount, label: 预估金额, type: number, prefix: '¥' }
+        - { id: images, label: 现场照片, type: images }
   dicts:
     leaveStatus:
       - { key: '0', label: 审批中 }

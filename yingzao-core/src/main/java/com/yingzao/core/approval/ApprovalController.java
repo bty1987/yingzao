@@ -3,6 +3,7 @@ package com.yingzao.core.approval;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,7 +25,8 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/approvals")
 public class ApprovalController {
 
-    public record SubmitRequest(String title, String bizAddon, String bizType, String bizId, Long assigneeId) {
+    public record SubmitRequest(String title, String bizAddon, String bizType, String bizId, Long assigneeId,
+                                Map<String, Object> formData, List<Long> attachments) {
     }
 
     public record ActRequest(String comment) {
@@ -34,18 +36,33 @@ public class ApprovalController {
     }
 
     private final ApprovalService approvalService;
+    private final ObjectMapper objectMapper;
 
-    public ApprovalController(ApprovalService approvalService) {
+    public ApprovalController(ApprovalService approvalService, ObjectMapper objectMapper) {
         this.approvalService = approvalService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping
     public ApiResponse<Long> submit(@RequestBody SubmitRequest body, HttpServletRequest request) {
         long userId = (Long) request.getAttribute("yz.userId");
         long orgId = (Long) request.getAttribute("yz.orgId");
+        // 表单值/附件(R15)由服务端统一序列化成 JSON 快照——内核只存透传串,不认业务字段
         long id = approvalService.submit(new ApprovalService.SubmitCmd(orgId, userId, body.title(),
-                body.bizAddon(), body.bizType(), body.bizId(), body.assigneeId()));
+                body.bizAddon(), body.bizType(), body.bizId(), body.assigneeId(),
+                toJson(body.formData()), toJson(body.attachments())));
         return ApiResponse.ok(id);
+    }
+
+    private String toJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("form serialization failed", e);
+        }
     }
 
     @GetMapping

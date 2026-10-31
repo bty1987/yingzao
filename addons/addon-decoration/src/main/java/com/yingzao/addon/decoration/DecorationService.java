@@ -644,6 +644,24 @@ public class DecorationService {
 
     // ---- 查询 ----
 
+    /**
+     * 轻量检索(docs/15 R15 发起审批选单等跨页场景):keyword 模糊匹配单号/客户名/楼盘快照,
+     * 只回轻量展示列(零业务面);与 /orders 列表同口径 authenticated 跨域引用惯例。
+     */
+    public List<Map<String, Object>> lookup(long orgId, String keyword) {
+        String kw = keyword == null ? "" : keyword.trim();
+        if (kw.isEmpty()) {
+            return List.of();
+        }
+        String like = "%" + kw + "%";
+        return jdbc.queryForList("""
+                select id, order_no, customer_name, house_label
+                from decoration_order
+                where org_id = ? and (order_no like ? or customer_name like ? or house_label like ?)
+                order by id desc limit 20
+                """, orgId, like, like, like);
+    }
+
     public Map<String, Object> page(long orgId, String orderNo, String customerName, Integer status,
             Integer type, Long designerId, int pageNo, int size) {
         int safePage = Math.max(pageNo, 1);

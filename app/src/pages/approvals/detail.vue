@@ -13,6 +13,20 @@
       <view class="cell-sub">办结时间:{{ detail.finished_at || '—' }}</view>
     </view>
 
+    <view v-if="formRows.length || formImages.length" class="card">
+      <text class="cell-title">申请内容</text>
+      <view v-for="row in formRows" :key="row.label" class="form-row">
+        <text class="form-label">{{ row.label }}</text>
+        <text class="form-value">{{ row.prefix || '' }}{{ row.value }}</text>
+      </view>
+      <yz-image-grid v-if="formImages.length" :fileIds="formImages" class="form-images" />
+    </view>
+
+    <view v-else-if="attachIds.length" class="card">
+      <text class="cell-title">附件</text>
+      <yz-image-grid :fileIds="attachIds" class="form-images" />
+    </view>
+
     <view class="card">
       <text class="cell-title">流水</text>
       <view v-if="(detail.records || []).length === 0" class="cell-sub">暂无流水</view>
@@ -48,7 +62,15 @@
 </template>
 
 <script>
-import { fetchApprovalDetail, approveApproval, rejectApproval, transferApproval, cancelApproval, listOrgUsers } from '../../api'
+import { fetchApprovalDetail, approveApproval, rejectApproval, transferApproval, cancelApproval, listOrgUsers, listAddons } from '../../api'
+import yzImageGrid from '../../components/yz-image-grid.vue'
+
+// 插件清单模块级缓存:详情页按 biz_type 找回表单 schema 渲染申请内容(找不到就回落附件卡)
+let addonsCache = null
+function loadAddonsCached() {
+  if (!addonsCache) addonsCache = listAddons().then((r) => r.data || [])
+  return addonsCache
+}
 
 // 流水动作:1 提交 / 2 通过 / 3 驳回 / 4 转交 / 5 撤回(与内核一致)
 const ACTION = { 1: '提交', 2: '通过', 3: '驳回', 4: '转交', 5: '撤回' }
@@ -56,8 +78,9 @@ const STATUS = { 0: '审批中', 1: '已通过', 2: '已驳回', 3: '已撤回' 
 const STATUS_TAG = { 0: 'tag-info', 1: 'tag-success', 2: 'tag-danger', 3: 'tag-warning' }
 
 export default {
+  components: { yzImageGrid },
   data() {
-    return { id: 0, detail: null, comment: '', acting: false, users: [] }
+    return { id: 0, detail: null, comment: '', acting: false, users: [], schema: null, formData: null, attachIds: [] }
   },
   computed: {
     me() {
@@ -73,6 +96,26 @@ export default {
     },
     userNames() {
       return this.users.map((u) => u.display_name)
+    },
+    // 申请内容行:schema 中非 query/images 且值非空的字段(原始快照诚实渲染,filling 承载展示语义)
+    formRows() {
+      if (!this.schema || !this.formData) return []
+      return (this.schema.fields || [])
+        .filter((f) => f.type !== 'query' && f.type !== 'images')
+        .map((f) => ({ label: f.label, value: this.formData[f.id], prefix: f.prefix || '' }))
+        .filter((r) => r.value !== null && r.value !== undefined && r.value !== '')
+    },
+    // schema 中 images 字段(表单随附照片)的 fileId 并集
+    formImages() {
+      if (!this.schema || !this.formData) return []
+      const ids = []
+      ;(this.schema.fields || [])
+        .filter((f) => f.type === 'images')
+        .forEach((f) => {
+          const v = this.formData[f.id]
+          if (Array.isArray(v)) ids.push(...v.filter((x) => typeof x === 'number'))
+        })
+      return ids
     }
   },
   onLoad(query) {
@@ -95,8 +138,25 @@ export default {
       try {
         const res = await fetchApprovalDetail(this.id)
         this.detail = res.data
+        this.formData = this.parseJson(this.detail.form_data)
+        this.attachIds = this.parseJson(this.detail.attachments) || []
+        if (this.formData) {
+          const addons = await loadAddonsCached()
+          const hit = addons
+            .flatMap((a) => a.approvalForms || [])
+            .find((f) => f.key === this.detail.biz_type)
+          this.schema = hit || null
+        }
       } catch (e) {
         uni.showToast({ title: e.message || '加载失败', icon: 'none' })
+      }
+    },
+    parseJson(text) {
+      if (!text) return null
+      try {
+        return JSON.parse(text)
+      } catch (e) {
+        return null
       }
     },
     async onAct(result) {
@@ -214,4 +274,31 @@ export default {
 .transfer-line { margin-top: 24rpx; }
 
 .btn-primary.warn { background: var(--yz-ochre); }
+
+.form-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid var(--yz-line);
+}
+
+.form-row:last-of-type { border-bottom: none; }
+
+.form-label {
+  color: var(--yz-ink-70);
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+
+.form-value {
+  color: var(--yz-ink);
+  font-size: 28rpx;
+  text-align: right;
+  word-break: break-all;
+}
+
+.form-images {
+  margin-top: 16rpx;
+}
 </style>

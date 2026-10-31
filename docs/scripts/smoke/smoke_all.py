@@ -165,6 +165,10 @@ def main():
                 for a in (addons_admin or []) if a.get("mobile")}
     step("admin mobile 槽位全量下发", _m_admin.get("customer") == ["/pages/leads/create"]
          and _m_admin.get("example") == ["/pages/leave/leave"], _m_admin)
+    # R15:admin 旁路下 approval-forms 模板全量下发(example demo-request 1 张)
+    _f_admin = {a["id"]: [f.get("key") for f in (a.get("approvalForms") or [])]
+                for a in (addons_admin or []) if a.get("approvalForms")}
+    step("admin 审批表单模板全量下发(R15)", _f_admin.get("example") == ["demo-request"], _f_admin)
 
     user_d = login("example_d")  # org1 永不授权账号(真无角色,v1 段专用)
     tok_d = user_d["token"] if user_d else None
@@ -222,6 +226,13 @@ def main():
         and len(ex1b.get("mobile") or []) == 1 \
         and ex1b["mobile"][0].get("page") == "/pages/leave/leave"
     step("example 槽位随菜单授权存活(菜单 1+槽位 1)", ok, ex1b)
+    # R15:审批表单模板 require 同 mobile 段语义,随 /example/leaves 授权下发
+    step("approval-forms 模板随菜单授权下发(require=/example/leaves)",
+         ex1b and len(ex1b.get("approvalForms") or []) == 1
+         and ex1b["approvalForms"][0].get("key") == "demo-request"
+         and ex1b["approvalForms"][0].get("require") == "/example/leaves"
+         and len(ex1b["approvalForms"][0].get("fields") or []) == 7,
+         ex1b and ex1b.get("approvalForms"))
     # customer 槽位 require=/customer/leads 不在新授权 → 槽位滤空;菜单同滤;
     # capability 挂载(customerprofile:view)在授权 → 插件条目合法存活
     cust1b = next((a for a in (addons_b1b or []) if a.get("id") == "customer"), None)
@@ -7099,6 +7110,142 @@ def main():
     finally:
         conn.close()
     step("删除走软删留痕(fid2 status=1)", _f_del == 1, _f_del)
+
+    # ========= 审批表单移动端发起(R15~R16,docs/15;schema 驱动动态表单+form_data 透传快照)=========
+    print("== 审批表单移动端发起(example 示范:schema 下发/lookup 预填/建单快照/办结回写/附件) ==")
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from example_request where reason like 'R15冒烟%'")
+            cur.execute("delete from yz_file where biz_type = 'smokereq'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    # 表单附件一张(images 字段 fileIds,F1 fileId 数组挂接)
+    stamp_r15 = time.strftime("%H%M%S")
+    st, res = upload_bytes(png, tok_admin, "r15表单" + stamp_r15 + ".png", "image/png", "smokereq", 1)
+    fid_r15 = ((res or {}).get("data") or {}).get("id")
+    step("R15 表单附件上传", bool(fid_r15), res)
+
+    # 预填数据源:装修单轻量检索(发起审批选单跨页引用)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select id, order_no, customer_name, house_label from decoration_order order by id desc limit 1")
+            drow = cur.fetchone()
+    finally:
+        conn.close()
+    ok = bool(drow)
+    step("取最新装修单做检索样本", ok, drow)
+    if not ok:
+        return finish()
+    do_id, do_no, do_cust, do_house = drow[0], drow[1], drow[2], drow[3]
+    lk = api_ok("装修单轻量检索(lookup 预填数据源)", "GET",
+                "/api/decoration/orders/lookup?keyword=" + urllib.parse.quote(str(do_no)), tok_b)
+    step("lookup 命中且携预填列(单号/客户/楼盘)", lk and any(
+        r.get("id") == do_id and r.get("order_no") == do_no
+        and r.get("customer_name") == do_cust and r.get("house_label") == do_house for r in (lk or [])),
+        (do_no, (lk or [])[:1]))
+    lk2 = api_ok("lookup 空关键字返回空表(零全量泄露)", "GET", "/api/decoration/orders/lookup?keyword=", tok_b)
+    step("空关键字空表", lk2 == [], lk2)
+
+    # 守卫族(290011)
+    api_err("示范申请 reason 缺失拒 290011", "POST", "/api/example/requests", tok_admin,
+            {"reason": "", "assigneeId": uid_b}, 290011)
+    api_err("示范申请 assignee 非法拒 290011", "POST", "/api/example/requests", tok_admin,
+            {"reason": "R15冒烟·守卫", "assigneeId": 999999}, 290011)
+
+    # 建单 1:通过路径(表单值+附件+处理人;金额 66 元→端点 ×1000 存厘)
+    r1 = api_ok("发起示范申请(表单值+附件+处理人)", "POST", "/api/example/requests", tok_admin,
+                {"orderId": do_id, "orderLabel": do_no, "village": do_house, "customer": do_cust,
+                 "reason": "R15冒烟·通过路径", "amount": 66, "images": [fid_r15], "assigneeId": uid_b})
+    ap1 = (r1 or {}).get("approvalId")
+    step("返回 approvalId(发起后直跳审批详情契约)", bool(ap1), r1)
+    if not ap1:
+        return finish()
+
+    # 快照双落:业务单(元→厘)+内核审批单(form_data/attachments 透传)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select id, amount, status, village, customer, attachments from example_request where approval_id = %s", (ap1,))
+            rq = cur.fetchone()
+            cur.execute("select form_data, attachments from yz_approval where id = %s", (ap1,))
+            apr = cur.fetchone()
+    finally:
+        conn.close()
+    fd = json.loads(apr[0]) if apr and apr[0] else {}
+    step("业务单落库(元→厘×1000+快照列+status=0)",
+         rq and rq[1] == 66000 and rq[2] == 0 and rq[3] == do_house and rq[4] == do_cust, rq)
+    step("审批单快照 form_data/attachments 落列",
+         fd.get("reason") == "R15冒烟·通过路径" and fd.get("amount") == 66
+         and fd.get("village") == do_house and str(fid_r15) in (apr[1] or ""), fd)
+
+    dt = api_ok("审批详情携表单快照(assignee 视角)", "GET", "/api/approvals/%s" % ap1, tok_b)
+    ok = dt and json.loads(dt.get("form_data") or "{}").get("customer") == do_cust
+    step("详情 form_data 可解析回填渲染", ok, dt and dt.get("form_data"))
+
+    api_ok("审批通过(处理人 b)", "POST", "/api/approvals/%s/approve" % ap1, tok_b, {"comment": "同意"})
+    event_consumed("ApprovalFinishedEvent", "approval-finished-%s" % ap1, "办结事件出站箱确认(通过)")
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select status from example_request where approval_id = %s", (ap1,))
+            rq1 = cur.fetchone()
+    finally:
+        conn.close()
+    step("消费器回写业务单 status=1", rq1 and rq1[0] == 1, rq1)
+
+    # 建单 2:驳回路径
+    r2 = api_ok("发起示范申请(驳回路径)", "POST", "/api/example/requests", tok_admin,
+                {"reason": "R15冒烟·驳回路径", "assigneeId": uid_b})
+    ap2 = (r2 or {}).get("approvalId")
+    if not ap2:
+        return finish()
+    api_ok("审批驳回(处理人 b)", "POST", "/api/approvals/%s/reject" % ap2, tok_b, {"comment": "依据不足"})
+    event_consumed("ApprovalFinishedEvent", "approval-finished-%s" % ap2, "办结事件出站箱确认(驳回)")
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select status from example_request where approval_id = %s", (ap2,))
+            rq2 = cur.fetchone()
+    finally:
+        conn.close()
+    step("消费器回写业务单 status=2", rq2 and rq2[0] == 2, rq2)
+
+    # 建单 3:撤回路径(applicant=admin 走内核撤回)
+    r3 = api_ok("发起示范申请(撤回路径)", "POST", "/api/example/requests", tok_admin,
+                {"reason": "R15冒烟·撤回路径", "assigneeId": uid_b})
+    ap3 = (r3 or {}).get("approvalId")
+    if not ap3:
+        return finish()
+    api_ok("申请人撤回(内核 cancel)", "POST", "/api/approvals/%s/cancel" % ap3, tok_admin)
+    event_consumed("ApprovalFinishedEvent", "approval-finished-%s" % ap3, "办结事件出站箱确认(撤回)")
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select status from example_request where approval_id = %s", (ap3,))
+            rq3 = cur.fetchone()
+    finally:
+        conn.close()
+    step("消费器回写业务单 status=3", rq3 and rq3[0] == 3, rq3)
+
+    # 我的示范申请列表(发起人视角)
+    mine = api_ok("我的示范申请列表含三单", "GET", "/api/example/requests", tok_admin)
+    ok = mine is not None and sum(1 for r in (mine or []) if str(r.get("reason", "")).startswith("R15冒烟")) == 3
+    step("列表按发起人过滤", ok, mine and [r.get("reason") for r in mine][:5])
+
+    # 段尾清理(业务单+附件;审批单/流水留痕属历史数据,不清)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from example_request where reason like 'R15冒烟%'")
+            cur.execute("delete from yz_file where biz_type = 'smokereq'")
+        conn.commit()
+    finally:
+        conn.close()
+    step("段尾清理(example_request/yz_file 归零)", True)
 
     return finish()
 

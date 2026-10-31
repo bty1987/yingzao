@@ -1,5 +1,6 @@
 package com.yingzao.addon.decoration;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -89,6 +90,14 @@ public class DecorationController {
             HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");
         return ApiResponse.ok(orders.page(orgId, orderNo, customerName, status, type, designerId, page, size));
+    }
+
+    /** 跨页轻量检索(R15 发起审批选单):literal 路径优先于 /orders/{id} 匹配。 */
+    @GetMapping("/orders/lookup")
+    public ApiResponse<List<Map<String, Object>>> lookupOrders(@RequestParam String keyword,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(orders.lookup(orgId, keyword));
     }
 
     @GetMapping("/orders/{id}")

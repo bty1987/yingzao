@@ -33,6 +33,7 @@ public class AddonController {
                             List<AddonDescriptor.Menu> menus,
                             List<AddonDescriptor.Mount> mounts,
                             List<AddonDescriptor.Mobile> mobile,
+                            List<AddonDescriptor.ApprovalForm> approvalForms,
                             List<ApiView> apis, Object dicts) {
     }
 
@@ -51,6 +52,7 @@ public class AddonController {
             List<AddonDescriptor.Menu> menus = d.menus();
             List<AddonDescriptor.Mount> mounts = d.mounts();
             List<AddonDescriptor.Mobile> mobile = d.mobile();
+            List<AddonDescriptor.ApprovalForm> forms = d.approvalForms();
             if (!admin) {
                 menus = d.menus().stream().filter(m -> grants.menus().contains(m.path())).toList();
                 // capability 为空的挂载 = 无权限诉求,人人可见
@@ -64,14 +66,21 @@ public class AddonController {
                                 || grants.menus().contains(m.require())
                                 || grants.capabilities().contains(m.require()))
                         .toList();
+                // 审批表单模板(R15):require 同 mobile 段语义
+                forms = d.approvalForms().stream()
+                        .filter(f -> f.require() == null || f.require().isBlank()
+                                || grants.menus().contains(f.require())
+                                || grants.capabilities().contains(f.require()))
+                        .toList();
             }
-            if (menus.isEmpty() && mounts.isEmpty() && mobile.isEmpty()) {
+            if (menus.isEmpty() && mounts.isEmpty() && mobile.isEmpty() && forms.isEmpty()) {
                 continue;
             }
             List<ApiView> apis = d.apis() == null ? List.of() : d.apis().stream()
                     .map(a -> new ApiView(a.prefix(), a.exact(), a.require(), a.methods()))
                     .toList();
-            views.add(new AddonView(d.id(), d.name(), d.version(), menus, mounts, mobile, apis, d.dicts()));
+            views.add(new AddonView(d.id(), d.name(), d.version(), menus, mounts, mobile, forms, apis,
+                    d.dicts()));
         }
         return ApiResponse.ok(views);
     }

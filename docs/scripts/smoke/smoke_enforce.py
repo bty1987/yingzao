@@ -137,6 +137,7 @@ ENDPOINTS = [
     # example
     ("example", "GET", "/api/example/leaves"), ("example", "POST", "/api/example/leaves"),
     ("example", "POST", "/api/example/leaves/1/cancel"),
+    ("example", "POST", "/api/example/requests"), ("example", "GET", "/api/example/requests"),
     # basedata
     ("basedata", "GET", "/api/basedata/brands"), ("basedata", "POST", "/api/basedata/brands"),
     ("basedata", "PUT", "/api/basedata/brands/1"), ("basedata", "POST", "/api/basedata/brands/1/status"),
@@ -169,7 +170,8 @@ ENDPOINTS = [
     ("payment", "POST", "/api/payment/advance/charge"), ("payment", "POST", "/api/payment/advance/deduct"),
     ("payment", "POST", "/api/payment/advance/withdraw"),
     # decoration
-    ("decoration", "GET", "/api/decoration/orders"), ("decoration", "GET", "/api/decoration/orders/1"),
+    ("decoration", "GET", "/api/decoration/orders"), ("decoration", "GET", "/api/decoration/orders/lookup"),
+    ("decoration", "GET", "/api/decoration/orders/1"),
     ("decoration", "POST", "/api/decoration/orders"), ("decoration", "POST", "/api/decoration/orders/1/profile"),
     ("decoration", "POST", "/api/decoration/orders/1/presign"), ("decoration", "POST", "/api/decoration/orders/1/sign"),
     ("decoration", "POST", "/api/decoration/orders/1/resign"), ("decoration", "POST", "/api/decoration/orders/1/obsolete"),
@@ -418,7 +420,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(18 插件 65 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 65,
+    step("载入 api 规则(18 插件 66 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 66,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0b. mobile 槽位静态校验(R14):title/page 非空,require 必须引用已声明菜单/功能点 =====
@@ -439,6 +441,16 @@ def main():
            or (m.get("require") and m["require"] not in all_menus and m["require"] not in all_caps)]
     step("mobile 槽位 require 全部引用已声明菜单/功能点(customer/example 共 2 格)",
          not bad and sum(len(d.get("mobile") or []) for d in descs.values()) == 2, bad)
+
+    # ===== 0c. approval-forms 静态校验(R15):key/title/submit 非空,require 引用已声明菜单/功能点,字段带 id/label =====
+    # 防 typo 表单对所有非 admin 静默隐藏(与 mobile 段同一静默失败模式)
+    bad_f = [(aid, f.get("key")) for aid, desc in descs.items()
+             for f in desc.get("approval-forms") or []
+             if not f.get("key") or not f.get("title") or not f.get("submit")
+             or (f.get("require") and f["require"] not in all_menus and f["require"] not in all_caps)
+             or any(not fl.get("id") or not fl.get("label") for fl in f.get("fields") or [])]
+    step("approval-forms 静态校验(example 1 模板,require 引用已声明)", not bad_f
+         and sum(len(d.get("approval-forms") or []) for d in descs.values()) == 1, bad_f)
 
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====
     print("\n== 静态完备性(method 感知模拟 match)==")

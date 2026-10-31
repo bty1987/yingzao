@@ -1,5 +1,8 @@
 <template>
   <view>
+    <view class="launchbar">
+      <button class="launch-btn" @click="goLaunch">＋ 发起审批</button>
+    </view>
     <view class="tabs">
       <text
         v-for="t in tabs"
@@ -49,6 +52,9 @@ export default {
     this.load().finally(() => uni.stopPullDownRefresh())
   },
   methods: {
+    goLaunch() {
+      uni.navigateTo({ url: '/pages/approvals/launch' })
+    },
     statusLabel(s) {
       return STATUS[s] != null ? STATUS[s] : s
     },
@@ -76,6 +82,20 @@ export default {
 </script>
 
 <style scoped>
+.launchbar {
+  padding: 20rpx;
+  background: #ffffff;
+  border-bottom: 1rpx solid var(--yz-line);
+}
+
+.launch-btn {
+  font-size: 28rpx;
+  color: var(--yz-paper);
+  background: var(--yz-seal);
+  border-radius: 4rpx;
+  line-height: 2.4;
+}
+
 .tabs {
   display: flex;
   background: #ffffff;
