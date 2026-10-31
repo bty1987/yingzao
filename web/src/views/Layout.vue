@@ -61,6 +61,8 @@ const menuGroups = computed(() => {
       { path: '/users', title: '用户管理' },
       { path: '/events', title: '事件总线' },
       { path: '/plans', title: '计划任务' },
+      { path: '/audit-logs', title: '操作日志' },
+      { path: '/login-logs', title: '登录日志' },
     ] },
     approvals: { key: 'approvals', name: '流程协作', items: [{ path: '/approvals', title: '审批中心' }] },
   }

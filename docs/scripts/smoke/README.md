@@ -52,6 +52,7 @@ python docs/scripts/smoke/smoke_redis_auth.py
 ## 覆盖链路(与历史夜跑冒烟同口径)
 
 - 认证:双用户+admin 登录 / 错误密码 110001 / 无 token 401(含 /api/addons 去白名单回归);
+- 审计日志(F3,第 115 次):@AuditLog 操作行(create/changeStatus:module/objectType/SpEL 摘要)+record 参数树级脱敏(password→***)+ 登录日志(密码误 110001 带回 user_id·org_id/成功行)+ 踢出留痕(evict)+ 查询面非管理员 122003 双闸 + 保留策略(audit-log-purge 即时计划 retentionDays=30 清 400 天假行+链式续期在挂);
 - RBAC(第 8 次扩展):admin 旁路全量下发 / 无角色用户过滤为空 / 非管理员建角色拒绝 122003 / 建角色+菜单·功能点·成员授权+详情回显 / 同编码拒绝 122004 / 授权后按人可见 / 删除角色后回落为空;
 - 客源:中文登记 → 手动分配(指定 example_c)→ 重复分配幂等拒绝 210003;
 - 机会:列表含中文客源名与责任人 → 确认 0→3 → 跳步完成拒绝 210005 → 完成 3→4;

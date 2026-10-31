@@ -26,14 +26,17 @@ public class AuthService {
     private final MessageSource messages;
     private final RoleService roleService;
     private final com.yingzao.core.org.OrganizationService organizations;
+    private final com.yingzao.core.audit.AuditRecorder audits;
 
     public AuthService(JdbcTemplate jdbc, TokenStore tokenStore, MessageSource messages,
-            RoleService roleService, com.yingzao.core.org.OrganizationService organizations) {
+            RoleService roleService, com.yingzao.core.org.OrganizationService organizations,
+            com.yingzao.core.audit.AuditRecorder audits) {
         this.jdbc = jdbc;
         this.tokenStore = tokenStore;
         this.messages = messages;
         this.roleService = roleService;
         this.organizations = organizations;
+        this.audits = audits;
     }
 
     public LoginResult login(String username, String password) {
@@ -44,25 +47,33 @@ public class AuthService {
                 where u.username = ? limit 1
                 """, username);
         if (rows.isEmpty() || !sha256(password).equalsIgnoreCase((String) rows.get(0).get("password_sha256"))) {
-            throw new BizException(110001,
-                    messages.getMessage("auth.login.failed", null, LocaleContextHolder.getLocale()));
+            // 审计(登录行):密码误;用户存在时带回真实 userId/orgId(暴力破解审计口径)
+            Long uid = rows.isEmpty() ? 0L : ((Number) rows.get(0).get("id")).longValue();
+            Long org = rows.isEmpty() ? 0L : ((Number) rows.get(0).get("org_id")).longValue();
+            String msg = messages.getMessage("auth.login.failed", null, LocaleContextHolder.getLocale());
+            audits.login(org, username, uid, false, 110001, msg);
+            throw new BizException(110001, msg);
         }
         Map<String, Object> user = rows.get(0);
+        Long userId = ((Number) user.get("id")).longValue();
+        Long orgId = ((Number) user.get("org_id")).longValue();
         Object orgStatus = user.get("org_status");
         if (orgStatus != null && ((Number) orgStatus).intValue() != 0) {
             // 所属组织已停用(docs/08 S1;组织停用=子树级联,登录即拒;旧会话由组织停用方踢出)
-            throw new BizException(120106,
-                    messages.getMessage("auth.login.orgDisabled", null, LocaleContextHolder.getLocale()));
+            String msg = messages.getMessage("auth.login.orgDisabled", null, LocaleContextHolder.getLocale());
+            audits.login(orgId, username, userId, false, 120106, msg);
+            throw new BizException(120106, msg);
         }
         if (((Number) user.get("status")).intValue() != 0) {
             // 账号已停用:单独提示(内部系统,不涉账号存在性探测);停用时会话已被 evictUser 踢出
-            throw new BizException(120102,
-                    messages.getMessage("auth.login.disabled", null, LocaleContextHolder.getLocale()));
+            String msg = messages.getMessage("auth.login.disabled", null, LocaleContextHolder.getLocale());
+            audits.login(orgId, username, userId, false, 120102, msg);
+            throw new BizException(120102, msg);
         }
-        Long userId = ((Number) user.get("id")).longValue();
-        Long orgId = ((Number) user.get("org_id")).longValue();
         organizations.rowOf(orgId); // 历史 org 首次触达懒建根节点(docs/08 零迁移)
         String displayName = (String) user.get("display_name");
+        // 审计(登录行):成功(user_name=尝试登录名快照)
+        audits.login(orgId, username, userId, true, null, null);
         return new LoginResult(tokenStore.issue(userId, orgId), userId, orgId, displayName,
                 roleService.roleCodes(userId));
     }

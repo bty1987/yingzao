@@ -669,3 +669,7 @@ export const adjustMemberPoint = (data) => http.post('/api/member/points/adjust'
 // 文件存储(F1 内核 file 模块:上传走 YzUpload 组件直传,这里只做回显与删除)
 export const listFiles = (params) => http.get('/api/files', { params })
 export const deleteFile = (id) => http.post(`/api/files/${id}/delete`)
+
+// 审计日志(F3 内核 audit:操作+登录两查询面,admin 双闸)
+export const pageAuditOperations = (params) => http.get('/api/audit/operations', { params })
+export const pageAuditLogins = (params) => http.get('/api/audit/logins', { params })

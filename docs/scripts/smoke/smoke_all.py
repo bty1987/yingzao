@@ -7247,7 +7247,155 @@ def main():
         conn.close()
     step("段尾清理(example_request/yz_file 归零)", True)
 
+    audit_segment(tok_admin, tok_b)
+
     return finish()
+
+
+def _audit_q(query, args=()):
+    """audit 段专用 DB 断言(db_exec 定义在 main 内部,模块级函数不可见——第 83 次教训变体)。"""
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, args)
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def audit_segment(tok_admin, tok_b):
+    """F3 审计日志段(第 115 次):@AuditLog 切面(create/changeStatus 操作行+SpEL 摘要)+
+    detail record 参数脱敏(record 树级脱敏:Cmd 类密码必须 ***)+ 登录日志(密码误 110001/
+    成功)+ 踢出留痕(evict,老系统不留痕,营造补上)+ 查询面双闸(122003)+
+    保留策略(audit-log-purge 即时计划,params.retentionDays 覆盖,链式续期断链在挂)。
+    专用数据:用户 auditp24xxxxxx(段首段尾双清理:用户/角色绑定/审计行全清)。"""
+    print("\n== 审计日志(F3:操作/登录/踢出日志+脱敏+保留策略,第 115 次) ==")
+
+    marker = "auditp24" + str(int(time.time()))[-6:]
+
+    # 段首清理(跨轮残留:用户+角色绑定+审计行)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                delete from yz_user_role where user_id in
+                  (select id from yz_user where username like %s)
+            """, (marker[:8] + "%",))
+            cur.execute("delete from yz_user where username like %s", (marker[:8] + "%",))
+            cur.execute("""
+                delete from yz_audit_log where user_name like %s
+                  or summary like %s or user_id in
+                  (select id from yz_user where username like %s)
+            """, (marker[:8] + "%", "%" + marker[:8] + "%", marker[:8] + "%"))
+        conn.commit()
+    finally:
+        conn.close()
+    step("段首清理(audit 专用数据归零)", True)
+
+    # 1) 建号 → @AuditLog 操作行:create(module=auth/object_type=user/summary=SpEL 用户名)
+    st, res = call("POST", "/api/users", tok_admin,
+                   {"username": marker, "displayName": "审计冒烟", "password": "yingzao123"})
+    ok = st == 200 and isinstance(res, dict) and res.get("code") == 0
+    step("建号(@AuditLog 端点)", ok, res)
+    a24_id = (res.get("data") if ok else 0)
+
+    ops = api_ok("操作日志查询(keyword 命中)", "GET", "/api/audit/operations?keyword=" + marker, tok_admin) or {}
+    create_rows = [r for r in (ops.get("rows") or []) if r.get("action") == "create"]
+    ok = (len(create_rows) == 1 and create_rows[0].get("module") == "auth"
+          and create_rows[0].get("object_type") == "user" and create_rows[0].get("summary") == marker)
+    step("create 操作行落库(module/objectType/summary SpEL)", ok, create_rows)
+    ok = bool(create_rows) and '"password":"***"' in str(create_rows[0].get("detail") or "")
+    step("detail 参数脱敏(record Cmd 树级脱敏 password→***)", ok,
+         create_rows and create_rows[0].get("detail"))
+
+    # 2) 登录失败(密码误 110001)→ 登录行 result=1 + user_id/orgId 回带(用户存在)
+    st, res = call("POST", "/api/auth/login", body={"username": marker, "password": "wrong-password"})
+    step("密码误登录拒 110001", st == 200 and isinstance(res, dict) and res.get("code") == 110001, res)
+    lg = api_ok("登录日志查询(失败行)", "GET", "/api/audit/logins?result=1&keyword=" + marker, tok_admin) or {}
+    fail_rows = [r for r in (lg.get("rows") or []) if r.get("action") == "login"]
+    ok = (len(fail_rows) == 1 and fail_rows[0].get("error_code") == 110001
+          and int(fail_rows[0].get("user_id") or 0) == int(a24_id)
+          and int(fail_rows[0].get("org_id") or 0) == 1)
+    step("失败登录行落库(110001/user_id·org_id 回带)", ok, fail_rows)
+
+    # 3) 登录成功 → result=0 行
+    a24 = login(marker)
+    lg2 = api_ok("登录日志查询(成功行)", "GET", "/api/audit/logins?result=0&keyword=" + marker, tok_admin) or {}
+    ok = any((r or {}).get("action") == "login" for r in (lg2.get("rows") or []))
+    step("成功登录行落库(result=0)", ok, lg2)
+
+    # 4) 停用 → 踢出行 evict + 旧令牌 401 + changeStatus 操作行(SpEL objectId/summary)
+    st, res = call("POST", "/api/users/%s/status" % a24_id, tok_admin, {"status": 1})
+    step("停用即时生效", st == 200 and isinstance(res, dict) and res.get("code") == 0, res)
+    st, _res = call("GET", "/api/addons", (a24 or {}).get("token") or "dead")
+    step("旧令牌已踢(401)", st == 401, st)
+    lg3 = api_ok("登录日志查询(evict 行)", "GET", "/api/audit/logins?keyword=evict", tok_admin) or {}
+    ev_rows = [r for r in (lg3.get("rows") or []) if int(r.get("user_id") or 0) == int(a24_id)]
+    ok = (len(ev_rows) == 1 and ev_rows[0].get("action") == "evict"
+          and ev_rows[0].get("summary") == "disable" and ev_rows[0].get("user_name") == marker)
+    step("踢出留痕(action=evict/summary=disable/user_name 快照)", ok, ev_rows)
+
+    ops2 = api_ok("changeStatus 操作行查询", "GET", "/api/audit/operations?keyword=changeStatus", tok_admin) or {}
+    cs = [r for r in (ops2.get("rows") or []) if str(r.get("object_id") or "") == str(a24_id)]
+    ok = len(cs) == 1 and cs[0].get("summary") == "status=1" and cs[0].get("action") == "changeStatus"
+    step("changeStatus 操作行(SpEL objectId/摘要 status=1)", ok, ops2.get("rows")[:3])
+
+    # 5) 查询面双闸:非管理员拒 122003(admin 端点自带守卫,RBAC 豁免同 users/plans)
+    api_err("非管理员查操作日志拒 122003", "GET", "/api/audit/operations", tok_b, None, 122003)
+    api_err("非管理员查登录日志拒 122003", "GET", "/api/audit/logins", tok_b, None, 122003)
+
+    # 6) 保留策略:假超期行(400 天前)+ 即时 purge 计划(retentionDays=30 覆盖全局 90)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                insert into yz_audit_log(category, org_id, user_id, user_name, action, module,
+                        object_type, object_id, summary, ip, result, error_msg, run_time, created_at)
+                values (0, 1, 0, %s, 'purge-fixture', 'audit', '', '', '', '127.0.0.1', 0, '', 0,
+                        date_sub(now(), interval 400 day))
+            """, (marker,))
+        conn.commit()
+    finally:
+        conn.close()
+    p_pid = api_ok("提交即时清理计划(audit-log-purge,retentionDays=30)", "POST", "/api/plans", tok_admin,
+                   {"handler": "audit-log-purge", "maxRetries": 1, "params": {"retentionDays": 30}})
+    _pp = None
+    for _ in range(12):
+        time.sleep(1)
+        _pp = api_ok("清理计划详情", "GET", "/api/plans/%s" % p_pid, tok_admin)
+        if (_pp or {}).get("status") in (1, 3):
+            break
+    step("清理计划成功(purged 摘要)", (_pp or {}).get("status") == 1
+         and "purged=" in str((_pp or {}).get("result")), _pp)
+    gone = _audit_q(
+        "select count(*) from yz_audit_log where user_name = %s and action = 'purge-fixture'", (marker,))
+    step("超期假行已清(400 天 > retention 30)", bool(gone) and gone[0][0] == 0, gone)
+    kept = _audit_q("""
+        select count(*) from yz_audit_log
+        where created_at > date_sub(now(), interval 1 day)
+          and (user_name like %s or user_id = %s or object_id = %s or summary like %s)
+    """, (marker + "%", a24_id, str(a24_id), "%" + marker + "%"))
+    step("未超期行保留(本段 5 行:建号/两登/踢出/启停)", bool(kept) and kept[0][0] == 5, kept)
+    chain = _audit_q("select count(*) from yz_plan where handler = 'audit-log-purge' and status = 0")
+    step("链式续期(下一轮 03:00 计划在挂)", bool(chain) and chain[0][0] >= 1, chain)
+
+    # 段尾清理(用户+角色绑定+审计行;done 计划行留痕如 member 先例)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                delete from yz_user_role where user_id in
+                  (select id from yz_user where username like %s)
+            """, (marker + "%",))
+            cur.execute("delete from yz_user where username like %s", (marker + "%",))
+            cur.execute("""
+                delete from yz_audit_log where user_name like %s or user_id = %s
+                  or summary like %s or object_id = %s
+            """, (marker + "%", a24_id, "%" + marker + "%", str(a24_id)))
+        conn.commit()
+    finally:
+        conn.close()
+    step("段尾清理(audit 专用数据归零)", True)
 
 
 def finish():

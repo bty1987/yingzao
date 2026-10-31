@@ -37,13 +37,15 @@ public class UserController {
     private final JdbcTemplate jdbc;
     private final RoleService roleService;
     private final TokenStore tokenStore;
+    private final com.yingzao.core.audit.AuditRecorder audits;
     private final org.springframework.context.MessageSource messages;
 
     public UserController(JdbcTemplate jdbc, RoleService roleService, TokenStore tokenStore,
-            org.springframework.context.MessageSource messages) {
+            com.yingzao.core.audit.AuditRecorder audits, org.springframework.context.MessageSource messages) {
         this.jdbc = jdbc;
         this.roleService = roleService;
         this.tokenStore = tokenStore;
+        this.audits = audits;
         this.messages = messages;
     }
 
@@ -59,6 +61,7 @@ public class UserController {
     }
 
     /** 建号:用户名全局唯一(uk 兜底),初始密码 sha256;可选同组织角色绑定。 */
+    @com.yingzao.core.audit.AuditLog(objectType = "user", summary = "#body.username()")
     @PostMapping("/api/users")
     public ApiResponse<Long> create(@RequestBody CreateBody body, HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");
@@ -126,6 +129,8 @@ public class UserController {
     }
 
     /** 启用/停用:停自己拒(防锁死);停用即时踢会话。 */
+    @com.yingzao.core.audit.AuditLog(objectType = "user", objectId = "#id",
+            summary = "'status=' + (#body.status() == null ? 0 : #body.status())")
     @PostMapping("/api/users/{id}/status")
     public ApiResponse<Void> changeStatus(@PathVariable long id, @RequestBody StatusBody body,
             HttpServletRequest request) {
@@ -139,6 +144,8 @@ public class UserController {
         jdbc.update("update yz_user set status = ? where id = ? and org_id = ?", status, id, orgId);
         if (status == 1) {
             tokenStore.evictUser(id);
+            // 审计(登录类):踢出留痕(老系统踢出不留痕,营造补上;docs/rules/audit.md §2)
+            audits.evict(orgId, id, usernameOf(orgId, id), "disable");
         }
         return ApiResponse.ok();
     }
@@ -147,6 +154,7 @@ public class UserController {
     }
 
     /** 重置密码:更新即踢会话(旧令牌全部失效,重发需重新登录)。 */
+    @com.yingzao.core.audit.AuditLog(objectType = "user", objectId = "#id")
     @PostMapping("/api/users/{id}/reset-password")
     public ApiResponse<Void> resetPassword(@PathVariable long id, @RequestBody ResetPasswordBody body,
             HttpServletRequest request) {
@@ -159,6 +167,7 @@ public class UserController {
         jdbc.update("update yz_user set password_sha256 = ? where id = ? and org_id = ?",
                 AuthService.sha256(password), id, orgId);
         tokenStore.evictUser(id);
+        audits.evict(orgId, id, usernameOf(orgId, id), "reset-password");
         return ApiResponse.ok();
     }
 
@@ -168,6 +177,15 @@ public class UserController {
         Integer n = jdbc.queryForObject(
                 "select count(*) from yz_user where id = ? and org_id = ?", Integer.class, id, orgId);
         return n != null && n > 0;
+    }
+
+    private String usernameOf(long orgId, long id) {
+        try {
+            return jdbc.queryForObject(
+                    "select username from yz_user where id = ? and org_id = ?", String.class, id, orgId);
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /** 角色绑定:仅接受同组织角色(insert..select 过滤),roleIds 空跳过。 */

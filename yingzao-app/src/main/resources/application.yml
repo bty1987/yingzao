@@ -53,6 +53,10 @@ yingzao:
     allowed-content-types: ${YINGZAO_FILE_TYPES:}
     local:
       base-dir: ${YINGZAO_FILE_BASEDIR:./data/files}
+  audit:
+    # F3 审计日志保留期(docs/15 R24~R25):天;0=不清理(执行空转但计划链不断,再开启无需重启);
+    # 单次执行可被 params.retentionDays 覆盖(冒烟/应急)
+    retention-days: ${YINGZAO_AUDIT_RETENTIONDAYS:90}
   # 启用的插件清单(编译期装配,未列出的 addon bean 不装配)
   addons:
     enabled: customer,customerprofile,example,basedata,payment,decoration,quotation,construction,inventory,sales,balance,market,supplier,member,portal,target,service,dashboard
