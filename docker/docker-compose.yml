@@ -16,12 +16,28 @@ services:
       timeout: 3s
       retries: 20
 
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # F2 认证 Redis 化(docs/15 R22~R23):仅 yingzao.auth.store=redis 时触达;
+    # 不发布 6379 到宿主机(内网互通即可,防与本机既有 redis 撞端口)
+
   app:
     build: ..
     environment:
       YINGZAO_DB_URL: jdbc:mysql://mysql:3306/yingzao?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       YINGZAO_DB_USER: root
       YINGZAO_DB_PASSWORD: yingzao
+      # F2 会话存储:缺省 memory,一行切 redis(compose 部署 YINGZAO_AUTH_STORE=redis 即启用)
+      YINGZAO_AUTH_STORE: ${YINGZAO_AUTH_STORE:-memory}
+      YINGZAO_REDIS_HOST: ${YINGZAO_REDIS_HOST:-redis}
       TZ: Asia/Shanghai
     ports:
       - "8080:8080"
@@ -31,6 +47,9 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_started
 
 volumes:
   mysql-data:
+  redis-data:

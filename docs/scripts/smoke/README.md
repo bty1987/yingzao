@@ -33,6 +33,18 @@ python docs/scripts/smoke/smoke_enforce.py
 ```
 
 覆盖:静态完备性(13 插件 addon.yml api 段 vs 325 端点样例,模拟内核 match 含 method 互补分层,零未声明)+ 动态四组(admin 旁路 14 端点 / 无角色全拒 122006 / 全授权全通 / 部分授权 authenticated 读放开与菜单闸)。改任何插件 api 段或内核 rbac 后必跑。
+
+### Redis 会话定向(F2,第 112 次沉淀:smoke_redis_auth.py)
+
+```bash
+# 服务必须以 redis 会话存储起(YINGZAO_AUTH_STORE=redis;对内存模式服务跑会在首个结构断言失败,属预期)
+YINGZAO_AUTH_STORE=redis YINGZAO_REDIS_HOST=127.0.0.1 YINGZAO_REDIS_PORT=6379 \
+YINGZAO_DB_URL=... YINGZAO_DB_USER=root YINGZAO_DB_PASSWORD='...' java -jar yingzao-app/target/yingzao-app-*.jar
+# 然后定向断言(键形态/PTTL/载荷 JSON/踢会话索引/evict 全语义/C 端不入索引;收尾 DEL yz:auth:*)
+python docs/scripts/smoke/smoke_redis_auth.py
+```
+
+改 TokenStore 双实现(auth store/会话 TTL/evictUser)或 compose redis 服务后必跑;配合内存模式全量 smoke_all 双跑=认证面双后端回归网。
 ```
 
 输出逐步 ✓/✗ 与汇总 `N/N PASS`。任何一步 ✗ 退出码非 0。

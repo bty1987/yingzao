@@ -30,8 +30,21 @@ spring:
       max-request-size: ${YINGZAO_FILE_MAXREQ:200MB}
   jackson:
     default-property-inclusion: non_null
+  data:
+    redis:
+      # F2 认证 Redis 化(docs/15 R22~R23):仅 yingzao.auth.store=redis 时触达;
+      # Lettuce 懒连接,内存模式零连接。密码场景在部署侧补 spring.data.redis.password
+      host: ${YINGZAO_REDIS_HOST:127.0.0.1}
+      port: ${YINGZAO_REDIS_PORT:6379}
+      connect-timeout: ${YINGZAO_REDIS_CONNECTTIMEOUT:3s}
+      timeout: ${YINGZAO_REDIS_TIMEOUT:3s}
 
 yingzao:
+  auth:
+    # 会话存储后端(F2):memory=内存缺省(重启丢会话,不可水平扩展)/ redis=生产推荐(多实例共享会话)
+    store: ${YINGZAO_AUTH_STORE:memory}
+    # 会话 TTL(小时):签发即定不滑动;双后端同语义,缺省 12h=存量行为
+    ttl-hours: ${YINGZAO_AUTH_TTLHOURS:12}
   file:
     # F1 文件存储抽象(docs/15 R10):local 磁盘首发,OSS/MinIO provider 随部署形态扩展;
     # allowed-content-types 非空=覆盖缺省白名单(image/* 前缀+常用文档)

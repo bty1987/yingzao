@@ -30,5 +30,11 @@
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>
+        <!-- F2 认证 Redis 化(R22~R23):Lettuce 懒连接,仅 yingzao.auth.store=redis 时触达;
+             内存缺省模式零连接零行为变化 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies>
 </project>
