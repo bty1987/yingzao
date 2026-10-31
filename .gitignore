@@ -58,3 +58,6 @@ desktop.ini
 # ---- Python 冒烟 ----
 __pycache__/
 *.pyc
+
+# ---- F1 文件存储 local provider 运行时目录(yingzao.file.local.base-dir) ----
+data/

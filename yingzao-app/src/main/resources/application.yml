@@ -23,10 +23,23 @@ spring:
     # 约定在配置绑定前追加(新插件零登记;独立 basename 避免 jar 内同名资源冲突)
     basename: i18n/messages
     encoding: UTF-8
+  servlet:
+    multipart:
+      # 容器层上限(兜底);业务级单文件限额 = yingzao.file.max-size-mb(file service 125002)
+      max-file-size: ${YINGZAO_FILE_MAXUPLOAD:100MB}
+      max-request-size: ${YINGZAO_FILE_MAXREQ:200MB}
   jackson:
     default-property-inclusion: non_null
 
 yingzao:
+  file:
+    # F1 文件存储抽象(docs/15 R10):local 磁盘首发,OSS/MinIO provider 随部署形态扩展;
+    # allowed-content-types 非空=覆盖缺省白名单(image/* 前缀+常用文档)
+    storage: ${YINGZAO_FILE_STORAGE:local}
+    max-size-mb: ${YINGZAO_FILE_MAXSIZEMB:20}
+    allowed-content-types: ${YINGZAO_FILE_TYPES:}
+    local:
+      base-dir: ${YINGZAO_FILE_BASEDIR:./data/files}
   # 启用的插件清单(编译期装配,未列出的 addon bean 不装配)
   addons:
     enabled: customer,customerprofile,example,basedata,payment,decoration,quotation,construction,inventory,sales,balance,market,supplier,member,portal,target,service,dashboard

@@ -665,3 +665,7 @@ export const pageMemberPointAccounts = (params) => http.get('/api/member/points/
 export const listMemberPointRecords = (customerId, params) =>
   http.get(`/api/member/points/accounts/${customerId}/records`, { params })
 export const adjustMemberPoint = (data) => http.post('/api/member/points/adjust', data)
+
+// 文件存储(F1 内核 file 模块:上传走 YzUpload 组件直传,这里只做回显与删除)
+export const listFiles = (params) => http.get('/api/files', { params })
+export const deleteFile = (id) => http.post(`/api/files/${id}/delete`)

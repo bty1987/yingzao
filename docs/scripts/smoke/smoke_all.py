@@ -4474,6 +4474,19 @@ def main():
 
     # ---- A1 部分退款+净退款链(第 81 次;docs/11 A1:净负差量单→部分退已收差量款)----
     print("\n== A1 部分退款与增减净退款 ==")
+
+    # A1 段残留清理(第 108 次:部分退原单恒活单,跨轮累积 HHMMSS 秒撞 270006——段首段尾双清理)
+    def _a1_cleanup():
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("delete from payment_bill where biz_addon like 'a1test%'")
+                cur.execute("delete from payment_bill where remark like 'A1 部分退%' or remark like 'A1 净退%'")
+            conn.commit()
+        finally:
+            conn.close()
+
+    _a1_cleanup()
     import time as _t81
     a1_stamp = _t81.strftime("%H%M%S") + "a1"
     a1_types = api_ok("A1 类型查", "GET", "/api/payment/bill-types?includeDisabled=true", tok_admin)
@@ -4547,6 +4560,8 @@ def main():
         _c81.close()
     step("A1 净退款单自动创建(部分退 2 万挂已收差量款)", (a1_refrows or 0) >= 1, a1_refrows)
 
+
+    _a1_cleanup()
 
     # ========= 营销获客(addon-market 第 27 次扩展)=========
     print("\n== 营销获客(addon-market:投放物+进线承接+归因漏斗+案例库) ==")
@@ -6949,7 +6964,110 @@ def main():
     _r3 = next((r for r in (cfg3 or []) if r.get("role_id") == 1), {})
     step("角色1落地页已清", not _r3.get("home_path"), _r3)
 
-    return finish()
+    # ================= file 文件存储(F1 内核 file 模块,docs/15 R10;错误码 125000 段) =================
+    print("== file 文件存储(F1:上传/回读/白名单/限额/org 隔离/删除权/C 端拒) ==")
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from yz_file where biz_type = 'smoke'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    def upload_bytes(xbytes, token, fname, ctype="application/octet-stream", biz_type=None, biz_id=None):
+        boundary = "smokeboundfile108"
+        head = ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" +
+                fname + "\"\r\nContent-Type: " + ctype + "\r\n\r\n")
+        body = head.encode("utf-8") + xbytes + ("\r\n--" + boundary + "--\r\n").encode("utf-8")
+        url = BASE + "/api/files"
+        if biz_type:
+            url = url + "?bizType=" + urllib.parse.quote(biz_type)
+            if biz_id is not None:
+                url = url + "&bizId=" + str(biz_id)
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
+        req.add_header("Authorization", "Bearer " + token)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def get_file_headers(path, token):
+        req = urllib.request.Request(BASE + path)
+        req.add_header("Authorization", "Bearer " + token)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status, resp.read(), dict(resp.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, e.read(), dict(e.headers)
+
+    stamp_file = time.strftime("%H%M%S")
+    png = bytes.fromhex("89504e470d0a1a0a") + ("smoke108" * 11).encode("utf-8")
+    st, res = upload_bytes(png, tok_admin, "冒烟文件" + stamp_file + ".png", "image/png", "smoke", 1)
+    f1 = (res or {}).get("data") or {}
+    step("上传中文文件名 png(bizType 挂接)", st == 200 and f1.get("id") and f1.get("fileName", "").endswith(".png")
+         and f1.get("bizType") == "smoke", f1)
+    fid1 = f1.get("id")
+
+    st, down, hdrs = get_file_headers("/api/files/%s" % fid1, tok_admin)
+    cd = hdrs.get("Content-Disposition", "")
+    step("下载字节一致+attachment+RFC5987 文件名", st == 200 and down == png and "attachment" in cd
+         and "filename*=" in cd, (st, len(down), cd[:80]))
+
+    st, down, hdrs = get_file_headers("/api/files/%s/preview" % fid1, tok_admin)
+    step("预览 inline(图片白名单)", st == 200 and hdrs.get("Content-Type", "").startswith("image/png")
+         and "inline" in hdrs.get("Content-Disposition", ""), (st, hdrs.get("Content-Type")))
+
+    st, res = upload_bytes(b"", tok_admin, "empty.png", "image/png")
+    step("空文件拒 125001", (res or {}).get("code") == 125001, res)
+    big = b"x" * (20 * 1024 * 1024 + 1)
+    st, res = upload_bytes(big, tok_admin, "big.png", "image/png")
+    step("超限拒 125002(业务闸 20MB)", (res or {}).get("code") == 125002, res)
+    st, res = upload_bytes(b"MZfake", tok_admin, "hack.exe", "application/x-msdownload")
+    step("类型白名单拒 125003", (res or {}).get("code") == 125003, res)
+
+    tok_o = (login("example_o") or {}).get("token")
+    st, down, hdrs = get_file_headers("/api/files/%s" % fid1, tok_o)
+    step("跨组织下载拒 125005", json.loads(down).get("code") == 125005, down[:120])
+    st, res = upload_bytes(png, c_token, "c端拒.png", "image/png")
+    # C 端 principal 对员工端点在 RBAC 层即拒(122006),先于 file 业务守卫 125008——两道防线
+    step("C 端主体上传拒 122006(RBAC 层)", (res or {}).get("code") == 122006, res)
+
+    st, res = call("POST", "/api/files/%s/delete" % fid1, tok_b)
+    step("非上传人删除拒 125006", (res or {}).get("code") == 125006, res)
+    api_ok("上传人删除", "POST", "/api/files/%s/delete" % fid1, tok_admin)
+    st, down, hdrs = get_file_headers("/api/files/%s" % fid1, tok_admin)
+    step("删除后下载拒 125004(软删)", json.loads(down).get("code") == 125004, down[:120])
+
+    st, res = upload_bytes(png, tok_admin, "列表文件A.png", "image/png", "smoke", 11)
+    fid2 = ((res or {}).get("data") or {}).get("id")
+    st, res = upload_bytes(png, tok_admin, "列表文件B.png", "image/png", "smoke", 22)
+    fid3 = ((res or {}).get("data") or {}).get("id")
+    lst = api_ok("列表 bizType=smoke", "GET", "/api/files?bizType=smoke", tok_admin)
+    ids = [r.get("id") for r in (lst or [])]
+    step("列表含两文件且倒序", fid2 in ids and fid3 in ids and ids.index(fid3) < ids.index(fid2), ids)
+    lst2 = api_ok("列表 bizId 收窄", "GET", "/api/files?bizType=smoke&bizId=11", tok_admin)
+    step("bizId 过滤只余 A", [r.get("id") for r in (lst2 or [])] == [fid2], lst2)
+
+    api_ok("上传人删除 fid2", "POST", "/api/files/%s/delete" % fid2, tok_admin)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select count(*) from yz_file where id in (%s, %s) and status = 1", (fid2, fid3))
+            _f_del = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    # 收尾清理:软删测试行(物理文件落 data/files 无元数据引用,无害)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from yz_file where id in (%s, %s)", (fid2, fid3))
+        conn.commit()
+    finally:
+        conn.close()
+    step("删除走软删留痕(fid2 status=1)", _f_del == 1, _f_del)
 
     return finish()
 

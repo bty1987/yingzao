@@ -25,6 +25,9 @@ services:
       TZ: Asia/Shanghai
     ports:
       - "8080:8080"
+    volumes:
+      # F1 文件存储 local provider(yingzao.file.local.base-dir=./data/files)
+      - ./data:/app/data
     depends_on:
       mysql:
         condition: service_healthy
