@@ -37,6 +37,13 @@
           <text class="arrow">›</text>
         </view>
       </view>
+      <view class="cell" @click="go('/pkg-base/pages/playground')">
+        <view class="cell-main">
+          <text class="cell-title">组件示范</text>
+          <text class="cell-sub">基础组件基建验收页(R12~R13,R14 配置化时由槽位下发取代)</text>
+        </view>
+        <text class="arrow">›</text>
+      </view>
     </view>
   </view>
 </template>

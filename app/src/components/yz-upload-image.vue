@@ -16,7 +16,7 @@
 // 展示与预览用本地临时路径(uni.downloadFile 换取——<image> 发不了 Authorization 头,
 // 网络图必须经带票据的 downloadFile 落本地;小程序/H5 同构)。
 import { ref, watch } from 'vue'
-import { API_BASE } from '../config'
+import { downloadForDisplay } from '../utils/yz-file'
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
@@ -120,31 +120,21 @@ function onPreview(i) {
   if (current >= 0) uni.previewImage({ urls, current })
 }
 
-function resolveRemote(id) {
+async function resolveRemote(id) {
   const item = { fileId: id, src: '', uploading: true, failed: false, localPath: '' }
   images.value.push(item)
-  uni.downloadFile({
-    url: API_BASE + '/api/files/' + id + '/preview',
-    header: { Authorization: 'Bearer ' + token() },
-    success: (res) => {
-      const idx = images.value.indexOf(item)
-      if (res.statusCode === 200) {
-        item.src = res.tempFilePath
-        item.localPath = res.tempFilePath
-        item.uploading = false
-      } else {
-        item.uploading = false
-        item.failed = true
-      }
-      if (idx >= 0) images.value.splice(idx, 1, { ...item })
-    },
-    fail: () => {
-      const idx = images.value.indexOf(item)
-      item.uploading = false
-      item.failed = true
-      if (idx >= 0) images.value.splice(idx, 1, { ...item })
-    },
-  })
+  const idx = () => images.value.indexOf(item)
+  try {
+    const local = await downloadForDisplay(id)
+    item.src = local
+    item.localPath = local
+    item.uploading = false
+  } catch (e) {
+    item.uploading = false
+    item.failed = true
+  }
+  const i = idx()
+  if (i >= 0) images.value.splice(i, 1, { ...item })
 }
 </script>
 

@@ -47,6 +47,17 @@
     "navigationBarBackgroundColor": "#FAF9F5",
     "backgroundColor": "#FAF9F5"
   },
+  "subPackages": [
+    {
+      "root": "pkg-base",
+      "pages": [
+        { "path": "pages/playground", "style": { "navigationBarTitleText": "组件示范" } }
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/index/index": { "network": "all", "packages": ["pkg-base"] }
+  },
   "tabBar": {
     "color": "rgba(26,26,24,0.5)",
     "selectedColor": "#1A1A18",

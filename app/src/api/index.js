@@ -15,6 +15,11 @@ export const listChances = () => get('/api/customer/chances')
 export const confirmChance = (id) => post(`/api/customer/chances/${id}/confirm`)
 export const completeChance = (id) => post(`/api/customer/chances/${id}/complete`)
 
+// 楼盘档案(addon-customerprofile):搜索联想数据源(R12 yz-search-select 远程模式)
+export const pageVillages = (params) => get('/api/customerprofile/villages', params)
+// 商品档案(addon-basedata):搜索联想数据源(name/no/拼音模糊+条码精确)
+export const pageGoods = (params) => get('/api/basedata/goods', params)
+
 // 通知收件箱(内核)
 export const listNotifications = (params) => get('/api/notifications', params)
 export const fetchUnreadCount = () => get('/api/notifications/unread-count')
