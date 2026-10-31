@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向三 · 手记·卷页 — 施工域页面族初稿(营造 app 员工端)</title>
+<style>
+  /* ============ 展示板(非页面本体) ============ */
+  :root{
+    --paper:#FAF9F5; --paper-deep:#F1EFE8; --ink:#1A1A18;
+    --ink70:rgba(26,26,24,.70); --ink62:rgba(26,26,24,.62); --ink35:rgba(26,26,24,.35);
+    --line:rgba(26,26,24,.12); --line-strong:rgba(26,26,24,.55);
+    --seal:#B03A2E; --moss:#5A7247; --ochre:#A6864B;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#242320;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:10px}
+  .board-head h1{font-family:'Songti SC','SimSun',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:14px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.75);font-size:14px;margin-bottom:30px;line-height:1.9;max-width:900px}
+  .board-sub b{color:#FAF9F5;font-weight:600}
+  .tok{color:rgba(250,249,245,.55);font-size:14px;letter-spacing:1px;margin-bottom:26px}
+  .tok i{font-style:normal;color:#D8A08F}
+
+  /* ============ 手机 ============ */
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .screen{height:100%;overflow-y:auto;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+
+  /* 展示板构图:局部特写——手记稿纸页放大为主视觉,其余错落 */
+  .stage{display:flex;gap:44px;align-items:flex-start;flex-wrap:wrap}
+  .feat{transform:scale(1.16);transform-origin:top left;margin-right:62px;margin-bottom:135px}
+  .colnote{max-width:330px;color:rgba(250,249,245,.78);font-size:14px;line-height:2;padding-top:6px}
+  .colnote h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:12px}
+  .colnote p{margin-bottom:12px}
+  .colnote .k{color:#D8A08F}
+  .colnote .cap{display:block;font-size:12px;color:rgba(250,249,245,.55);letter-spacing:2px;margin:0 0 6px}
+  .stack{display:flex;flex-direction:column;gap:36px}
+
+  /* ============ 页面通用 ============ */
+  .page{height:100%;display:flex;flex-direction:column}
+  .nav{padding:14px 16px 12px;background:var(--paper);border-bottom:1px solid var(--line);flex-shrink:0}
+  .nav .t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:3px;color:var(--ink)}
+  .nav .s{font-size:14px;color:var(--ink62);margin-top:2px;letter-spacing:1px}
+  .body{flex:1;overflow-y:auto;scrollbar-width:none;padding:16px 16px 28px}
+  .body::-webkit-scrollbar{display:none}
+
+  /* 卷页装裱(名帖双框语言:外强墨线内淡墨线) */
+  .scroll-frame{border:2px solid var(--ink);padding:4px;background:var(--paper)}
+  .inner{border:1px solid var(--line-strong);padding:16px 16px 14px;position:relative}
+
+  /* 工地列表:一工地一卷签 */
+  .roll{border:1px solid var(--line-strong);padding:14px 16px 12px;margin-top:16px;position:relative;background:var(--paper)}
+  .roll::before{content:'';position:absolute;right:-1px;top:-1px;bottom:-1px;width:6px;background:var(--paper-deep);border-left:1px solid var(--line)}
+  .roll .no{font-size:13px;letter-spacing:1px;color:var(--ink62)}
+  .roll .house{font-family:'Songti SC','SimSun',serif;font-size:20px;letter-spacing:1px;margin-top:6px}
+  .roll .meta{font-size:13px;color:var(--ink62);margin-top:5px}
+  .roll .foot{display:flex;align-items:baseline;gap:8px;border-top:1px dashed var(--line);margin-top:11px;padding-top:9px}
+  .roll .lab{font-size:12px;color:var(--ink62);letter-spacing:1px}
+  .roll .node{font-family:'Songti SC','SimSun',serif;font-size:16px;color:var(--seal)}
+  .roll .node.ok{color:var(--moss)}
+  .roll .day{margin-left:auto;font-size:12px;color:var(--ink62)}
+
+  /* 详情:卷页装裱 + 概况 */
+  .seal-chip{position:absolute;top:14px;right:14px;width:40px;height:40px;background:var(--seal);color:var(--paper);
+    display:flex;align-items:center;justify-content:center;font-family:'Songti SC','SimSun',serif;font-size:15px;border-radius:3px}
+  .d-house{font-family:'Songti SC','SimSun',serif;font-size:20px;letter-spacing:1px;line-height:1.5;padding-right:52px}
+  .d-cust{font-size:14px;color:var(--ink62);margin-top:7px}
+  .d-nums{display:flex;border-top:1px solid var(--line);margin-top:13px;padding-top:12px}
+  .d-nums .n{flex:1}
+  .d-nums .k{font-size:13px;color:var(--ink62);letter-spacing:1px}
+  .d-nums .v{font-family:'Songti SC','SimSun',serif;font-size:19px;margin-top:3px}
+  .d-nums .v small{font-size:12px;font-family:-apple-system,'PingFang SC',sans-serif;color:var(--ink62);margin-left:2px}
+  .sec-t{display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 8px}
+  .sec-t .t{font-family:'Songti SC','SimSun',serif;font-size:15px;letter-spacing:5px}
+  .sec-t .s{font-size:12px;color:var(--ink62)}
+
+  /* 朱批带(异常/超期/免检留痕):纸深底+朱侧线+「批」印 */
+  .zhub{display:flex;gap:10px;background:var(--paper-deep);border-left:3px solid var(--seal);padding:10px 12px;margin-top:14px}
+  .zhub .z{width:26px;height:26px;background:var(--seal);color:var(--paper);font-family:'Songti SC','SimSun',serif;
+    font-size:13px;display:flex;align-items:center;justify-content:center;border-radius:2px;flex-shrink:0;margin-top:2px}
+  .zhub .txt{font-size:14px;color:var(--ink70);line-height:1.75}
+  .zhub .txt b{color:var(--seal);font-weight:600}
+
+  /* 时间轴(纵贯墨线,yz-timeline 语言) */
+  .tl{margin-top:6px}
+  .tl .trow{display:flex}
+  .tl .rail{display:flex;flex-direction:column;align-items:center;width:22px;flex-shrink:0}
+  .tl .dot{width:9px;height:9px;border-radius:50%;border:2px solid var(--ink70);background:var(--paper);margin-top:5px;box-sizing:border-box}
+  .tl .dot.done{border-color:var(--moss);background:var(--moss)}
+  .tl .dot.cur{border-color:var(--seal);background:var(--seal)}
+  .tl .tline{width:1px;flex:1;background:var(--line);margin:3px 0}
+  .tl .tbody{flex:1;padding:0 0 22px 12px;min-width:0}
+  .tl .th2{display:flex;align-items:baseline;justify-content:space-between}
+  .tl .tt{font-size:15px;font-weight:600}
+  .tl .tt.cur{color:var(--seal)}
+  .tl .ttime{font-size:12px;color:var(--ink62)}
+  .tl .tdesc{font-size:13px;color:var(--ink62);margin-top:4px;line-height:1.7}
+  .tl .tcrew{font-size:13px;color:var(--ink62);margin-top:6px}
+  .tl .tcrew b{color:var(--ink);font-weight:600}
+  .tl .tops{display:flex;gap:8px;margin-top:9px}
+  .tl .tbtn{font-size:13px;padding:6px 16px;background:var(--ink);color:var(--paper);border-radius:2px;letter-spacing:2px}
+  .tl .tbtn.ghost{background:transparent;color:var(--ink62);border:1px solid var(--line)}
+
+  /* 完工确认:卷内夹条(居中窄签) */
+  .mask{position:absolute;inset:0;background:rgba(26,26,24,.45)}
+  .slip{position:absolute;left:34px;right:34px;top:250px;background:var(--paper);border:2px solid var(--ink);padding:4px}
+  .slip .in2{border:1px solid var(--line-strong);padding:16px 14px 14px}
+  .slip .s-t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:3px;text-align:center}
+  .slip .s-node{font-size:13px;color:var(--ink62);text-align:center;margin-top:5px}
+  .slip .s-chk{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+  .slip .row{display:flex;font-size:13px;line-height:2.1}
+  .slip .row .k{width:88px;color:var(--ink62);flex-shrink:0}
+  .slip .v.ok{color:var(--moss)}
+  .slip .btns{display:flex;gap:8px;margin-top:14px}
+  .slip .btn{flex:1;text-align:center;padding:9px 0;font-size:14px;letter-spacing:2px}
+  .slip .btn.ghost{border:1px solid var(--line-strong);color:var(--ink70)}
+  .slip .btn.main{background:var(--seal);color:var(--paper)}
+
+  /* 日记:稿纸书写页(featured) */
+  .gz{border:1px solid var(--line-strong);padding:16px 14px 14px;
+    background:repeating-linear-gradient(to bottom,transparent,transparent 31px,var(--line) 31px,var(--line) 32px)}
+  .gz .head{display:flex;justify-content:space-between;align-items:baseline;background:var(--paper);display:flex}
+  .gz .head .n{font-family:'Songti SC','SimSun',serif;font-size:15px;letter-spacing:2px}
+  .gz .head .d{font-size:12px;color:var(--ink62)}
+  .gz textarea{width:100%;height:118px;border:0;background:transparent;outline:0;resize:none;
+    font-size:14px;line-height:32px;color:var(--ink);margin-top:6px}
+  .gz textarea::placeholder{color:var(--ink35)}
+  .gz .foot{display:flex;justify-content:space-between;align-items:center;background:var(--paper);padding-top:10px}
+  .up{display:flex;gap:8px}
+  .upcell{width:54px;height:54px;border:1px dashed var(--line-strong);display:flex;align-items:center;justify-content:center;color:var(--ink62);font-size:22px}
+  .upcell.fill{border-style:solid;background:var(--paper-deep)}
+  .jstamp{width:48px;height:48px;background:var(--seal);color:var(--paper);display:flex;align-items:center;justify-content:center;
+    font-family:'Songti SC','SimSun',serif;font-size:20px;border-radius:3px}
+  .jd{padding:14px 2px;border-bottom:1px dashed var(--line)}
+  .jd .h{display:flex;align-items:baseline;gap:8px}
+  .jd .w{font-size:13px;font-weight:600}
+  .jd .tp{font-size:12px;padding:1px 8px;border-radius:2px}
+  .jd .tp.in{background:rgba(90,114,71,.12);color:var(--moss)}
+  .jd .tp.out{background:rgba(166,134,75,.14);color:#7A5E2A}
+  .jd .t{font-size:12px;color:var(--ink62);margin-left:auto}
+  .jd .x{font-size:14px;color:var(--ink70);line-height:1.8;margin-top:6px}
+  .jd .ims{display:flex;gap:6px;margin-top:8px}
+  .jd .ims i{width:64px;height:64px;background:var(--paper-deep);border:1px solid var(--line);display:block}
+
+  /* 图纸:画册横滑 */
+  .album{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:2px 16px 6px}
+  .album::-webkit-scrollbar{display:none}
+  .ab{flex-shrink:0;width:150px}
+  .ab .ph{height:110px;background:linear-gradient(135deg,var(--paper-deep),#E9E5DA);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .ab .ph span{font-family:'Songti SC','SimSun',serif;font-size:12px;color:var(--ink62);letter-spacing:2px}
+  .ab .nm{font-size:13px;margin-top:7px}
+  .ab .mt{font-size:12px;color:var(--ink62);margin-top:3px}
+</style>
+</head>
+<body>
+  <div class="board-head">
+    <h1>方向三 · 手记·卷页</h1>
+    <span class="en">CONSTRUCTION · FIELD JOURNAL</span>
+  </div>
+  <div class="board-sub">
+    工程即<b>一册手记</b>:节点时间轴纵贯全流程,日记与图纸归属节点行内,详情页用<b>名帖双框装裱</b>(web-mp 名片页同语)。
+    异常与免检走<b>朱批带</b>(纸深底+朱侧线+「批」印),日记书写页=稿纸界格+「记」印。留痕感最强的一版。
+  </div>
+  <div class="tok">token 锚定 yingzao.css / App.vue:<i>纸白暖底 #FAF9F5 / 墨黑 #1A1A18 / 朱印红 #B03A2E(朱批带与「记」印)/ 苔绿 #5A7247=完工 / 赭金 #A6864B=出场 / 宋体 display / 方角 / 细墨线</i></div>
+
+  <div class="stage">
+    <div>
+      <!-- P5 施工日记(主视觉,放大) -->
+      <div class="phone feat">
+        <div class="page">
+          <div class="nav"><div class="t">施工日记</div><div class="s">瓦工铺贴 · 打卡自动判定进场/出场</div></div>
+          <div class="body">
+            <div class="gz">
+              <div class="head"><span class="n">今日手记</span><span class="d">10-26 · 星期一</span></div>
+              <textarea>厨房墙砖铺贴过半,烟道处加铺一道钢丝网防裂。</textarea>
+              <div class="foot">
+                <div class="up">
+                  <span class="upcell fill"></span>
+                  <span class="upcell fill"></span>
+                  <span class="upcell">＋</span>
+                </div>
+                <div class="jstamp">记</div>
+              </div>
+            </div>
+
+            <div class="sec-t"><span class="t">本节点手记</span><span class="s">3 篇 · 照片 6 张</span></div>
+            <div class="jd">
+              <div class="h"><span class="w">张施工</span><span class="tp in">进场</span><span class="t">10-25 08:47</span></div>
+              <div class="x">瓦工 3 人进场,材料已码放并做成品保护,阳台地漏坡度复核无积水。</div>
+              <div class="ims"><i></i><i></i></div>
+            </div>
+            <div class="jd">
+              <div class="h"><span class="w">张施工</span><span class="t">10-24 18:05</span></div>
+              <div class="x">今日完成客厅地面对缝预排,损耗率 4%;明日上墙,先做烟道防裂处理。</div>
+            </div>
+            <div class="jd">
+              <div class="h"><span class="w">系统</span><span class="tp out">出场</span><span class="t">10-24 17:58</span></div>
+              <div class="x">王德贵瓦工组 3 人出场打卡,工费额度余 62%。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <!-- P1 工地列表 -->
+      <div class="phone">
+        <div class="page">
+          <div class="nav"><div class="t">我的工地</div><div class="s">按数据范围下发 · 3 个在建</div></div>
+          <div class="body">
+            <div class="roll">
+              <div class="no">YZ2610310173 · 开工第 42 天</div>
+              <div class="house">中海·云麓公馆 3-1-1201</div>
+              <div class="meta">周建成 · 108㎡ · 监理 张施工</div>
+              <div class="foot"><span class="lab">当前节点</span><span class="node">瓦工铺贴</span><span class="day">6/17</span></div>
+            </div>
+            <div class="roll">
+              <div class="no">YZ2610280086 · 开工第 12 天</div>
+              <div class="house">华润置地·幸福里 2-902</div>
+              <div class="meta">林晚芳 · 89㎡ · 监理 何一鸣</div>
+              <div class="foot"><span class="lab">当前节点</span><span class="node">水电改造</span><span class="day">3/17</span></div>
+            </div>
+            <div class="roll">
+              <div class="no">YZ2610190041 · 总工期 128 天</div>
+              <div class="house">绿城·晓风印月 5-1-1902</div>
+              <div class="meta">郑立群 · 142㎡ · 监理 张施工</div>
+              <div class="foot"><span class="lab">当前节点</span><span class="node ok">竣工验收</span><span class="day">17/17</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- P2 装修单详情(卷页装裱) -->
+      <div class="phone">
+        <div class="page">
+          <div class="nav"><div class="t">工地详情</div><div class="s">YZ2610310173 · 施工中 · 第 6/17 节点</div></div>
+          <div class="body">
+            <div class="scroll-frame">
+              <div class="inner">
+                <div class="seal-chip">施</div>
+                <div class="d-house">中海·云麓公馆 3-1-1201</div>
+                <div class="d-cust">客户 周建成 · 监理 张施工 · 设计 陈曼如</div>
+                <div class="d-nums">
+                  <div class="n"><div class="k">合同额</div><div class="v">¥38.6<small>万</small></div></div>
+                  <div class="n"><div class="k">建筑面积</div><div class="v">108<small>㎡</small></div></div>
+                  <div class="n"><div class="k">开工</div><div class="v">09-15</div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="zhub">
+              <span class="z">批</span>
+              <span class="txt">水电验收 <b>免检放行</b>,经办 张施工 09-30 留痕;「免检必带理由」按组织配置执行。</span>
+            </div>
+
+            <div class="sec-t"><span class="t">工程概况</span><span class="s">快照展示</span></div>
+            <div class="d-cust" style="color:var(--ink);font-size:14px">三室两厅两卫 · 总工期 128 天 · 辅料库开启</div>
+            <div class="d-cust">施工单 #204 · 放线点火 09-15 · 节点进度 6/17</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- P3 节点时间轴 -->
+      <div class="phone">
+        <div class="page">
+          <div class="nav"><div class="t">节点进度</div><div class="s">YZ2610310173 · 开工/完工受款项比例闸约束</div></div>
+          <div class="body">
+            <div class="tl">
+              <div class="trow">
+                <div class="rail"><span class="dot done"></span><span class="tline"></span></div>
+                <div class="tbody">
+                  <div class="th2"><span class="tt">放线交底</span><span class="ttime">09-15</span></div>
+                  <div class="tdesc">放线点火 · 当日完工</div>
+                </div>
+              </div>
+              <div class="trow">
+                <div class="rail"><span class="dot done"></span><span class="tline"></span></div>
+                <div class="tbody">
+                  <div class="th2"><span class="tt">水电改造</span><span class="ttime">09-20~09-28</span></div>
+                  <div class="tdesc">计划 09-20~09-29 · 提前一日完工</div>
+                </div>
+              </div>
+              <div class="trow">
+                <div class="rail"><span class="dot done"></span><span class="tline"></span></div>
+                <div class="tbody">
+                  <div class="th2"><span class="tt">水电验收</span><span class="ttime">09-30</span></div>
+                  <div class="tdesc">免检放行 · 经办 张施工</div>
+                </div>
+              </div>
+              <div class="trow">
+                <div class="rail"><span class="dot cur"></span><span class="tline"></span></div>
+                <div class="tbody">
+                  <div class="th2"><span class="tt cur">瓦工铺贴</span><span class="ttime">10-22~11-02</span></div>
+                  <div class="tdesc">实际开工 10-24 · 第 3 天</div>
+                  <div class="tcrew">现场 <b>王德贵瓦工组</b> · 3 人 · 手记 3 篇</div>
+                  <div class="tops"><span class="tbtn">完工</span><span class="tbtn ghost">记一笔</span></div>
+                </div>
+              </div>
+              <div class="trow">
+                <div class="rail"><span class="dot"></span><span class="tline"></span></div>
+                <div class="tbody">
+                  <div class="th2"><span class="tt" style="color:var(--ink70)">瓦工验收</span><span class="ttime">11-03~11-04</span></div>
+                  <div class="tdesc">待前置节点完工解锁</div>
+                </div>
+              </div>
+              <div class="trow">
+                <div class="rail"><span class="dot"></span></div>
+                <div class="tbody">
+                  <div class="th2"><span class="tt" style="color:var(--ink70)">木工吊顶</span><span class="ttime">11-05~11-12</span></div>
+                  <div class="tdesc">待前置节点完工解锁</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <!-- P4 完工确认(卷内夹条) -->
+      <div class="phone">
+        <div class="page">
+          <div class="nav"><div class="t">节点进度</div><div class="s">YZ2610310173 · 操作幂等,后端状态闸</div></div>
+          <div class="mask"></div>
+          <div class="slip">
+            <div class="in2">
+              <div class="s-t">完工夹条</div>
+              <div class="s-node">瓦工铺贴 · 第 6/17 节点</div>
+              <div class="s-chk">
+                <div class="row"><span class="k">完工检查</span><span class="v ok">款项比例闸通过</span></div>
+                <div class="row"><span class="k">后续节点</span><span class="v">瓦工验收 解锁</span></div>
+                <div class="row"><span class="k">本节点手记</span><span class="v">3 篇 · 照片 6 张</span></div>
+              </div>
+              <div class="btns"><span class="btn ghost">再看看</span><span class="btn main">落款完工</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- P6 图纸(画册横滑) -->
+      <div class="phone">
+        <div class="page">
+          <div class="nav"><div class="t">图纸画册</div><div class="s">只读 · 横滑翻阅 · 点按全屏</div></div>
+          <div class="body">
+            <div class="album">
+              <div class="ab"><div class="ph"><span>平面布置</span></div><div class="nm">平面布置图</div><div class="mt">09-14 · 陈曼如</div></div>
+              <div class="ab"><div class="ph"><span>拆改定位</span></div><div class="nm">拆改定位图</div><div class="mt">09-14 · 陈曼如</div></div>
+              <div class="ab"><div class="ph"><span>水电点位</span></div><div class="nm">水电点位图</div><div class="mt">09-19 · 张施工</div></div>
+              <div class="ab"><div class="ph"><span>瓦工铺贴</span></div><div class="nm">瓦工铺贴图</div><div class="mt">10-21 · 张施工</div></div>
+              <div class="ab"><div class="ph"><span>木作深化</span></div><div class="nm">木作深化图</div><div class="mt">10-08 · 陈曼如</div></div>
+              <div class="ab"><div class="ph"><span>客厅效果</span></div><div class="nm">客厅效果图</div><div class="mt">08-30 · 陈曼如</div></div>
+            </div>
+            <div class="sec-t"><span class="t">全册目录</span><span class="s">6 份</span></div>
+            <div class="jd">
+              <div class="h"><span class="w">平面布置图 · 拆改定位图</span><span class="t">09-14 上传</span></div>
+              <div class="x">设计出图随交底更新;现场以最新版为准。</div>
+            </div>
+            <div class="jd">
+              <div class="h"><span class="w">水电点位图</span><span class="t">09-19 上传</span></div>
+              <div class="x">打压测试 0.8MPa 无渗漏,点位现场复核一致。</div>
+            </div>
+            <div class="jd">
+              <div class="h"><span class="w">瓦工铺贴图 · 木作深化图</span><span class="t">10-21 / 10-08 上传</span></div>
+              <div class="x">对缝预排以铺贴图为准;木作按深化图下单。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="colnote">
+      <span class="cap">方向定位</span>
+      <h3>手记·卷页</h3>
+      <p><span class="k">信息焦点:</span>时间与留痕——时间轴是详情的第二主角,日记/图纸归属节点行内,「这单经历过什么」一滑到底。</p>
+      <p><span class="k">版式:</span>名帖双框装裱(详情头)/卷签(列表,右缘纸深书脊)/朱批带(免检·超期·驳回)/稿纸界格(日记书写)。</p>
+      <p><span class="k">朱用量:</span>最重仍克制——朱批带与「记」「落款」印,朱=异常与人工落款的仪式感,受「异常是唯一红焦点」约束。</p>
+      <p><span class="k">实现成本:</span>中高——装裱框/朱批带/稿纸为自定义样式族(可与 web-mp 名帖语言共用 token)。</p>
+      <p><span class="k">数据口径:</span>与方向一/二完全同数,纯风格对比。</p>
+    </div>
+  </div>
+</body>
+</html>

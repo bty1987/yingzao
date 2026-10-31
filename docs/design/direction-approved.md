@@ -48,3 +48,18 @@
 
 - 三方向同守:纸白暖底/墨黑/朱印红唯一点缀/宋体 display/8px 模数/2px 方角 + docs/06 §4.2 五区块布局与 §5 图表硬规则(数据三方向完全一致,纯风格对比);
 - 可读性校准:初稿内 ink-50 文本统一提到 .62(3.3:1→4.85:1),脚注 14px——正式实现同步此口径(见方向卡);
+
+---
+
+## 附:R17 施工域页面族方向轮(app 员工端,体系内三诠释)
+
+2026-10-31(第 113 次):docs/15 R17~R19 施工域页面族动手前,按军规 5 出三方向初稿(锚定 app/src/App.vue 全局 token,与 D4 二轮同一纪律)。数据三稿同数(YZ2610310173/6/17 节点),纯风格对比;design_lint 红灯全清,D4 可读性教训提前兑现(文本灰 .62/标签 12px/注脚 14px/赭金加深)。**🔴待用户拍板=三方向任选或混搭(唯一视觉闸)**:
+
+| 方向 | 文件 | 截图 | 一句话 |
+|---|---|---|---|
+| 一·工牌·现场 | `construction-dir-1.html` | `docs/screenshots/design/construction-dir1-*.png` | 工地公示牌进手机:当前节点宋体大字第一主角,宋版界行节点,朱最省 |
+| 二·账册·进度簿 | `construction-dir-2.html` | `docs/screenshots/design/construction-dir2-*.png` | 既有管理页家族延伸:墨线 tab+账册表格+行内操作,实现成本最低 |
+| 三·手记·卷页 | `construction-dir-3.html` | `docs/screenshots/design/construction-dir3-*.png` | 一册手记:时间轴纵贯+名帖双框装裱+朱批带+稿纸日记,留痕感最强 |
+
+- 方向卡(含实现成本/朱用量/混搭建议/实现口径注记):`docs/design/construction-directions.md`;
+- 图纸域尚无表:三稿按「挂 yz_file 只读投影」示意,实现期落;节点开完工端点(schedules begin/finish)与日记端点(diaries)已就绪。

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向二 · 账册·进度簿 — 施工域页面族初稿(营造 app 员工端)</title>
+<style>
+  /* ============ 展示板(非页面本体) ============ */
+  :root{
+    --paper:#FAF9F5; --paper-deep:#F1EFE8; --ink:#1A1A18;
+    --ink70:rgba(26,26,24,.70); --ink62:rgba(26,26,24,.62); --ink35:rgba(26,26,24,.35);
+    --line:rgba(26,26,24,.12); --line-strong:rgba(26,26,24,.55);
+    --seal:#B03A2E; --moss:#5A7247; --ochre:#A6864B;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:#242320;min-height:100vh;padding:44px 40px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  .board-head{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:10px}
+  .board-head h1{font-family:'Songti SC','SimSun',serif;color:#FAF9F5;font-size:26px;letter-spacing:4px}
+  .board-head .en{color:rgba(250,249,245,.62);font-size:14px;letter-spacing:3px}
+  .board-sub{color:rgba(250,249,245,.75);font-size:14px;margin-bottom:30px;line-height:1.9;max-width:900px}
+  .board-sub b{color:#FAF9F5;font-weight:600}
+  .tok{color:rgba(250,249,245,.55);font-size:14px;letter-spacing:1px;margin-bottom:26px}
+  .tok i{font-style:normal;color:#D8A08F}
+
+  /* ============ 手机 ============ */
+  .phone{width:390px;height:844px;background:var(--paper);border:1px solid rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);flex-shrink:0}
+  .screen{height:100%;overflow-y:auto;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .serif{font-family:'Songti SC','SimSun','Noto Serif SC',serif}
+
+  /* 展示板构图:流程串联(编号标签+细线连线) */
+  .stage{display:flex;flex-direction:column;gap:46px}
+  .thread{display:flex;align-items:flex-start;gap:28px;flex-wrap:wrap}
+  .step{position:relative}
+  .step .lab{position:absolute;top:-24px;left:0;font-size:12px;color:rgba(250,249,245,.72);letter-spacing:2px;white-space:nowrap}
+  .step .lab b{color:#D8A08F;font-family:'Songti SC','SimSun',serif;font-size:14px;margin-right:8px}
+  .thread::after{content:'';display:block}
+  .colnote{max-width:330px;color:rgba(250,249,245,.78);font-size:14px;line-height:2;padding-top:2px}
+  .colnote h3{font-family:'Songti SC','SimSun',serif;font-size:15px;color:#FAF9F5;letter-spacing:2px;margin-bottom:12px}
+  .colnote p{margin-bottom:12px}
+  .colnote .k{color:#D8A08F}
+  .colnote .cap{display:block;font-size:12px;color:rgba(250,249,245,.55);letter-spacing:2px;margin:0 0 6px}
+
+  /* ============ 页面通用 ============ */
+  .page{height:100%;display:flex;flex-direction:column}
+  .nav{padding:14px 16px 12px;background:var(--paper);border-bottom:1px solid var(--line);flex-shrink:0;display:flex;align-items:baseline;justify-content:space-between}
+  .nav .t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:3px;color:var(--ink)}
+  .nav .s{font-size:14px;color:var(--ink62);letter-spacing:1px;text-align:right}
+  .body{flex:1;overflow-y:auto;scrollbar-width:none;padding:14px 16px 28px}
+  .body::-webkit-scrollbar{display:none}
+
+  /* 墨线 tab(与 approvals/leads 既有页同族) */
+  .tabs{display:flex;background:var(--paper);border-bottom:1px solid var(--line);flex-shrink:0}
+  .tab{flex:1;text-align:center;padding:12px 0;color:var(--ink70);font-size:14px;border-bottom:2px solid transparent}
+  .tab.active{color:var(--seal);font-weight:600;border-bottom-color:var(--seal)}
+
+  /* 卡(全局 .card 家族:纸面+细墨线+方角) */
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:14px;margin-top:12px}
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .ct{font-size:15px;font-weight:600;color:var(--ink)}
+  .ct.serif{font-family:'Songti SC','SimSun',serif;letter-spacing:1px}
+  .tag{display:inline-block;font-size:12px;padding:3px 8px;border-radius:3px;line-height:1.5;flex-shrink:0;white-space:nowrap}
+  .tag-info{background:var(--paper-deep);color:var(--ink70)}
+  .tag-success{background:rgba(90,114,71,.12);color:var(--moss)}
+  .tag-danger{background:rgba(176,58,46,.10);color:var(--seal)}
+  .tag-warning{background:rgba(166,134,75,.14);color:#7A5E2A}
+  .sub{color:var(--ink62);font-size:14px;margin-top:7px;line-height:1.7}
+  .sub b{color:var(--ink);font-weight:600}
+  .arrow{color:var(--ink62);flex-shrink:0;font-size:14px}
+
+  /* 搜索行 */
+  .searchbar{display:flex;gap:8px;margin-bottom:2px}
+  .searchbar .ipt{flex:1;display:flex;align-items:center;border:1px solid var(--line);border-radius:3px;padding:8px 10px;background:var(--paper)}
+  .searchbar .ipt input{border:0;background:transparent;outline:0;font-size:13px;flex:1;color:var(--ink)}
+  .searchbar .ipt input::placeholder{color:var(--ink35)}
+  .searchbar .go{font-size:13px;padding:0 16px;background:var(--ink);color:var(--paper);border-radius:3px;display:flex;align-items:center;letter-spacing:2px}
+
+  /* 详情头部(概览 tab) */
+  .dh{border:1px solid var(--line);border-radius:4px;padding:16px 14px 14px;background:var(--paper)}
+  .dh .h1{font-family:'Songti SC','SimSun',serif;font-size:21px;letter-spacing:1px}
+  .dh .row{font-size:14px;color:var(--ink62);margin-top:6px}
+  .dh .row b{color:var(--ink);font-weight:600}
+  .nums{display:flex;border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+  .nums .n{flex:1}
+  .nums .k{font-size:13px;color:var(--ink62)}
+  .nums .v{font-family:'Songti SC','SimSun',serif;font-size:18px;margin-top:3px}
+  .nums .v small{font-size:12px;font-family:-apple-system,'PingFang SC',sans-serif;color:var(--ink62);margin-left:2px}
+  .pbar{height:4px;background:var(--paper-deep);margin-top:12px}
+  .pbar i{display:block;height:100%;width:35%;background:var(--seal)}
+  .pcap{display:flex;justify-content:space-between;font-size:13px;color:var(--ink62);margin-top:6px}
+
+  /* 账册表(节点 tab):表线+行内操作 */
+  .ledg{border:1px solid var(--line);border-radius:4px;overflow:hidden;margin-top:12px}
+  .ledg .lr{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid var(--line);background:var(--paper)}
+  .ledg .lr:last-child{border-bottom:0}
+  .ledg .lr.hd{background:var(--paper-deep);font-size:12px;color:var(--ink62);letter-spacing:1px}
+  .ledg .c1{width:26px;font-family:'Songti SC','SimSun',serif;font-size:13px;color:var(--ink62);flex-shrink:0}
+  .ledg .c2{flex:1;min-width:0}
+  .ledg .c2 .nm{font-size:14px;font-weight:600;color:var(--ink)}
+  .ledg .c2 .pl{font-size:12px;color:var(--ink62);margin-top:3px}
+  .ledg .c3{width:64px;flex-shrink:0;text-align:center}
+  .ledg .c4{width:64px;flex-shrink:0}
+  .mini-btn{display:block;font-size:12px;padding:6px 0;text-align:center;border-radius:3px;border:1px solid var(--line-strong);color:var(--ink70)}
+  .mini-btn.solid{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+
+  /* 居中 dialog(区别于方向一半屏弹层) */
+  .mask{position:absolute;inset:0;background:rgba(26,26,24,.45)}
+  .dialog{position:absolute;left:22px;right:22px;top:240px;background:var(--paper);border:1px solid var(--ink);border-radius:4px;padding:20px 18px 18px}
+  .dialog .d-t{font-family:'Songti SC','SimSun',serif;font-size:17px;letter-spacing:2px;text-align:center}
+  .dialog .d-node{font-size:13px;color:var(--ink62);text-align:center;margin-top:6px}
+  .dialog .d-chk{margin-top:14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 2px}
+  .dialog .d-chk .row{display:flex;font-size:13px;line-height:2.2}
+  .dialog .d-chk .row .k{width:92px;color:var(--ink62);flex-shrink:0}
+  .dialog .d-chk .v.ok{color:var(--moss)}
+  .dialog .btns{display:flex;gap:10px;margin-top:16px}
+  .dialog .btn{flex:1;text-align:center;padding:10px 0;font-size:14px;letter-spacing:2px;border-radius:3px}
+  .dialog .btn.ghost{border:1px solid var(--line-strong);color:var(--ink70)}
+  .dialog .btn.main{background:var(--ink);color:var(--paper)}
+  .dialog .hint{font-size:12px;color:var(--ink62);margin-top:10px;line-height:1.7;text-align:center}
+
+  /* 日记 */
+  .writebox{border:1px solid var(--line);border-radius:4px;background:var(--paper);padding:12px;margin-top:12px}
+  .writebox textarea{width:100%;height:72px;border:0;background:transparent;outline:0;resize:none;font-size:14px;line-height:1.8;color:var(--ink)}
+  .writebox textarea::placeholder{color:var(--ink35)}
+  .wfoot{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+  .up{display:flex;gap:8px}
+  .upcell{width:50px;height:50px;border:1px dashed var(--line-strong);border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--ink62);font-size:20px}
+  .upcell.fill{border-style:solid;background:var(--paper-deep)}
+  .wbtn{font-size:13px;padding:8px 22px;background:var(--seal);color:var(--paper);border-radius:3px;letter-spacing:2px}
+  .diary{padding:12px 2px;border-bottom:1px solid var(--line)}
+  .diary:last-child{border-bottom:0}
+  .d-head{display:flex;align-items:baseline;gap:8px}
+  .d-who{font-size:13px;font-weight:600}
+  .d-time{font-size:12px;color:var(--ink62);margin-left:auto}
+  .d-txt{font-size:14px;color:var(--ink70);line-height:1.75;margin-top:6px}
+  .d-imgs{display:flex;gap:6px;margin-top:8px}
+  .d-imgs i{width:62px;height:62px;background:var(--paper-deep);border:1px solid var(--line);display:block}
+
+  /* 图纸 */
+  .plan{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid var(--line)}
+  .plan:last-child{border-bottom:0}
+  .plan .th{width:64px;height:64px;background:linear-gradient(135deg,var(--paper-deep),#E9E5DA);border:1px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .plan .th span{font-size:12px;color:var(--ink62);letter-spacing:1px}
+  .plan .nm{font-size:14px;font-weight:600}
+  .plan .mt{font-size:12px;color:var(--ink62);margin-top:4px}
+</style>
+</head>
+<body>
+  <div class="board-head">
+    <h1>方向二 · 账册·进度簿</h1>
+    <span class="en">CONSTRUCTION · LEDGER</span>
+  </div>
+  <div class="board-sub">
+    施工管理即<b>登记入册</b>:一页一单、行行入册。这是既有 app 管理页(客源/审批/计划)家族的直接延伸——淡墨线框卡+朱印 tag+墨线 tab,
+    节点是<b>账册表格</b>(表头+表线+行内操作),实现成本最低、与现有页面一体化最自然。
+  </div>
+  <div class="tok">token 锚定 yingzao.css / App.vue:<i>纸白暖底 #FAF9F5 / 墨黑 #1A1A18 / 朱印红 #B03A2E(tag 与进度条)/ 苔绿 #5A7247=完工 / 赭金 #A6864B=预警 / 宋体 display / 方角 4px 圆角 / 细墨线</i></div>
+
+  <div class="stage">
+    <div class="thread">
+      <div class="step">
+        <span class="lab"><b>壹</b>我的工地</span>
+        <!-- P1 工地列表 -->
+        <div class="phone">
+          <div class="page">
+            <div class="nav"><span class="t">我的工地</span><span class="s">3</span></div>
+            <div class="body">
+              <div class="searchbar">
+                <span class="ipt"><input placeholder="搜单号 / 客户 / 小区"></span>
+                <span class="go">搜索</span>
+              </div>
+              <div class="card">
+                <div class="head"><span class="ct serif">中海·云麓公馆 3-1-1201</span><span class="tag tag-danger">施工中</span></div>
+                <div class="sub">周建成 · 108㎡ · 开工第 42 天</div>
+                <div class="sub">当前 <b>瓦工铺贴</b>(第 6/17 节点)· 监理 张施工</div>
+              </div>
+              <div class="card">
+                <div class="head"><span class="ct serif">华润置地·幸福里 2-902</span><span class="tag tag-danger">施工中</span></div>
+                <div class="sub">林晚芳 · 89㎡ · 开工第 12 天</div>
+                <div class="sub">当前 <b>水电改造</b>(第 3/17 节点)· 监理 何一鸣</div>
+              </div>
+              <div class="card">
+                <div class="head"><span class="ct serif">绿城·晓风印月 5-1-1902</span><span class="tag tag-success">待验收</span></div>
+                <div class="sub">郑立群 · 142㎡ · 总工期 128 天</div>
+                <div class="sub">当前 <b>竣工验收</b>(第 17/17 节点)· 监理 张施工</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="lab"><b>贰</b>装修单详情(概览)</span>
+        <!-- P2 详情概览 -->
+        <div class="phone">
+          <div class="page">
+            <div class="nav"><span class="t">中海·云麓公馆 3-1-1201</span><span class="s">YZ2610310173</span></div>
+            <div class="tabs">
+              <span class="tab active">概览</span><span class="tab">节点</span><span class="tab">日记</span><span class="tab">图纸</span>
+            </div>
+            <div class="body">
+              <div class="dh">
+                <div class="h1">中海·云麓公馆 3-1-1201</div>
+                <div class="row">客户 <b>周建成</b> · 监理 <b>张施工</b> · 设计 陈曼如</div>
+                <div class="row">施工单 #204 · 放线点火 09-15 · 辅料库开启</div>
+                <div class="nums">
+                  <div class="n"><div class="k">合同额</div><div class="v">¥38.6<small>万</small></div></div>
+                  <div class="n"><div class="k">建筑面积</div><div class="v">108<small>㎡</small></div></div>
+                  <div class="n"><div class="k">开工</div><div class="v">09-15</div></div>
+                </div>
+                <div class="pbar"><i></i></div>
+                <div class="pcap"><span>节点进度 6/17</span><span>已开工 42 天</span></div>
+              </div>
+
+              <div class="card">
+                <div class="head"><span class="ct">工程概况</span></div>
+                <div class="sub">房屋 中海·云麓公馆 3-1-1201 · 三室两厅两卫</div>
+                <div class="sub">总工期 128 天(节点模板累加)· 当前节点 <b>瓦工铺贴</b></div>
+                <div class="sub">实际开工 10-24 · 计划 10-22~11-02</div>
+              </div>
+              <div class="card">
+                <div class="head"><span class="ct">进场工人</span><span class="tag tag-info">3 人在场</span></div>
+                <div class="sub">王德贵瓦工组 · 10-24 进场打卡 · 工费额度余 62%</div>
+                <div class="sub">进出场流水正序留痕,施工日记自动判定记录类型</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="lab"><b>叁</b>节点账册</span>
+        <!-- P3 节点账册 -->
+        <div class="phone">
+          <div class="page">
+            <div class="nav"><span class="t">中海·云麓公馆 3-1-1201</span><span class="s">节点 6/17</span></div>
+            <div class="tabs">
+              <span class="tab">概览</span><span class="tab active">节点</span><span class="tab">日记</span><span class="tab">图纸</span>
+            </div>
+            <div class="body">
+              <div class="ledg">
+                <div class="lr hd"><span class="c1">序</span><span class="c2">节点 / 计划起止</span><span class="c3">状态</span><span class="c4">操作</span></div>
+                <div class="lr">
+                  <span class="c1">一</span>
+                  <div class="c2"><div class="nm">放线交底</div><div class="pl">09-15 点火</div></div>
+                  <span class="c3"><span class="tag tag-success">完工</span></span>
+                  <span class="c4"></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">二</span>
+                  <div class="c2"><div class="nm">拆改清运</div><div class="pl">09-16~09-19</div></div>
+                  <span class="c3"><span class="tag tag-success">完工</span></span>
+                  <span class="c4"></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">三</span>
+                  <div class="c2"><div class="nm">水电改造</div><div class="pl">09-20~09-28</div></div>
+                  <span class="c3"><span class="tag tag-success">完工</span></span>
+                  <span class="c4"></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">四</span>
+                  <div class="c2"><div class="nm">水电验收</div><div class="pl">09-30 · 免检留痕</div></div>
+                  <span class="c3"><span class="tag tag-warning">免检</span></span>
+                  <span class="c4"></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">五</span>
+                  <div class="c2"><div class="nm">瓦工进场</div><div class="pl">10-01</div></div>
+                  <span class="c3"><span class="tag tag-success">完工</span></span>
+                  <span class="c4"></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">六</span>
+                  <div class="c2"><div class="nm">瓦工铺贴</div><div class="pl">10-22~11-02 · 实开 10-24</div></div>
+                  <span class="c3"><span class="tag tag-danger">开工中</span></span>
+                  <span class="c4"><span class="mini-btn solid">完工</span></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">七</span>
+                  <div class="c2"><div class="nm">瓦工验收</div><div class="pl">11-03~11-04</div></div>
+                  <span class="c3"><span class="tag tag-info">未开工</span></span>
+                  <span class="c4"></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">八</span>
+                  <div class="c2"><div class="nm">木工吊顶</div><div class="pl">11-05~11-12</div></div>
+                  <span class="c3"><span class="tag tag-info">未开工</span></span>
+                  <span class="c4"></span>
+                </div>
+                <div class="lr">
+                  <span class="c1">九</span>
+                  <div class="c2"><div class="nm">木工制作</div><div class="pl">11-13~11-24</div></div>
+                  <span class="c3"><span class="tag tag-info">未开工</span></span>
+                  <span class="c4"></span>
+                </div>
+              </div>
+              <div class="sub" style="margin-top:10px">节点操作幂等,后端状态闸(非前置态拒操作);免检必带理由留痕。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thread">
+      <div class="step">
+        <span class="lab"><b>肆</b>完工确认</span>
+        <!-- P4 完工确认 dialog -->
+        <div class="phone">
+          <div class="page">
+            <div class="nav"><span class="t">中海·云麓公馆 3-1-1201</span><span class="s">节点 6/17</span></div>
+            <div class="tabs">
+              <span class="tab">概览</span><span class="tab active">节点</span><span class="tab">日记</span><span class="tab">图纸</span>
+            </div>
+            <div class="mask"></div>
+            <div class="dialog">
+              <div class="d-t">确认节点完工</div>
+              <div class="d-node">瓦工铺贴 · 第 6/17 节点</div>
+              <div class="d-chk">
+                <div class="row"><span class="k">完工检查</span><span class="v ok">款项比例闸通过</span></div>
+                <div class="row"><span class="k">后续节点</span><span class="v">瓦工验收 将解锁</span></div>
+                <div class="row"><span class="k">本节点日记</span><span class="v">3 篇 · 照片 6 张</span></div>
+              </div>
+              <div class="hint">完工后不可再改;重复提交幂等。</div>
+              <div class="btns"><span class="btn ghost">取消</span><span class="btn main">确认完工</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="lab"><b>伍</b>施工日记</span>
+        <!-- P5 施工日记 -->
+        <div class="phone">
+          <div class="page">
+            <div class="nav"><span class="t">中海·云麓公馆 3-1-1201</span><span class="s">日记 3</span></div>
+            <div class="tabs">
+              <span class="tab">概览</span><span class="tab">节点</span><span class="tab active">日记</span><span class="tab">图纸</span>
+            </div>
+            <div class="body">
+              <div class="writebox">
+                <textarea placeholder="记录今天工地上的事(进出场打卡自动判定记录类型)"></textarea>
+                <div class="wfoot">
+                  <div class="up"><span class="upcell">＋</span><span class="upcell" style="border-style:solid"></span></div>
+                  <span class="wbtn">记一笔</span>
+                </div>
+              </div>
+              <div class="diary">
+                <div class="d-head"><span class="d-who">张施工</span><span class="tag tag-success" style="margin-left:4px">进场</span><span class="d-time">10-25 08:47</span></div>
+                <div class="d-txt">瓦工 3 人进场,材料已码放并做成品保护,阳台地漏坡度复核无积水。</div>
+                <div class="d-imgs"><i></i><i></i></div>
+              </div>
+              <div class="diary">
+                <div class="d-head"><span class="d-who">张施工</span><span class="d-time">10-24 18:05</span></div>
+                <div class="d-txt">今日完成客厅地面对缝预排,损耗率 4%;明日上墙,先做烟道防裂处理。</div>
+              </div>
+              <div class="diary">
+                <div class="d-head"><span class="d-who">系统</span><span class="tag tag-warning" style="margin-left:4px">出场</span><span class="d-time">10-24 17:58</span></div>
+                <div class="d-txt">王德贵瓦工组 3 人出场打卡,工费额度余 62%。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="lab"><b>陆</b>图纸</span>
+        <!-- P6 图纸 -->
+        <div class="phone">
+          <div class="page">
+            <div class="nav"><span class="t">中海·云麓公馆 3-1-1201</span><span class="s">图纸 6</span></div>
+            <div class="tabs">
+              <span class="tab">概览</span><span class="tab">节点</span><span class="tab">日记</span><span class="tab active">图纸</span>
+            </div>
+            <div class="body">
+              <div class="plan"><div class="th"><span>平面</span></div><div><div class="nm">平面布置图</div><div class="mt">09-14 上传 · 陈曼如 · PDF</div></div></div>
+              <div class="plan"><div class="th"><span>拆改</span></div><div><div class="nm">拆改定位图</div><div class="mt">09-14 上传 · 陈曼如 · PDF</div></div></div>
+              <div class="plan"><div class="th"><span>水电</span></div><div><div class="nm">水电点位图</div><div class="mt">09-19 上传 · 张施工 · JPG×3</div></div></div>
+              <div class="plan"><div class="th"><span>瓦工</span></div><div><div class="nm">瓦工铺贴图</div><div class="mt">10-21 上传 · 张施工 · JPG</div></div></div>
+              <div class="plan"><div class="th"><span>木作</span></div><div><div class="nm">木作深化图</div><div class="mt">10-08 上传 · 陈曼如 · PDF</div></div></div>
+              <div class="plan"><div class="th"><span>效果</span></div><div><div class="nm">客厅效果图</div><div class="mt">08-30 上传 · 陈曼如 · JPG</div></div></div>
+              <div class="sub" style="margin-top:12px">只读投影:上传与版本管理走 Web 工程档案,现场点按大图预览。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="colnote" style="max-width:900px;margin-top:34px">
+    <span class="cap">方向定位</span>
+    <h3>账册·进度簿</h3>
+    <p><span class="k">信息焦点:</span>清单与操作——每行一个节点,状态 tag 一眼可读,行内「完工」小按钮即触达。</p>
+    <p><span class="k">版式:</span>全局 .card 家族(细墨线 4px 圆角卡)+墨线 tab(与客源/审批页同构)+账册表格(表头深纸色)。</p>
+    <p><span class="k">朱用量:</span>tag 语义色(施工中/开工中=朱,完工=苔绿,免检/出场=赭金)+进度条朱色,与既有页一致。</p>
+    <p><span class="k">实现成本:</span>最低——全部复用既有卡/tab/tag/btn-mini 习语,无自定义新样式族。</p>
+    <p><span class="k">数据口径:</span>与方向一/三完全同数,纯风格对比。</p>
+  </div>
+</body>
+</html>
