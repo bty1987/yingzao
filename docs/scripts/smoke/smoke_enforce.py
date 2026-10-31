@@ -421,6 +421,25 @@ def main():
     step("载入 api 规则(18 插件 65 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 65,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
+    # ===== 0b. mobile 槽位静态校验(R14):title/page 非空,require 必须引用已声明菜单/功能点 =====
+    # 防 typo 槽位静默隐藏(require 拼错=格子对所有非 admin 用户消失,admin 旁路看不出来)
+    descs, all_menus, all_caps = {}, set(), set()
+    for f in sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                                           "addons", "*", "src", "main", "resources", "addon.yml"))):
+        desc = yaml.safe_load(open(f, encoding="utf-8"))["addon"]
+        descs[desc["id"]] = desc
+        for m in desc.get("menus") or []:
+            all_menus.add(m.get("path"))
+        for c in desc.get("mounts") or []:
+            if c.get("capability"):
+                all_caps.add(c["capability"])
+    bad = [(aid, m.get("title"), m.get("require")) for aid, desc in descs.items()
+           for m in desc.get("mobile") or []
+           if not m.get("title") or not m.get("page")
+           or (m.get("require") and m["require"] not in all_menus and m["require"] not in all_caps)]
+    step("mobile 槽位 require 全部引用已声明菜单/功能点(customer/example 共 2 格)",
+         not bad and sum(len(d.get("mobile") or []) for d in descs.values()) == 2, bad)
+
     # ===== 0. 静态完备性:全量端点样例 vs 模拟 match,零未声明 =====
     print("\n== 静态完备性(method 感知模拟 match)==")
     miss = [(a, m, u) for (a, m, u) in ENDPOINTS if mock_match(rules, u, m) is None]

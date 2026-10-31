@@ -15,6 +15,7 @@ public record AddonDescriptor(
         List<Mount> mounts,
         List<Api> apis,
         List<Metric> metrics,
+        List<Mobile> mobile,
         Map<String, Object> dicts) {
 
     /** 插件菜单声明:前端据此动态注册路由与侧栏菜单项。 */
@@ -33,6 +34,14 @@ public record AddonDescriptor(
 
     /** 前端槽位挂载声明:component 由插件前端包导出,capability 为渲染所需权限。 */
     public record Mount(String slot, String component, String capability) {
+    }
+
+    /**
+     * 移动端工作台宫格槽位声明(docs/15 R14):icon=宋体单字方章字/sub=一行说明/page=app 内页路由/
+     * sort=跨插件排序。require 沿 api 段语义——菜单 path 或 capability;为空 = 人人可见;
+     * 下发时按当前用户授权过滤,无权限格子不出现。
+     */
+    public record Mobile(String icon, String title, String sub, String page, String require, int sort) {
     }
 
     /**

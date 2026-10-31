@@ -60,6 +60,12 @@ public class AddonRegistry {
                 .map(m -> new AddonDescriptor.Mount((String) m.get("slot"), (String) m.get("component"),
                         (String) m.get("capability")))
                 .toList();
+        List<Map<String, Object>> mobile = (List<Map<String, Object>>) a.getOrDefault("mobile", List.of());
+        List<AddonDescriptor.Mobile> parsedMobile = mobile.stream()
+                .map(m -> new AddonDescriptor.Mobile((String) m.get("icon"), (String) m.get("title"),
+                        (String) m.get("sub"), (String) m.get("page"), (String) m.get("require"),
+                        m.get("sort") == null ? 0 : ((Number) m.get("sort")).intValue()))
+                .toList();
         List<Map<String, Object>> apis = (List<Map<String, Object>>) a.getOrDefault("api", List.of());
         List<AddonDescriptor.Api> parsedApis = apis.stream()
                 .map(r -> new AddonDescriptor.Api((String) r.get("prefix"), (String) r.get("exact"),
@@ -86,6 +92,7 @@ public class AddonRegistry {
                 parsedMounts,
                 parsedApis,
                 parsedMetrics,
+                parsedMobile,
                 (Map<String, Object>) a.getOrDefault("dicts", Map.of()));
     }
 

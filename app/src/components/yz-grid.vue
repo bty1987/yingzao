@@ -23,11 +23,14 @@ const props = defineProps({
   items: { type: Array, default: () => [] },
   columns: { type: Number, default: 4 },
 })
-const emit = defineEmits(['tap'])
+// 双发 tap+click:uni-app H5 编译器把组件标签上的 @tap 重写为 onClick 监听(emit('tap') 查
+// onTap prop 落空),mp 端 bindtap 收的是 'tap' 事件——两平台各命中其监听,另一名无监听者不双触发。
+const emit = defineEmits(['tap', 'click'])
 
 function onTap(item) {
   if (item.disabled) return
   emit('tap', item)
+  emit('click', item)
 }
 </script>
 

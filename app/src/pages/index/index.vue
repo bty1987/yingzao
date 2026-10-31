@@ -5,28 +5,17 @@
       <text class="cell-sub">今天也要把家交好</text>
     </view>
 
+    <!-- 工作台宫格(R14 配置化):条目 = GET /api/addons 各插件的 mobile 槽位段,
+         后端已按当前用户授权过滤(无权限格子不出现),前端按 sort 跨插件合并排序 -->
+    <view v-if="gridItems.length" class="card">
+      <yz-grid :items="gridItems" :columns="4" @tap="goGrid" />
+    </view>
+    <view v-else class="card">
+      <text class="cell-sub">暂无应用,由已启用插件按权限下发</text>
+    </view>
+
+    <!-- 内核固定入口:通知(带未读徽章,内核设施不上 addon.yml,与 tabBar 同属 app 壳) -->
     <view class="card">
-      <view class="cell" @click="go('/pages/leads/create')">
-        <view class="cell-main">
-          <text class="cell-title">登记客源</text>
-          <text class="cell-sub">店头/渠道线索现场登记</text>
-        </view>
-        <text class="arrow">›</text>
-      </view>
-      <view class="cell" @click="go('/pages/chances/chances')">
-        <view class="cell-main">
-          <text class="cell-title">我的机会</text>
-          <text class="cell-sub">分配给我的客源机会跟进</text>
-        </view>
-        <text class="arrow">›</text>
-      </view>
-      <view class="cell" @click="go('/pages/leave/leave')">
-        <view class="cell-main">
-          <text class="cell-title">请假示例</text>
-          <text class="cell-sub">插件接入轻量审批的示范(days≥3 两级审批)</text>
-        </view>
-        <text class="arrow">›</text>
-      </view>
       <view class="cell" @click="go('/pages/notifications/notifications')">
         <view class="cell-main">
           <text class="cell-title">通知</text>
@@ -37,31 +26,54 @@
           <text class="arrow">›</text>
         </view>
       </view>
-      <view class="cell" @click="go('/pkg-base/pages/playground')">
-        <view class="cell-main">
-          <text class="cell-title">组件示范</text>
-          <text class="cell-sub">基础组件基建验收页(R12~R13,R14 配置化时由槽位下发取代)</text>
-        </view>
-        <text class="arrow">›</text>
-      </view>
     </view>
   </view>
 </template>
 
 <script>
-import { fetchUnreadCount } from '../../api'
+import { fetchUnreadCount, listAddons } from '../../api'
+import yzGrid from '../../components/yz-grid.vue'
 
 export default {
+  components: { yzGrid },
   data() {
-    return { displayName: '', unread: 0 }
+    return { displayName: '', unread: 0, gridItems: [] }
   },
   onShow() {
     this.displayName = uni.getStorageSync('yz_display_name') || ''
     this.refreshUnread()
+    this.refreshGrid()
   },
   methods: {
     go(url) {
       uni.navigateTo({ url })
+    },
+    goGrid(item) {
+      this.go(item.page)
+    },
+    async refreshGrid() {
+      try {
+        const res = await listAddons()
+        const items = []
+        for (const a of (res.data || [])) {
+          for (const m of (a.mobile || [])) {
+            items.push({
+              key: a.id + m.page,
+              icon: m.icon,
+              title: m.title,
+              sub: m.sub || '',
+              page: m.page,
+              sort: m.sort || 0,
+              addon: a.id
+            })
+          }
+        }
+        // 跨插件排序:sort 升序,同 sort 按插件 id 稳定
+        items.sort((x, y) => x.sort - y.sort || (x.addon < y.addon ? -1 : x.addon > y.addon ? 1 : 0))
+        this.gridItems = items
+      } catch (e) {
+        // 拉取失败静默,下次 onShow 重试(保留现有格子避免闪空)
+      }
     },
     async refreshUnread() {
       try {

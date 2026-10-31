@@ -3,6 +3,9 @@ import { get, post } from './http'
 // 认证
 export const login = (data) => post('/api/auth/login', data)
 
+// 已启用插件清单(R14 工作台配置化宫格数据源):mobile 槽位段按当前用户授权过滤后下发
+export const listAddons = () => get('/api/addons')
+
 // 本组织用户(转交/指派选择人)
 export const listOrgUsers = () => get('/api/users')
 

@@ -1,7 +1,7 @@
 addon:
   id: customer
   name: 客源管理
-  version: 0.3.0
+  version: 0.4.0
   error-code-segment: 210000
   menus:
     - path: /customer/leads
@@ -17,6 +17,10 @@ addon:
       - { key: walkin, label: 自然进店 }
   mounts:
     - { slot: customer.lead.detail.footer, component: CustomerProfileCard, capability: customerprofile:view }
+  # 移动端工作台宫格槽位(R14):page=app 内页路由,require=菜单 path(授权该菜单的角色可见);
+  # 我的机会已固定在 app tabBar,不重复占格。
+  mobile:
+    - { icon: 录, title: 登记客源, sub: 店头/渠道线索现场登记, page: /pages/leads/create, require: /customer/leads, sort: 1 }
   api:
     - prefix: /api/customer/leads
       require: /customer/leads

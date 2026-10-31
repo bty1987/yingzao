@@ -160,6 +160,11 @@ def main():
     ok = cust and len(cust.get("menus") or []) == 2 \
         and any((m.get("capability") or "") == "customerprofile:view" for m in (cust.get("mounts") or []))
     step("admin 可见双菜单+capability 挂载", ok, cust)
+    # R14:admin 旁路下 mobile 槽位全量下发(customer 录客源 1 格/example 假 1 格)
+    _m_admin = {a["id"]: [m.get("page") for m in (a.get("mobile") or [])]
+                for a in (addons_admin or []) if a.get("mobile")}
+    step("admin mobile 槽位全量下发", _m_admin.get("customer") == ["/pages/leads/create"]
+         and _m_admin.get("example") == ["/pages/leave/leave"], _m_admin)
 
     user_d = login("example_d")  # org1 永不授权账号(真无角色,v1 段专用)
     tok_d = user_d["token"] if user_d else None
@@ -199,6 +204,32 @@ def main():
     # 功能点已授权 → 其挂载所在插件条目合法出现,但未授权的菜单必须仍为空(不泄露)
     prof1 = next((a for a in (addons_b1 or []) if a.get("id") == "customerprofile"), None)
     step("未授权菜单不可见(capability 挂载随授权下发)", prof1 is not None and prof1.get("menus") == [], prof1)
+
+    # ---- 工作台宫格槽位下发(R14,第 110 次):mobile 段随插件下发+require 权限过滤 ----
+    cust_m = next((m for m in (cust1 or {}).get("mobile") or [] if m.get("page") == "/pages/leads/create"), None)
+    step("mobile 槽位随授权下发(登记客源 require=/customer/leads)",
+         cust_m is not None and cust_m.get("require") == "/customer/leads"
+         and (cust_m.get("icon") or "") == "录" and cust_m.get("sort") == 1, cust_m)
+    step("未授权插件整条不出现(example_d 无 /example/leaves)",
+         next((a for a in (addons_b1 or []) if a.get("id") == "example"), None) is None,
+         [a.get("id") for a in (addons_b1 or [])])
+    api_ok("角色改授权:仅 /example/leaves", "PUT", "/api/roles/%s/menus" % role_id, tok_admin,
+           {"menus": ["/example/leaves"]})
+    addons_b1b = api_ok("改授权后插件下发(example_d)", "GET", "/api/addons", tok_d)
+    ex1b = next((a for a in (addons_b1b or []) if a.get("id") == "example"), None)
+    # example 插件菜单恰为 /example/leaves:授权后菜单 1 + 槽位 1 同条存活
+    ok = ex1b is not None and len(ex1b.get("menus") or []) == 1 \
+        and len(ex1b.get("mobile") or []) == 1 \
+        and ex1b["mobile"][0].get("page") == "/pages/leave/leave"
+    step("example 槽位随菜单授权存活(菜单 1+槽位 1)", ok, ex1b)
+    # customer 槽位 require=/customer/leads 不在新授权 → 槽位滤空;菜单同滤;
+    # capability 挂载(customerprofile:view)在授权 → 插件条目合法存活
+    cust1b = next((a for a in (addons_b1b or []) if a.get("id") == "customer"), None)
+    ok = cust1b is not None and cust1b.get("menus") == [] and cust1b.get("mobile") == [] \
+        and len(cust1b.get("mounts") or []) == 1
+    step("customer 槽位被 require 滤空(菜单/槽位空,capability 挂载仍在)", ok, cust1b)
+    api_ok("角色授权恢复(双客源菜单)", "PUT", "/api/roles/%s/menus" % role_id, tok_admin,
+           {"menus": ["/customer/leads", "/customer/chances"]})
 
     api_ok("删除角色", "DELETE", "/api/roles/%s" % role_id, tok_admin)
     addons_b2 = api_ok("删除后插件下发(example_d)", "GET", "/api/addons", tok_d)

@@ -32,6 +32,7 @@ public class AddonController {
     public record AddonView(String id, String name, String version,
                             List<AddonDescriptor.Menu> menus,
                             List<AddonDescriptor.Mount> mounts,
+                            List<AddonDescriptor.Mobile> mobile,
                             List<ApiView> apis, Object dicts) {
     }
 
@@ -49,6 +50,7 @@ public class AddonController {
         for (AddonDescriptor d : registry.enabled()) {
             List<AddonDescriptor.Menu> menus = d.menus();
             List<AddonDescriptor.Mount> mounts = d.mounts();
+            List<AddonDescriptor.Mobile> mobile = d.mobile();
             if (!admin) {
                 menus = d.menus().stream().filter(m -> grants.menus().contains(m.path())).toList();
                 // capability 为空的挂载 = 无权限诉求,人人可见
@@ -56,14 +58,20 @@ public class AddonController {
                         .filter(m -> m.capability() == null || m.capability().isBlank()
                                 || grants.capabilities().contains(m.capability()))
                         .toList();
+                // 工作台宫格槽位(R14):require 沿 api 段语义=菜单 path 或 capability,为空人人可见
+                mobile = d.mobile().stream()
+                        .filter(m -> m.require() == null || m.require().isBlank()
+                                || grants.menus().contains(m.require())
+                                || grants.capabilities().contains(m.require()))
+                        .toList();
             }
-            if (menus.isEmpty() && mounts.isEmpty()) {
+            if (menus.isEmpty() && mounts.isEmpty() && mobile.isEmpty()) {
                 continue;
             }
             List<ApiView> apis = d.apis() == null ? List.of() : d.apis().stream()
                     .map(a -> new ApiView(a.prefix(), a.exact(), a.require(), a.methods()))
                     .toList();
-            views.add(new AddonView(d.id(), d.name(), d.version(), menus, mounts, apis, d.dicts()));
+            views.add(new AddonView(d.id(), d.name(), d.version(), menus, mounts, mobile, apis, d.dicts()));
         }
         return ApiResponse.ok(views);
     }

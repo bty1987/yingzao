@@ -1,12 +1,15 @@
 addon:
   id: example
   name: 请假示例
-  version: 0.2.0
+  version: 0.3.0
   error-code-segment: 290000   # 示范工程独占段,与业务 addon 段(210000-260000)保持距离
   menus:
     - path: /example/leaves
       title: 请假示例
       icon: tickets
+  # 移动端工作台宫格槽位(R14):请假两页(发起+我的)合一入口落在「我的请假」页
+  mobile:
+    - { icon: 假, title: 请假, sub: 发起与跟踪我的请假单, page: /pages/leave/leave, require: /example/leaves, sort: 10 }
   api:
     - prefix: /api/example/leaves
       require: /example/leaves
