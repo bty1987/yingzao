@@ -2458,6 +2458,81 @@ def main():
     step("总线对账:construction 事件零滞留(全消费确认)", c_undelivered == 0, c_undelivered)
     step("免检留痕:轨迹在册(修老完全绕闸无痕)", checkout_tracks >= 1, checkout_tracks)
 
+    # ---- R17 施工域移动端:mobile 槽位/我的工地(参与即所见)/日记图片/图纸投影 ----
+    print("== 施工域移动端(R17:my-sites+日记图片+图纸投影,视觉方向=账册骨架+朱批带/稿纸日记)==")
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("delete from yz_file where biz_type in ('construction_diary','construction_drawing')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    def upload_r17(xbytes, token, fname, ctype="image/png", biz_type=None, biz_id=None):
+        boundary = "smokeboundr17"
+        head = ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" +
+                fname + "\"\r\nContent-Type: " + ctype + "\r\n\r\n")
+        body = head.encode("utf-8") + xbytes + ("\r\n--" + boundary + "--\r\n").encode("utf-8")
+        url = BASE + "/api/files"
+        if biz_type:
+            url = url + "?bizType=" + urllib.parse.quote(biz_type)
+            if biz_id is not None:
+                url = url + "&bizId=" + str(biz_id)
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
+        req.add_header("Authorization", "Bearer " + token)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    addons_r17 = api_ok("admin 插件下发(construction mobile 槽位)", "GET", "/api/addons", tok_admin)
+    con_addon = next((a for a in (addons_r17 or []) if a.get("id") == "construction"), None)
+    mob_r17 = next((mm for mm in (con_addon or {}).get("mobile") or []
+                    if mm.get("page") == "/pkg-site/site/list"), None)
+    step("construction mobile 槽位下发(require=既有菜单)", bool(mob_r17)
+         and mob_r17.get("require") == "/construction/constructions",
+         (con_addon or {}).get("mobile"))
+
+    # 我的工地:参与即所见——监理 example_c 与工人 example_b 见单D;admin 未参与不可见
+    sites_c = api_ok("监理视角我的工地(example_c)", "GET", "/api/construction/my-sites", tok_c)
+    ids_c = [r.get("order_id") for r in (sites_c or [])]
+    step("单D在监理工地列表(竣工单保留+当前节点快照)", order_d in ids_c
+         and all(r.get("current_node_name") is not None or r.get("current_schedule_id") is None
+                 for r in (sites_c or [])), ids_c)
+    sites_b = api_ok("工人视角我的工地(example_b)", "GET", "/api/construction/my-sites", tok_b)
+    step("单D在工人工地列表(在册未停用)", order_d in [r.get("order_id") for r in (sites_b or [])], sites_b)
+    sites_a = api_ok("未参与视角我的工地(admin)", "GET", "/api/construction/my-sites", tok_admin)
+    step("单D不在未参与人列表(一个接口替代三角色接口)", order_d not in
+         [r.get("order_id") for r in (sites_a or [])],
+         [r.get("order_id") for r in (sites_a or [])])
+
+    # 日记图片:上传(biz 挂接)→ 写日记带 images → 回读数组化+has_drawing 自动置位
+    png_r17 = bytes.fromhex("89504e470d0a1a0a") + ("smoker17" * 11).encode("utf-8")
+    st, res = upload_r17(png_r17, tok_admin, "日记图.png", "image/png",
+                         "construction_diary", sched1["id"])
+    fid_diary = ((res or {}).get("data") or {}).get("id")
+    step("日记图片上传(bizType=construction_diary)", bool(fid_diary), res)
+    did_r17 = api_ok("写日记带图(images 数组)", "POST",
+                     "/api/construction/schedules/%s/diaries" % sched1["id"], tok_admin,
+                     {"content": "贴砖收口完成,附现场照片", "images": [fid_diary]})
+    diaries_r17 = api_ok("日记回读(订单面)", "GET", "/api/construction/orders/%s/diaries" % order_d, tok_admin)
+    hit_r17 = next((dd for dd in (diaries_r17 or []) if dd.get("id") == did_r17), None)
+    step("日记 images 数组化回显+has_drawing 自动置位", hit_r17 and hit_r17.get("images") == [fid_diary]
+         and hit_r17.get("has_drawing") == 1, hit_r17)
+
+    # 图纸投影:上传挂 biz → 只读反查 → 删除后退出(软删过滤)
+    st, res = upload_r17(png_r17, tok_admin, "水电图.png", "image/png",
+                         "construction_drawing", order_d)
+    fid_dwg = ((res or {}).get("data") or {}).get("id")
+    dwg = api_ok("图纸投影反查", "GET", "/api/construction/orders/%s/drawings" % order_d, tok_admin)
+    step("图纸在册(id/biz 锚,零字节流)", any(r.get("id") == fid_dwg for r in (dwg or []))
+         and all(r.get("biz_type") == "construction_drawing" for r in (dwg or [])), dwg)
+    api_ok("图纸删除(上传人)", "POST", "/api/files/%s/delete" % fid_dwg, tok_admin)
+    dwg2 = api_ok("删除后图纸列表", "GET", "/api/construction/orders/%s/drawings" % order_d, tok_admin)
+    step("软删退出投影", not any(r.get("id") == fid_dwg for r in (dwg2 or [])), dwg2)
+
     print("== 库存(addon-inventory V1:单据即库存+原子守卫+领料双闸契约+外辅+采购)==")
     stamp_inv = time.strftime("%H%M%S")
 

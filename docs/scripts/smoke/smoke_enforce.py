@@ -439,8 +439,9 @@ def main():
            for m in desc.get("mobile") or []
            if not m.get("title") or not m.get("page")
            or (m.get("require") and m["require"] not in all_menus and m["require"] not in all_caps)]
-    step("mobile 槽位 require 全部引用已声明菜单/功能点(customer/example 共 2 格)",
-         not bad and sum(len(d.get("mobile") or []) for d in descs.values()) == 2, bad)
+    # 期望格数随接入插件演进:R14=2(customer/example)→ R17 +1(construction)=3
+    step("mobile 槽位 require 全部引用已声明菜单/功能点(customer/example/construction 共 3 格)",
+         not bad and sum(len(d.get("mobile") or []) for d in descs.values()) == 3, bad)
 
     # ===== 0c. approval-forms 静态校验(R15):key/title/submit 非空,require 引用已声明菜单/功能点,字段带 id/label =====
     # 防 typo 表单对所有非 admin 静默隐藏(与 mobile 段同一静默失败模式)

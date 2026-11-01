@@ -66,7 +66,7 @@ public class ConstructionController {
     public record RateRequest(Integer score1, Integer score2, Integer score3, String assessment) {
     }
 
-    public record DiaryRequest(String content, Boolean hasDrawing) {
+    public record DiaryRequest(String content, Boolean hasDrawing, java.util.List<Long> images) {
     }
 
     public record AcceptanceRequest(List<ConstructionService.AcceptanceItemCmd> items, String remark) {
@@ -187,6 +187,21 @@ public class ConstructionController {
     }
 
     // ---- 施工单 ----
+
+    /** 我的工地(R17,app P0-3):参与即所见(监理 or 在册工人),归 /api/construction 既有 prefix。 */
+    @GetMapping("/my-sites")
+    public ApiResponse<Object> mySites(HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        Long userId = (Long) request.getAttribute("yz.userId");
+        return ApiResponse.ok(constructions.mySites(orgId, userId));
+    }
+
+    /** 图纸只读投影(R17):yz_file 按 biz_type=construction_drawing 反查,前端持 id 拼预览 URL。 */
+    @GetMapping("/orders/{orderId}/drawings")
+    public ApiResponse<Object> drawings(@PathVariable long orderId, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        return ApiResponse.ok(constructions.drawings(orgId, orderId));
+    }
 
     @GetMapping("/orders")
     public ApiResponse<Map<String, Object>> page(@RequestParam(required = false) String orderNo,
@@ -350,7 +365,8 @@ public class ConstructionController {
         long orgId = (Long) request.getAttribute("yz.orgId");
         Long userId = (Long) request.getAttribute("yz.userId");
         return ApiResponse.ok(teams.addDiary(orgId, id, body == null ? null : body.content(),
-                body == null ? null : body.hasDrawing(), userId));
+                body == null ? null : body.hasDrawing(),
+                body == null ? null : body.images(), userId));
     }
 
     @GetMapping("/schedules/{id}/diaries")

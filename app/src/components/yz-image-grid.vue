@@ -1,5 +1,5 @@
 <template>
-  <view class="yig" :style="{ '--cell': cellRpx + 'rpx' }">
+  <view class="yig" :style="{ '--cell': cellRpx }">
     <view v-for="(img, i) in images" :key="img.fileId || 'i' + i" class="cell" @tap="onPreview(i)">
       <image v-if="img.src" class="pic" :src="img.src" mode="aspectFill" />
       <view v-else class="cell-fallback"><text>图</text></view>

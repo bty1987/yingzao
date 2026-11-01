@@ -1,12 +1,15 @@
 addon:
   id: construction
   name: 施工管理
-  version: 0.4.0
+  version: 0.5.0
   error-code-segment: 240000
   menus:
     - path: /construction/constructions
       title: 施工管理
       icon: set-up
+  # 移动端工作台槽位(R14 机制,R17 接入):require 引既有菜单 /construction/constructions
+  mobile:
+    - { icon: 工, title: 我的工地, sub: 施工节点·日记·图纸, page: /pkg-site/site/list, require: /construction/constructions, sort: 2 }
   dicts:
     drawlineStatus:
       - { key: '0', label: 排队 }

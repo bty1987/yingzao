@@ -112,11 +112,13 @@ public class ConstructionService {
     private final NormApi norms;
     private final ConstructionTeamService teams;
     private final ConstructionProfileService profiles;
+    private final com.yingzao.core.file.FileService files;
 
     public ConstructionService(JdbcTemplate jdbc, MessageSource messages, YzEventBus eventBus,
             DecorationApi decorations, QuotationApi quotations, PaymentApi payments,
             com.yingzao.addons.api.SalesApi sales, NormApi norms,
-            ConstructionTeamService teams, ConstructionProfileService profiles) {
+            ConstructionTeamService teams, ConstructionProfileService profiles,
+            com.yingzao.core.file.FileService files) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.eventBus = eventBus;
@@ -127,6 +129,7 @@ public class ConstructionService {
         this.norms = norms;
         this.teams = teams;
         this.profiles = profiles;
+        this.files = files;
     }
 
     // ---- 组织配置(懒初始化) ----
@@ -573,6 +576,55 @@ public class ConstructionService {
     }
 
     // ---- 施工单:查询/监理/辅料开关 ----
+
+    /**
+     * 我的工地(R17,app P0-3 首项):一个 involvement 接口替代老系统「工程/监理/质检」三角色接口
+     * (fl-yy 按 constructionfunctionright 角色分叉三套列表,营造收敛为参与即所见)。
+     * 口径=我任监理的单 + 我作为在册工人(未停用)挂过节点排期的单;竣工单保留在列表(历史工地)。
+     */
+    public List<Map<String, Object>> mySites(long orgId, long userId) {
+        return jdbc.queryForList("""
+                select o.id, o.order_id, o.order_no, o.customer_name, o.house_label,
+                       o.supervisor_id, o.supervisor_name, o.current_schedule_id, o.current_sort,
+                       o.process, o.period,
+                       cur.node_name as current_node_name, cur.status as current_node_status,
+                       cur.work_status as current_work_status,
+                       (select count(*) from construction_schedule s
+                        where s.org_id = o.org_id and s.order_id = o.order_id) as node_total,
+                       (select count(*) from construction_schedule s
+                        where s.org_id = o.org_id and s.order_id = o.order_id and s.status = 2) as node_done
+                from construction_order o
+                left join construction_schedule cur on cur.id = o.current_schedule_id
+                where o.org_id = ?
+                  and (o.supervisor_id = ? or exists (
+                        select 1 from construction_schedule s
+                        join construction_worker w on w.schedule_id = s.id
+                        where s.org_id = o.org_id and s.order_id = o.order_id
+                          and w.user_id = ? and w.status = 0))
+                order by o.process asc, o.id desc
+                """, orgId, userId, userId);
+    }
+
+    /** 图纸只读投影(R17):yz_file 按 biz 挂接反查(biz_type=construction_drawing,biz_id=装修单),零字节流。 */
+    public List<Map<String, Object>> drawings(long orgId, long orderId) {
+        loadConstructionMap(orgId, orderId); // 归属校验
+        return files.list(orgId, DRAWING_BIZ_TYPE, orderId).stream()
+                .map(meta -> {
+                    Map<String, Object> row = new LinkedHashMap<String, Object>();
+                    row.put("id", meta.id());
+                    row.put("file_name", meta.fileName());
+                    row.put("content_type", meta.contentType());
+                    row.put("size_bytes", meta.sizeBytes());
+                    row.put("biz_type", meta.bizType());
+                    row.put("biz_id", meta.bizId());
+                    row.put("created_at", meta.createdAt());
+                    return row;
+                })
+                .toList();
+    }
+
+    /** 图纸挂接类型协议键:上传方(bizType 参数)与本投影共用。 */
+    public static final String DRAWING_BIZ_TYPE = "construction_drawing";
 
     public Map<String, Object> page(long orgId, String orderNo, String customerName, Integer process,
             Long supervisorId, int pageNo, int size) {

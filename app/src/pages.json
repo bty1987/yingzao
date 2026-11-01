@@ -57,6 +57,23 @@
   },
   "subPackages": [
     {
+      "root": "pkg-site",
+      "pages": [
+        {
+          "path": "site/list",
+          "style": {
+            "navigationBarTitleText": "我的工地"
+          }
+        },
+        {
+          "path": "site/detail",
+          "style": {
+            "navigationBarTitleText": "工地详情"
+          }
+        }
+      ]
+    },
+    {
       "root": "pkg-base",
       "pages": [
         { "path": "pages/playground", "style": { "navigationBarTitleText": "组件示范" } }

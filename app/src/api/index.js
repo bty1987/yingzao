@@ -41,3 +41,12 @@ export const approveApproval = (id, data) => post(`/api/approvals/${id}/approve`
 export const rejectApproval = (id, data) => post(`/api/approvals/${id}/reject`, data)
 export const transferApproval = (id, data) => post(`/api/approvals/${id}/transfer`, data)
 export const cancelApproval = (id) => post(`/api/approvals/${id}/cancel`)
+
+// 施工域(addon-construction,R17):我的工地/详情/节点推进/日记(带图)/图纸投影
+export const listMySites = () => get('/api/construction/my-sites')
+export const getConstructionDetail = (orderId) => get(`/api/construction/orders/${orderId}`)
+export const beginScheduleNode = (scheduleId) => post(`/api/construction/schedules/${scheduleId}/begin`)
+export const finishScheduleNode = (scheduleId) => post(`/api/construction/schedules/${scheduleId}/finish`)
+export const listOrderDiaries = (orderId) => get(`/api/construction/orders/${orderId}/diaries`)
+export const createDiary = (scheduleId, data) => post(`/api/construction/schedules/${scheduleId}/diaries`, data)
+export const listDrawings = (orderId) => get(`/api/construction/orders/${orderId}/drawings`)

@@ -143,8 +143,13 @@ public class ConstructionTeamService {
 
     // ---- 施工日志(自动进出场判定) ----
 
+    /**
+     * 写日记:content 必填 ≤500;images 为 yz_file.id 数组(R17,V606,业务表存 id 惯例),
+     * 非空自动置 has_drawing=1(老字段语义保留)。
+     */
     @Transactional
-    public long addDiary(long orgId, long scheduleId, String content, Boolean hasDrawing, long operatorId) {
+    public long addDiary(long orgId, long scheduleId, String content, Boolean hasDrawing,
+            List<Long> images, long operatorId) {
         Map<String, Object> schedule = loadSchedule(orgId, scheduleId);
         require(content != null && !content.isBlank() && content.trim().length() <= 500,
                 ConstructionService.CODE_PARAM, m.msg("construction.param.invalid"));
@@ -161,33 +166,68 @@ public class ConstructionTeamService {
         } else {
             atttype = DIARY_PLAIN;
         }
+        boolean hasImg = images != null && !images.isEmpty();
         jdbc.update("""
                 insert into construction_diary(org_id, order_id, schedule_id, user_id, user_name, content,
-                    atttype, has_drawing)
-                values (?,?,?,?,?,?,?,?)
+                    atttype, has_drawing, images)
+                values (?,?,?,?,?,?,?,?,?)
                 """, orgId, schedule.get("order_id"), scheduleId, operatorId, displayName(operatorId),
-                content.trim(), atttype, Boolean.TRUE.equals(hasDrawing) ? 1 : 0);
+                content.trim(), atttype, Boolean.TRUE.equals(hasDrawing) || hasImg ? 1 : 0, toJson(images));
         return jdbc.queryForObject("select last_insert_id()", Long.class);
     }
 
     public List<Map<String, Object>> listDiaries(long orgId, long scheduleId) {
         loadSchedule(orgId, scheduleId);
-        return jdbc.queryForList("""
-                select id, user_name, content, atttype, has_drawing, created_at
+        return parseImages(jdbc.queryForList("""
+                select id, user_name, content, atttype, has_drawing, images, created_at
                 from construction_diary where org_id = ? and schedule_id = ? order by id desc
-                """, orgId, scheduleId);
+                """, orgId, scheduleId));
     }
 
     public List<Map<String, Object>> listOrderDiaries(long orgId, long orderId) {
-        return jdbc.queryForList("""
+        return parseImages(jdbc.queryForList("""
                 select d.id, d.schedule_id, s.node_name, d.user_name, d.content, d.atttype, d.has_drawing,
-                       d.created_at
+                       d.images, d.created_at
                 from construction_diary d join construction_schedule s on s.id = d.schedule_id
                 where d.org_id = ? and d.order_id = ? order by d.id desc
-                """, orgId, orderId);
+                """, orgId, orderId));
     }
 
     // ---- 内部 ----
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper IMAGES_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /** yz_file.id 数组 → JSON 串(空表=null);List&lt;Long&gt; 序列化实际不会失败。 */
+    private String toJson(List<Long> images) {
+        if (images == null || images.isEmpty()) {
+            return null;
+        }
+        try {
+            return IMAGES_MAPPER.writeValueAsString(
+                    images.stream().filter(java.util.Objects::nonNull).distinct().toList());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 行内 images JSON 串 → 数组(解析失败=空数组,脏数据不炸展示面)。 */
+    private List<Map<String, Object>> parseImages(List<Map<String, Object>> rows) {
+        for (Map<String, Object> row : rows) {
+            Object raw = row.get("images");
+            if (raw == null || String.valueOf(raw).isBlank()) {
+                row.put("images", List.of());
+                continue;
+            }
+            try {
+                row.put("images", IMAGES_MAPPER.readValue(String.valueOf(raw),
+                        IMAGES_MAPPER.getTypeFactory().constructCollectionType(List.class, Long.class)));
+            } catch (Exception e) {
+                row.put("images", List.of());
+            }
+        }
+        return rows;
+    }
 
     /** cond 不满足即抛;第三个参数为已解析文案(调用方用 m.msg(...) 传入)。 */
     private void require(boolean cond, int code, String message) {

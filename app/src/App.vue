@@ -23,6 +23,7 @@ page {
   --yz-ink: #1A1A18;
   --yz-ink-70: rgba(26, 26, 24, 0.70);
   --yz-ink-50: rgba(26, 26, 24, 0.50);
+  --yz-ink-62: rgba(26, 26, 24, 0.62);
   --yz-ink-35: rgba(26, 26, 24, 0.35);
   --yz-line: rgba(26, 26, 24, 0.12);
   --yz-line-strong: rgba(26, 26, 24, 0.55);
