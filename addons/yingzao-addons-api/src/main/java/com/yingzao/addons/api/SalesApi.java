@@ -34,4 +34,10 @@ public interface SalesApi {
      * 主单轴 status not in {2 全退, 4 废单, 5 完结})。消费方:装修决算六项检查「主材销售」子项。
      */
     int countUnfinishedOrders(long orgId, long orderId);
+
+    /**
+     * 装修单名下全部销售单摘要(只读;C 端资金流水主材款投影数据源):
+     * 含完结单(已付历史仍需可见),剔除全退/倒单/废单。按 id 倒序(新单在前)。
+     */
+    java.util.List<SalesOrderRef> listByDecorationOrder(long orgId, long orderId);
 }

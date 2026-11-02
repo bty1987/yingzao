@@ -5915,6 +5915,68 @@ def main():
         api_err("非本人装修单进度拒绝 360004", "GET",
                 "/api/c/progress?orderId=%s" % order_a, c_token, None, 360004)
 
+    # ---- R20 资金流水/工地相册(C 端投影;票据卡+九宫格拍板已落,portal 0.2.0) ----
+    print("== C端资金流水/工地相册(R20:finance/album/files,同口径 addon-payment+construction 投影)==")
+    fin0 = api_ok("C端资金流水(空户结构)", "GET", "/api/c/finance", c_token)
+    step("资金流水结构(list)", isinstance(fin0, list), fin0)
+    api_err("员工令牌调资金流水拒绝 122006", "GET", "/api/c/finance", tok_admin, None, 122006)
+    st, res = call("GET", "/api/c/finance")
+    step("匿名调资金流水 401", st == 401, (st, res))
+    if order_a:
+        api_err("非本人相册拒绝 360004", "GET", "/api/c/album?orderId=%s" % order_a, c_token, None, 360004)
+    st, res = call("GET", "/api/c/files/1", c_token)
+    step("相册外文件拒绝 360004(白名单现算,不泄露存在性)",
+         (res or {}).get("code") == 360004, res)
+
+    # 真数据断言:把施工冒烟单 order_d 临时改挂 C 端客户(customer_id 捕获复位;竣工单不改状态线)
+    if order_d and fid_diary:
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("select customer_id from decoration_order where id = %s", (order_d,))
+                orig_cust = cur.fetchone()[0]
+                cur.execute("update decoration_order set customer_id = %s where id = %s", (c_cid, order_d))
+            conn.commit()
+        finally:
+            conn.close()
+        try:
+            fin = api_ok("C端资金流水(临时挂接单D)", "GET", "/api/c/finance", c_token)
+            sec = next((s for s in (fin or []) if s.get("orderId") == order_d), None)
+            dec = (sec or {}).get("decoration") or []
+            step("装修款票据在册(direction/status 整数+typeName 快照)", bool(dec)
+                 and all(("direction" in b and "status" in b and b.get("typeName")) for b in dec),
+                 [ (b.get("typeName"), b.get("direction"), b.get("status")) for b in dec ])
+            step("印章映射可覆盖(讫=direction0 已收/候=待收)", any(
+                (b.get("status") in (1, 2)) or b.get("status") == 0 for b in dec),
+                [ b.get("status") for b in dec ])
+            alb = api_ok("C端工地相册(单D)", "GET", "/api/c/album?orderId=%s" % order_d, c_token)
+            ids = [p.get("fileId") for p in (alb or [])]
+            step("相册含 R17 段日记图(时间倒序投影)", fid_diary in ids, ids[:5])
+            req = urllib.request.Request(BASE + "/api/c/files/%s" % fid_diary)
+            req.add_header("Authorization", "Bearer " + c_token)
+            try:
+                with urllib.request.urlopen(req, timeout=15) as fresp:
+                    fraw = fresp.read()
+                    fst, fcd = fresp.status, dict(fresp.headers).get("Content-Disposition", "")
+            except urllib.error.HTTPError as fe:
+                fst, fraw, fcd = fe.code, b"", ""
+            step("相册图字节流通(PNG 头+inline)", fst == 200 and fraw[:4] == b"\x89PNG"
+                 and "inline" in fcd, (fst, len(fraw), fcd[:40]))
+            st2, raw2 = call("GET", "/api/c/files/%s" % fid_diary)
+            step("匿名调图字节流 401", st2 == 401, (st2, str(raw2)[:60]))
+        finally:
+            conn = db_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("update decoration_order set customer_id = %s where id = %s",
+                                (orig_cust, order_d))
+                conn.commit()
+            finally:
+                conn.close()
+        fin2 = api_ok("复位后资金流水(空户)", "GET", "/api/c/finance", c_token)
+        step("挂接复位零残留", not any(s.get("orderId") == order_d for s in (fin2 or [])), fin2)
+
+
     # ---- 毛利管理线(D2,addon-balance V1302;测试年 2027 全 PENDING + 2025 过去年全 NORMAL) ----
     print("== 毛利管理线(addon-balance D2:两线两主体+版本化发布+乐观闸+scope 守卫) ==")
     MY = 2027   # 测试业务年(未来年,17 周期全 PENDING)

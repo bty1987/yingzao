@@ -28,4 +28,15 @@ public interface ConstructionApi {
     record ProgressNode(String nodeName, int sort, int status,
                         String planStart, String planEnd, String finishTime) {
     }
+
+    /**
+     * 工地相册(只读;C 端对外投影数据源):该装修单全部施工日记带图行的图片时间倒序平铺,
+     * 行内携带节点名快照(相册分组头)。 fileId 指向内核 yz_file 行,字节流由消费方
+     * (portal /api/c/files/{id})经归属校验后代理。无施工单或无带图日记返回空表。
+     */
+    java.util.List<AlbumPhoto> customerAlbum(long orgId, long orderId);
+
+    /** 相册照片(只读投影):fileId=yz_file.id,nodeName=日记所属节点快照,takenAt=日记时间。 */
+    record AlbumPhoto(long fileId, String nodeName, String takenAt) {
+    }
 }

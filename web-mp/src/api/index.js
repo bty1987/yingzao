@@ -10,3 +10,7 @@ export const fetchPoints = () => get('/api/c/points')
 // 匿名名片(R7,/api/c/cards 内核白名单免登;share_token 即路由锚,R6 契约)
 export const cardByToken = (token) => get('/api/c/cards/' + token)
 export const submitCardNotice = (token, data) => post('/api/c/cards/' + token + '/notices', data)
+
+// 资金流水/工地相册(R20,addon-portal):票据卡数据源+相册投影(归属校验 360004 后端收口)
+export const fetchFinance = () => get('/api/c/finance')
+export const fetchAlbum = (orderId) => get('/api/c/album', { orderId })

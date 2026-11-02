@@ -18,6 +18,8 @@ import com.yingzao.addons.api.CustomerProfileApi;
 import com.yingzao.addons.api.DecorationApi;
 import com.yingzao.addons.api.MarketApi;
 import com.yingzao.addons.api.MemberApi;
+import com.yingzao.addons.api.PaymentApi;
+import com.yingzao.addons.api.SalesApi;
 import com.yingzao.core.auth.TokenStore;
 import com.yingzao.core.web.BizException;
 
@@ -55,6 +57,9 @@ public class PortalService {
     private final ConstructionApi constructions;
     private final DecorationApi decorations;
     private final MemberApi members;
+    private final PaymentApi payments;
+    private final SalesApi salesApi;
+    private final com.yingzao.core.file.FileService files;
     private final SecureRandom random = new SecureRandom();
 
     /** 匿名面组织上下文(C 端匿名请求无令牌无 org;小程序/域名与组织绑定 V2 走多租户解析)。 */
@@ -63,7 +68,8 @@ public class PortalService {
 
     public PortalService(JdbcTemplate jdbc, MessageSource messages, TokenStore tokens,
             CustomerProfileApi profiles, MarketApi markets, ConstructionApi constructions,
-            DecorationApi decorations, MemberApi members) {
+            DecorationApi decorations, MemberApi members, PaymentApi payments, SalesApi salesApi,
+            com.yingzao.core.file.FileService files) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.tokens = tokens;
@@ -72,6 +78,9 @@ public class PortalService {
         this.constructions = constructions;
         this.decorations = decorations;
         this.members = members;
+        this.payments = payments;
+        this.salesApi = salesApi;
+        this.files = files;
     }
 
     /** 发验证码(匿名):60s 限发+日限;6 位随机;5 分钟过期。 */
@@ -169,6 +178,84 @@ public class PortalService {
         return members.points(orgId, customerId);
     }
 
+    /**
+     * 资金流水(R20,登录;只读投影经 PaymentApi/SalesApi 契约,禁直查他域表):
+     * 名下全部装修单 × 装修款(biz 三元组 decoration/order)+ 主材款(销售单 sales/order)。
+     * 票据状态原样下发(direction/status 整数),讫/候/退印章语义由前端映射;
+     * 已作废(4)不返回(对客户无意义)。金额=厘,前端换算元。
+     */
+    public List<Map<String, Object>> finance(long orgId, long customerId) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (DecorationApi.OrderBrief o : decorations.listByCustomer(orgId, customerId)) {
+            Map<String, Object> section = new LinkedHashMap<>();
+            section.put("orderId", o.orderId());
+            section.put("orderNo", o.orderNo());
+            section.put("houseLabel", o.houseLabel());
+            // 装修款:sort+billId 升序(票据顺序=收款计划顺序)
+            section.put("decoration", payments.listBills(orgId, "decoration", "order",
+                            String.valueOf(o.orderId())).stream()
+                    .filter(b -> b.status() != 4)
+                    .sorted(java.util.Comparator.<PaymentApi.BillSummary>comparingInt(b -> b.sort())
+                            .thenComparingLong(PaymentApi.BillSummary::billId))
+                    .map(this::billView).toList());
+            // 主材款:每张销售单一组(单号做组头)
+            List<Map<String, Object>> sales = new ArrayList<>();
+            for (SalesApi.SalesOrderRef ref : salesApi.listByDecorationOrder(orgId, o.orderId())) {
+                List<Map<String, Object>> bills = payments.listBills(orgId, "sales", "order",
+                                String.valueOf(ref.salesOrderId())).stream()
+                        .filter(b -> b.status() != 4)
+                        .sorted(java.util.Comparator.<PaymentApi.BillSummary>comparingInt(b -> b.sort())
+                                .thenComparingLong(PaymentApi.BillSummary::billId))
+                        .map(this::billView).toList();
+                if (!bills.isEmpty()) {
+                    Map<String, Object> group = new LinkedHashMap<>();
+                    group.put("salesOrderId", ref.salesOrderId());
+                    group.put("salesNo", ref.orderNo());
+                    group.put("bills", bills);
+                    sales.add(group);
+                }
+            }
+            section.put("material", sales);
+            out.add(section);
+        }
+        return out;
+    }
+
+    /** 工地相册(R20,登录;归属校验同进度 360004;经 ConstructionApi.customerAlbum 契约)。 */
+    public List<ConstructionApi.AlbumPhoto> album(long orgId, long customerId, long orderId) {
+        long owner = decorations.queryOrderCustomer(orgId, orderId)
+                .orElseThrow(() -> new BizException(CODE_NOT_YOURS, msg("portal.progress.notYours")))
+                .customerId();
+        if (owner != customerId) {
+            throw new BizException(CODE_NOT_YOURS, msg("portal.progress.notYours"));
+        }
+        return constructions.customerAlbum(orgId, orderId);
+    }
+
+    /**
+     * 相册图片字节流(R20,登录):fileId 必须在本人名下任一装修单的相册集内
+     * (白名单集按请求现算;不在集内一律 360004,不泄露文件存在性),再经内核
+     * FileService 读取代理。前端 <image> 发不了 Authorization 头,由 downloadFile
+     * 带票据换取本地路径展示(与员工端同姿势)。
+     */
+    public com.yingzao.core.file.FileService.FileRow albumFile(long orgId, long customerId, long fileId) {
+        java.util.Set<Long> allowed = new java.util.HashSet<>();
+        for (DecorationApi.OrderBrief o : decorations.listByCustomer(orgId, customerId)) {
+            for (ConstructionApi.AlbumPhoto p : constructions.customerAlbum(orgId, o.orderId())) {
+                allowed.add(p.fileId());
+            }
+        }
+        if (!allowed.contains(fileId)) {
+            throw new BizException(CODE_NOT_YOURS, msg("portal.progress.notYours"));
+        }
+        return files.get(orgId, fileId);
+    }
+
+    /** 字节流读取代理(controller 用;FileRow 已过归属与软删校验)。 */
+    public byte[] readFile(com.yingzao.core.file.FileService.FileRow row) {
+        return files.read(row);
+    }
+
     /** 匿名面组织上下文访问器(controller 用;登录后请求改走令牌内 orgId)。 */
     public long anonymousOrgId() {
         return anonymousOrgId;
@@ -192,5 +279,18 @@ public class PortalService {
 
     private String msg(String key) {
         return messages.getMessage(key, null, LocaleContextHolder.getLocale());
+    }
+
+    /** 票据视图(direction/status 原样整数,前端映射印章;零后端文案)。 */
+    private Map<String, Object> billView(PaymentApi.BillSummary b) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("billId", b.billId());
+        m.put("typeCode", b.typeCode());
+        m.put("typeName", b.typeName());
+        m.put("direction", b.direction());
+        m.put("amount", b.amount());
+        m.put("sort", b.sort());
+        m.put("status", b.status());
+        return m;
     }
 }

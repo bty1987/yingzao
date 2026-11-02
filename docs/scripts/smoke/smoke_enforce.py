@@ -182,6 +182,8 @@ ENDPOINTS = [
     ("portal", "POST", "/api/c/auth/code"), ("portal", "POST", "/api/c/auth/login"),
     ("portal", "GET", "/api/c/cases"), ("portal", "GET", "/api/c/progress"), ("portal", "GET", "/api/c/points"),
     ("portal", "GET", "/api/c/orders"),
+    # R20(第 118 次):资金流水/工地相册/相册图片字节流(c-customer 型)
+    ("portal", "GET", "/api/c/finance"), ("portal", "GET", "/api/c/album"), ("portal", "GET", "/api/c/files/1"),
     ("basedata", "GET", "/api/basedata/goods/import-template"),
     ("basedata", "POST", "/api/basedata/goods/import"),
     ("member", "POST", "/api/member/exchanges/1/ship"), ("member", "POST", "/api/member/points/expire-clear"),
@@ -420,7 +422,7 @@ REP_DENIES = [
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(18 插件 66 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 66,
+    step("载入 api 规则(18 插件 69 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 69,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0b. mobile 槽位静态校验(R14):title/page 非空,require 必须引用已声明菜单/功能点 =====

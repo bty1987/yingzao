@@ -2,6 +2,11 @@
   <view class="page">
     <view class="yz-eyebrow head">CONSTRUCTION · {{ orderNo }}</view>
     <view v-if="!loading && nodes.length === 0" class="empty">施工排期尚未生成</view>
+    <!-- R20 配套入口:资金流水(票据卡)/工地相册(九宫格),同单锚 -->
+    <view class="r20">
+      <view class="r20-btn" @click="goFinance">资金流水</view>
+      <view class="r20-btn" @click="goAlbum">工地相册</view>
+    </view>
     <view v-for="(n, i) in nodes" :key="i" class="node">
       <view class="rail">
         <view class="dot" :class="dotClass(n)" />
@@ -27,14 +32,19 @@ import { fetchProgress } from '../../api'
 const nodes = ref([])
 const loading = ref(true)
 const orderNo = ref('')
+let currentOrderId = null
 
 const stLabel = (n) => ({ 0: '待开工', 1: '施工中', 2: '已完工', 3: '工费确认' }[n.status] || '—')
 const stClass = (n) => ({ 1: 'cur', 2: 'fin', 3: 'sal' }[n.status] || '')
 const dotClass = (n) => ({ 1: 'cur', 2: 'fin' }[n.status] || '')
 const short = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '')
 
+const goFinance = () => uni.navigateTo({ url: '/pages/finance/index' })
+const goAlbum = () => uni.navigateTo({ url: '/pages/album/index?orderId=' + (currentOrderId || '') })
+
 onLoad(async (q) => {
   try {
+    currentOrderId = q.orderId
     const res = await fetchProgress(q.orderId)
     nodes.value = (res.data && res.data.nodes) || []
   } finally {

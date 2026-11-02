@@ -3,6 +3,7 @@ package com.yingzao.addon.portal;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -72,5 +73,38 @@ public class PortalController {
         long orgId = (Long) request.getAttribute("yz.orgId");
         long customerId = (Long) request.getAttribute("yz.customerId");
         return ApiResponse.ok(portal.points(orgId, customerId));
+    }
+
+    // ---- R20 资金流水/工地相册(登录;归属校验在 service,360004 收口) ----
+
+    @GetMapping("/finance")
+    public ApiResponse<Object> finance(HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        long customerId = (Long) request.getAttribute("yz.customerId");
+        return ApiResponse.ok(portal.finance(orgId, customerId));
+    }
+
+    @GetMapping("/album")
+    public ApiResponse<Object> album(@RequestParam long orderId, HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        long customerId = (Long) request.getAttribute("yz.customerId");
+        return ApiResponse.ok(portal.album(orgId, customerId, orderId));
+    }
+
+    /**
+     * 相册图片字节流:<image> 发不了 Authorization 头,前端经 downloadFile 带票据取本页;
+     * 内联 disposition(仅图片白名单内文件),归属白名单校验在 service(不在集=360004)。
+     */
+    @GetMapping("/files/{fileId}")
+    public void albumFile(@PathVariable long fileId, HttpServletRequest request,
+            jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        long customerId = (Long) request.getAttribute("yz.customerId");
+        com.yingzao.core.file.FileService.FileRow row = portal.albumFile(orgId, customerId, fileId);
+        byte[] bytes = portal.readFile(row);
+        response.setContentType(row.contentType() == null ? "application/octet-stream" : row.contentType());
+        response.setHeader("Content-Disposition", "inline; filename=\"album\"");
+        response.setContentLength(bytes.length);
+        response.getOutputStream().write(bytes);
     }
 }

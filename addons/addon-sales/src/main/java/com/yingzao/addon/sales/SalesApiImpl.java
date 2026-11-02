@@ -66,4 +66,18 @@ public class SalesApiImpl implements SalesApi {
         long orderId = ((Number) rows.get(0).get("order_id")).longValue();
         return decorations.queryOrderCustomer(orgId, orderId);
     }
+
+    /** C 端资金流水主材款投影数据源:含完结单(已付历史可见),剔除全退/倒单/废单,id 倒序。 */
+    @Override
+    public List<SalesOrderRef> listByDecorationOrder(long orgId, long orderId) {
+        return jdbc.queryForList("""
+                select id, code, order_id, customer_name from sales_order
+                where org_id = ? and order_id = ? and status not in (2, 3, 4)
+                order by id desc
+                """, orgId, orderId).stream()
+                .map(r -> new SalesOrderRef(((Number) r.get("id")).longValue(),
+                        (String) r.get("code"), ((Number) r.get("order_id")).longValue(),
+                        (String) r.get("customer_name")))
+                .toList();
+    }
 }
