@@ -95,4 +95,24 @@ class H2DialectProbeTest extends KernelTestBase {
         assertEquals("{\"a\":1}", row.get("params"));
         assertEquals("中文结果", row.get("result"));
     }
+
+    @Test
+    void md5UuidReceiptPlaceholderSupported() {
+        // payment 收据占位编号原文(BillService.collect,第 125 次扩垫片):
+        // md5(uuid()) 经方言垫片跑通;占位值随后被 lpad(id) 规范号覆盖,只需非空可回填
+        String no = jdbc.queryForObject("select concat('R', left(md5(uuid()), 8))", String.class);
+        assertTrue(no != null && no.startsWith("R") && no.length() > 2);
+        String padded = jdbc.queryForObject("select concat('R', lpad(42, 8, '0'))", String.class);
+        assertEquals("R00000042", padded);
+    }
+
+    @Test
+    void mysqlIfFunctionRewrittenToCaseWhen() {
+        // NormService.summary 工费公式原文(第 97 次聚合口径回归锚所在 SQL):
+        // if(trannum = 0, 1, num / 1000 * trannum / 1000) → H2 CASEWHEN 等价
+        Long base = jdbc.queryForObject("select if(? = 0, 1, ? / 1000 * ? / 1000)", Long.class, 0, 5000, 1000);
+        assertEquals(1L, base);
+        Long scaled = jdbc.queryForObject("select if(? = 0, 1, ? / 1000 * ? / 1000)", Long.class, 1000, 5000, 1000);
+        assertEquals(5L, scaled);
+    }
 }

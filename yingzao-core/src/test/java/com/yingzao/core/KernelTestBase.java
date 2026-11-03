@@ -54,7 +54,14 @@ public abstract class KernelTestBase {
 
     private static final String[] TABLES = {
             "yz_user", "organization", "yz_approval", "yz_approval_record",
-            "yz_event_task", "yz_event_consumed", "yz_plan", "yz_audit_log"
+            "yz_event_task", "yz_event_consumed", "yz_plan", "yz_audit_log",
+            // F4b addon 单测批业务表(decoration/sales/payment/quotation)
+            "decoration_order", "decoration_order_profile", "decoration_order_belong",
+            "decoration_order_track", "decoration_config",
+            "sales_order", "sales_order_item", "sales_track", "sales_settlement",
+            "sales_refunds", "sales_delivery", "sales_delivery_item",
+            "payment_bill", "payment_bill_type", "payment_receipt", "payment_receipt_channel",
+            "quotation_quotation", "quotation_track", "quotation_norm_item"
     };
 
     protected DataSource dataSource;

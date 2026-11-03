@@ -41,7 +41,9 @@ public final class RewritingDataSource implements DataSource {
     /**
      * MySQL 日期算术形状 → H2 dateadd(新形状先在 H2DialectProbeTest 落锚):
      * ①date_sub(now(), interval N minute) / ②date_add(now(), interval ? second)
-     * / ③? + interval N month(日期列加法,W1 主材业绩聚合)/ ④? + interval N day。
+     * / ③? + interval N month(日期列加法,W1 主材业绩聚合)/ ④? + interval N day
+     * / ⑤md5(uuid()) → H2 等价占位(payment 收据号回填前的临时编号,规范号随后覆盖)
+     * / ⑥if(a,b,c) → H2 CASEWHEN(a,b,c)(NormService.summary 工费公式原文)。
      */
     static String rewrite(String sql) {
         sql = sql.replaceAll(
@@ -56,6 +58,10 @@ public final class RewritingDataSource implements DataSource {
         sql = sql.replaceAll(
                 "(?i)\\?\\s*\\+\\s*interval\\s+(\\?|\\d+)\\s+day",
                 "dateadd(DAY, $1, ?)");
+        sql = sql.replaceAll(
+                "(?i)md5\\s*\\(\\s*uuid\\s*\\(\\s*\\)\\s*\\)",
+                "rawtohex(hash('MD5', random_uuid()))");
+        sql = sql.replaceAll("(?i)\\bif\\s*\\(", "CASEWHEN(");
         return sql;
     }
 
