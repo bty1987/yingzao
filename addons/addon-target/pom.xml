@@ -25,5 +25,23 @@
             <groupId>com.yingzao</groupId>
             <artifactId>yingzao-core</artifactId>
         </dependency>
-    </dependencies>
+      <!-- F4b/W1 单测:JUnit5 仅 test 域,运行时 jar 零变化;内核测试基座走 core test-jar -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>com.yingzao</groupId>
+        <artifactId>yingzao-core</artifactId>
+        <version>${project.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>com.h2database</groupId>
+        <artifactId>h2</artifactId>
+        <scope>test</scope>
+    </dependency>
+  </dependencies>
 </project>

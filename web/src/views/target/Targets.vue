@@ -68,6 +68,7 @@
           <el-select v-model="createForm.line" style="width: 100%">
             <el-option label="签约额(元)" value="contract" />
             <el-option label="渠道进线数(条)" value="channel" />
+            <el-option label="主材开单额(元)" value="material" />
           </el-select>
         </el-form-item>
         <el-form-item label="目标月" required>

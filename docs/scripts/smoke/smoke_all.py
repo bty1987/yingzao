@@ -6061,6 +6061,40 @@ def main():
 
 
     # ---- 毛利管理线(D2,addon-balance V1302;测试年 2027 全 PENDING + 2025 过去年全 NORMAL) ----
+    # ---- W1 主材业绩线(target V1.4:line 第三线+SalesApi 契约实绩;判定矩阵单测已覆盖) ----
+    print("== 主材业绩线(W1:target material 线+开单额契约实绩)==")
+    if sale1:
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("select date_format(created_at, '%%Y-%%m'), total from sales_order where id = %s",
+                            (sale1,))
+                _sym, _stotal = cur.fetchone()
+                cur.execute("select coalesce(sum(total), 0) from sales_order "
+                            "where org_id = 1 and status not in (2, 3, 4) "
+                            "and date_format(created_at, '%%Y-%%m') = %s", (_sym,))
+                _expect = cur.fetchone()[0]
+        finally:
+            conn.close()
+        mt = api_ok("建主材线目标", "POST", "/api/target/plans", tok_admin,
+                    {"orgNode": 1, "ym": _sym, "amount": 100000000, "line": "material"})
+        ach_m = api_ok("主材线实绩(开单额契约)", "GET",
+                       "/api/target/achievement?node=1&line=material&yearMonth=" + _sym, tok_admin)
+        step("material 实绩=DB 汇总一致(剔除废退含完结)",
+             ach_m and ach_m.get("actual") == _expect and _expect >= _stotal,
+             (ach_m, _expect, _stotal))
+        api_err("非法业绩线拒绝 370001", "POST", "/api/target/plans", tok_admin,
+                {"orgNode": 1, "ym": _sym, "amount": 100, "line": "bogus"}, 370001)
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("delete from target_stage where plan_id = %s", (mt,))
+                cur.execute("delete from target_plan where id = %s", (mt,))
+            conn.commit()
+        finally:
+            conn.close()
+        step("主材线目标清理零残留", True)
+
     print("== 毛利管理线(addon-balance D2:两线两主体+版本化发布+乐观闸+scope 守卫) ==")
     MY = 2027   # 测试业务年(未来年,17 周期全 PENDING)
     MYP = 2025  # 过去年(NORMAL 断言)

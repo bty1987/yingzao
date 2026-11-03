@@ -80,4 +80,26 @@ public class SalesApiImpl implements SalesApi {
                         (String) r.get("customer_name")))
                 .toList();
     }
+
+    /** 主材开单业绩·月额(target 主材线实绩):创建日落当月,剔除废退单,含完结,厘。 */
+    @Override
+    public long materialSalesTotalByMonth(long orgId, String yearMonth) {
+        Long total = jdbc.queryForObject("""
+                select coalesce(sum(total), 0) from sales_order
+                where org_id = ? and status not in (2, 3, 4)
+                  and created_at >= ? and created_at < ? + interval 1 month
+                """, Long.class, orgId, yearMonth + "-01", yearMonth + "-01");
+        return total == null ? 0L : total;
+    }
+
+    /** 主材开单业绩·区间额(阶段实绩):created_at 闭区间,口径同月额。 */
+    @Override
+    public long materialSalesTotalBetween(long orgId, String beginDay, String endDay) {
+        Long total = jdbc.queryForObject("""
+                select coalesce(sum(total), 0) from sales_order
+                where org_id = ? and status not in (2, 3, 4)
+                  and created_at >= ? and created_at < ? + interval 1 day
+                """, Long.class, orgId, beginDay, endDay);
+        return total == null ? 0L : total;
+    }
 }

@@ -25,5 +25,11 @@
             <groupId>com.yingzao</groupId>
             <artifactId>yingzao-core</artifactId>
         </dependency>
-    </dependencies>
+      <!-- W1 单测:JUnit5 仅 test 域 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+  </dependencies>
 </project>

@@ -1,7 +1,7 @@
 addon:
   id: target
   name: 经营目标
-  version: 0.3.0
+  version: 1.4.0
   error-code-segment: 370000
   menus:
     - path: /target/plans
@@ -14,6 +14,7 @@ addon:
     targetLine:
       - { key: 'contract', label: 签约额 }
       - { key: 'channel', label: 渠道进线数 }
+      - { key: 'material', label: 主材开单额 }
     targetStatus:
       - { key: '0', label: 启用 }
       - { key: '1', label: 停用 }

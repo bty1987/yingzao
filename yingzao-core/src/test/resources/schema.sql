@@ -114,3 +114,38 @@ create table yz_audit_log (
     created_at  datetime not null,
     primary key (id)
 );
+
+
+-- W1 工作台族(target 主材业绩线单测)
+create table target_plan (
+    id         bigint not null auto_increment,
+    org_id     bigint not null,
+    org_node   bigint not null,
+    ym         char(7) not null,
+    line       varchar(24) not null default 'contract',
+    amount     bigint not null,
+    status     tinyint not null default 0,
+    remark     varchar(200) null,
+    created_by bigint null,
+    created_at datetime not null default current_timestamp,
+    updated_at datetime not null default current_timestamp,
+    primary key (id),
+    constraint uk_target unique (org_id, org_node, ym, line)
+);
+
+create table target_stage (
+    id         bigint not null auto_increment,
+    org_id     bigint not null,
+    plan_id    bigint not null,
+    stage_key  varchar(32) not null,
+    sort_no    int not null default 1,
+    begin_day  date null,
+    end_day    date null,
+    amount     bigint not null default 0,
+    remark     varchar(200) null,
+    status     tinyint not null default 0,
+    created_by bigint null,
+    created_at datetime not null default current_timestamp,
+    primary key (id),
+    constraint uk_stage unique (plan_id, stage_key)
+);

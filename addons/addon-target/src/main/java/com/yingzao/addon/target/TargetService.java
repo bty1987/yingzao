@@ -44,19 +44,24 @@ public class TargetService {
 
     public static final String LINE_CONTRACT = "contract";
     public static final String LINE_CHANNEL = "channel";
+    /** 主材开单额线(W1 工作台族):实绩经 SalesApi.materialSalesTotal* 契约,剔除废退单含完结。 */
+    public static final String LINE_MATERIAL = "material";
 
     private final JdbcTemplate jdbc;
     private final MessageSource messages;
     private final DecorationApi decorations;
     private final com.yingzao.addons.api.MarketApi markets;
+    private final com.yingzao.addons.api.SalesApi sales;
     private final OrgScopeService orgScopes;
 
     public TargetService(JdbcTemplate jdbc, MessageSource messages, DecorationApi decorations,
-            com.yingzao.addons.api.MarketApi markets, OrgScopeService orgScopes) {
+            com.yingzao.addons.api.MarketApi markets, com.yingzao.addons.api.SalesApi sales,
+            OrgScopeService orgScopes) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.decorations = decorations;
         this.markets = markets;
+        this.sales = sales;
         this.orgScopes = orgScopes;
     }
 
@@ -81,7 +86,8 @@ public class TargetService {
                 CODE_MONTH_FORMAT, "target.monthFormat");
         require(cmd.amount() != null && cmd.amount() > 0, CODE_AMOUNT, "target.amount");
         String line = cmd.line() == null || cmd.line().isBlank() ? LINE_CONTRACT : cmd.line().trim();
-        require(line.equals(LINE_CONTRACT) || line.equals(LINE_CHANNEL), CODE_PARAM, "target.line");
+        require(line.equals(LINE_CONTRACT) || line.equals(LINE_CHANNEL)
+                || line.equals(LINE_MATERIAL), CODE_PARAM, "target.line");
         requireNodeExists(cmd.orgNode());
         try {
             jdbc.update("""
@@ -309,9 +315,13 @@ public class TargetService {
         List<Long> scope = orgScopes.scopeOrgIds(node);
         long total = 0;
         for (Long org : scope) {
-            total += LINE_CHANNEL.equals(line)
-                    ? markets.inboundTotalByMonth(org, yearMonth)
-                    : decorations.contractSignedTotalByMonth(org, yearMonth);
+            if (LINE_CHANNEL.equals(line)) {
+                total += markets.inboundTotalByMonth(org, yearMonth);
+            } else if (LINE_MATERIAL.equals(line)) {
+                total += sales.materialSalesTotalByMonth(org, yearMonth);
+            } else {
+                total += decorations.contractSignedTotalByMonth(org, yearMonth);
+            }
         }
         return total;
     }
@@ -321,9 +331,13 @@ public class TargetService {
         List<Long> scope = orgScopes.scopeOrgIds(node);
         long total = 0;
         for (Long org : scope) {
-            total += LINE_CHANNEL.equals(line)
-                    ? markets.inboundTotalBetween(org, begin.toString(), end.toString())
-                    : decorations.contractSignedTotalBetween(org, begin.toString(), end.toString());
+            if (LINE_CHANNEL.equals(line)) {
+                total += markets.inboundTotalBetween(org, begin.toString(), end.toString());
+            } else if (LINE_MATERIAL.equals(line)) {
+                total += sales.materialSalesTotalBetween(org, begin.toString(), end.toString());
+            } else {
+                total += decorations.contractSignedTotalBetween(org, begin.toString(), end.toString());
+            }
         }
         return total;
     }

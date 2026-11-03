@@ -38,7 +38,11 @@ public final class RewritingDataSource implements DataSource {
         return wrap(target.getConnection(username, password));
     }
 
-    /** 两种且仅两种 MySQL 日期函数形状 → H2 dateadd(新形状先在 H2DialectProbeTest 落锚)。 */
+    /**
+     * MySQL 日期算术形状 → H2 dateadd(新形状先在 H2DialectProbeTest 落锚):
+     * ①date_sub(now(), interval N minute) / ②date_add(now(), interval ? second)
+     * / ③? + interval N month(日期列加法,W1 主材业绩聚合)/ ④? + interval N day。
+     */
     static String rewrite(String sql) {
         sql = sql.replaceAll(
                 "(?i)date_sub\\(\\s*now\\(\\)\\s*,\\s*interval\\s+(\\d+)\\s+minute\\)",
@@ -46,6 +50,12 @@ public final class RewritingDataSource implements DataSource {
         sql = sql.replaceAll(
                 "(?i)date_add\\(\\s*now\\(\\)\\s*,\\s*interval\\s+(\\?|\\d+)\\s+second\\)",
                 "dateadd(SECOND, $1, now())");
+        sql = sql.replaceAll(
+                "(?i)\\?\\s*\\+\\s*interval\\s+(\\?|\\d+)\\s+month",
+                "dateadd(MONTH, $1, ?)");
+        sql = sql.replaceAll(
+                "(?i)\\?\\s*\\+\\s*interval\\s+(\\?|\\d+)\\s+day",
+                "dateadd(DAY, $1, ?)");
         return sql;
     }
 

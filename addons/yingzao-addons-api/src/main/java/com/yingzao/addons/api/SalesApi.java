@@ -40,4 +40,14 @@ public interface SalesApi {
      * 含完结单(已付历史仍需可见),剔除全退/倒单/废单。按 id 倒序(新单在前)。
      */
     java.util.List<SalesOrderRef> listByDecorationOrder(long orgId, long orderId);
+
+    /**
+     * 主材开单业绩·月额(只读;target 主材业绩线实绩数据源):该组织当月(按单据
+     * created_at)全部销售单 total 之和,剔除全退/倒单/废单(status 2/3/4),
+     * 含完结单(已开单业绩即计入,与「业绩=创建日原额排除废单」口径一致)。单位:厘。
+     */
+    long materialSalesTotalByMonth(long orgId, String yearMonth);
+
+    /** 主材开单业绩·区间额(只读;阶段实绩):按单据 created_at 落于 [begin, end] 闭区间,口径同月额。 */
+    long materialSalesTotalBetween(long orgId, String beginDay, String endDay);
 }
