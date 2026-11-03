@@ -50,4 +50,15 @@ public interface SalesApi {
 
     /** 主材开单业绩·区间额(只读;阶段实绩):按单据 created_at 落于 [begin, end] 闭区间,口径同月额。 */
     long materialSalesTotalBetween(long orgId, String beginDay, String endDay);
+
+    /**
+     * 装修单名下销售单进度批查(只读;dashboard 工作台族五阶段判定数据源,W2):
+     * 有效销售单数(剔除全退/倒单/废单 status 2/3/4)与其中已完结数(status=5),
+     * 按装修单聚合;无销售单的装修单不在返回集(消费方按缺 0 处理)。
+     */
+    java.util.List<OrderSalesProgress> listOrderProgress(long orgId);
+
+    /** 销售单进度快照(total=有效单数;finished=其中已完结数)。 */
+    record OrderSalesProgress(long orderId, int total, int finished) {
+    }
 }

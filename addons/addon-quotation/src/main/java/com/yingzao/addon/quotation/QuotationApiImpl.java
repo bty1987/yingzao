@@ -97,4 +97,13 @@ public class QuotationApiImpl implements QuotationApi {
                 (String) row.get("name"), ((Number) row.get("total_price")).longValue(),
                 ((Number) row.get("discount")).intValue()));
     }
+
+    /** 存在活跃报价(attstatus<3)的装修单 id 集(dashboard 工作台①报价跟进判定)。 */
+    @Override
+    public java.util.Set<Long> activeQuoteOrderIds(long orgId) {
+        return new java.util.HashSet<>(jdbc.queryForList(
+                "select distinct order_id from quotation_quotation"
+                        + " where org_id = ? and order_id is not null and attstatus < 3",
+                Long.class, orgId));
+    }
 }

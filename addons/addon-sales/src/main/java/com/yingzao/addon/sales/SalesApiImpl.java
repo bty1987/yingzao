@@ -102,4 +102,20 @@ public class SalesApiImpl implements SalesApi {
                 """, Long.class, orgId, beginDay, endDay);
         return total == null ? 0L : total;
     }
+
+    /** 装修单名下销售单进度批查(dashboard 五阶段判定):有效单数与完结数按装修单聚合。 */
+    @Override
+    public List<OrderSalesProgress> listOrderProgress(long orgId) {
+        return jdbc.queryForList("""
+                select order_id, count(*) as total,
+                       sum(case when status = 5 then 1 else 0 end) as finished
+                from sales_order
+                where org_id = ? and order_id is not null and status not in (2, 3, 4)
+                group by order_id
+                """, orgId).stream()
+                .map(r -> new OrderSalesProgress(((Number) r.get("order_id")).longValue(),
+                        ((Number) r.get("total")).intValue(),
+                        ((Number) r.get("finished")).intValue()))
+                .toList();
+    }
 }

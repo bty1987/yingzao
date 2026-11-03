@@ -42,4 +42,11 @@ public interface QuotationApi {
                               long managePrice, long carryPrice, long taxPrice, long totalPrice,
                               int discount, int manageRate, boolean locked) {
     }
+
+    /**
+     * 存在活跃报价(attstatus&lt;3:初始/已提交/已审核)的装修单 id 集(只读;
+     * dashboard 工作台族五阶段判定「①报价跟进」数据源,W2)。批量形态替代逐单
+     * hasLockedQuotation 式 N+1 查询。
+     */
+    java.util.Set<Long> activeQuoteOrderIds(long orgId);
 }

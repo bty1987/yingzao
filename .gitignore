@@ -4,6 +4,7 @@ target/
 !web/src/views/target/
 !addons/addon-target/src/main/resources/db/migration/target/
 !addons/addon-target/src/main/java/com/yingzao/addon/target/
+!addons/addon-target/src/test/java/com/yingzao/addon/target/
 *.class
 *.jar
 !.mvn/wrapper/maven-wrapper.jar

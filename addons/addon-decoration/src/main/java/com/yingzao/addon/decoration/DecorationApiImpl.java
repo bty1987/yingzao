@@ -110,4 +110,34 @@ public class DecorationApiImpl implements DecorationApi {
         return Optional.of(new CustomerRef(((Number) row.get("customer_id")).longValue(),
                 (String) row.get("customer_name")));
     }
+
+    /** 工作台跟单投影(dashboard 五阶段判定):剔除废单/终止(终态退出跟单),登记倒序。 */
+    @Override
+    public List<OrderTrackView> listOrderTrackViews(long orgId) {
+        return jdbc.queryForList("""
+                select id, order_no, customer_name, house_label, status, project_status,
+                       designer_id, salesman_id, created_at, contract_time, updated_at,
+                       finish_time, account_time
+                from decoration_order
+                where org_id = ? and status not in (5, 6)
+                order by id desc
+                """, orgId).stream()
+                .map(r -> new OrderTrackView(
+                        ((Number) r.get("id")).longValue(),
+                        (String) r.get("order_no"),
+                        (String) r.get("customer_name"),
+                        (String) r.get("house_label"),
+                        ((Number) r.get("status")).intValue(),
+                        ((Number) r.get("project_status")).intValue(),
+                        ((Number) r.get("designer_id")).longValue(),
+                        ((Number) r.get("salesman_id")).longValue(),
+                        day(r.get("created_at")), day(r.get("contract_time")),
+                        day(r.get("updated_at")), day(r.get("finish_time")),
+                        day(r.get("account_time"))))
+                .toList();
+    }
+
+    private String day(Object dt) {
+        return dt == null ? null : String.valueOf(dt).substring(0, 10);
+    }
 }

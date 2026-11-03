@@ -55,4 +55,18 @@ public interface DecorationApi {
     /** 客户视角装修单摘要(只读投影;零金额零人员)。 */
     record OrderBrief(long orderId, String orderNo, String houseLabel, int status, int projectStatus) {
     }
+
+    /**
+     * 工作台跟单投影(只读;dashboard 工作台族五阶段判定数据源,W2):本组织全部装修单
+     * 状态快照,剔除废单(5)/终止(6)(终态退出跟单),按登记倒序。时间列为 yyyy-MM-dd
+     * (null=未发生;停留天数锚点由消费方按阶段取用,无锚回落 createdAt)。
+     */
+    java.util.List<OrderTrackView> listOrderTrackViews(long orgId);
+
+    /** 跟单投影快照(status=合同线;projectStatus=工程线;日期串 yyyy-MM-dd 或 null)。 */
+    record OrderTrackView(long orderId, String orderNo, String customerName, String houseLabel,
+                          int status, int projectStatus, long designerId, long salesmanId,
+                          String createdAt, String contractTime, String updatedAt,
+                          String finishTime, String accountTime) {
+    }
 }

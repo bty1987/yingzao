@@ -388,6 +388,9 @@ ENDPOINTS = [
     ("dashboard", "GET", "/api/dashboard/home"), ("dashboard", "GET", "/api/dashboard/home-config"),
     ("dashboard", "POST", "/api/dashboard/home-config"),
     ("dashboard", "DELETE", "/api/dashboard/home-config/1"),
+    # dashboard W2 主材工作台(最长 prefix /api/dashboard/material → /dashboard/material)
+    ("dashboard", "GET", "/api/dashboard/material/summary"),
+    ("dashboard", "GET", "/api/dashboard/material/tracking"),
 ]
 
 # 12 插件代表 GET 端点(admin/全授权组用;三条读放开端点返回 200 属预期)
@@ -404,6 +407,8 @@ REP_GETS = [
     ("/api/service/complaints", "售后投诉"),
     ("/api/target/plans", "经营目标"),
     ("/api/target/pk/events", "PK 赛事"),
+    ("/api/dashboard/home", "驾驶舱"),
+    ("/api/dashboard/material/summary", "主材工作台"),
 ]
 
 # 无角色拒绝面:详情/子资源/未放开列表(读放开的三条列表端点不含在内,放开行为在第 4 组断言)
@@ -420,12 +425,14 @@ REP_DENIES = [
     ("/api/service/visits/1", "回访任务详情"),
     ("/api/target/plans", "经营目标"),
     ("/api/target/pk/events", "PK 赛事"),
+    ("/api/dashboard/home", "驾驶舱"),
+    ("/api/dashboard/material/summary", "主材工作台"),
 ]
 
 
 def main():
     rules = load_rules()
-    step("载入 api 规则(18 插件 71 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 71,
+    step("载入 api 规则(18 插件 72 条)", len({r["addon"] for r in rules}) == 18 and len(rules) == 72,
          "addons=%s rules=%d" % (sorted({r["addon"] for r in rules}), len(rules)))
 
     # ===== 0b. mobile 槽位静态校验(R14):title/page 非空,require 必须引用已声明菜单/功能点 =====

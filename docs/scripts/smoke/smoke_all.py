@@ -6095,6 +6095,109 @@ def main():
             conn.close()
         step("主材线目标清理零残留", True)
 
+    # ---- W2 主材工作台(dashboard V2:summary/tracking 全只读聚合;判定=W1 纯函数,漏斗 DB 对账) ----
+    print("== 主材工作台(W2:KPI 达成+五阶段漏斗对账+跟单明细过滤)==")
+    WYM = time.strftime("%Y-%m")
+
+    def _w2_clean():
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("delete from target_stage where plan_id in "
+                            "(select id from (select id from target_plan where org_id=1 and org_node=1 "
+                            "and ym=%s and line='material') x)", (WYM,))
+                cur.execute("delete from target_plan where org_id=1 and org_node=1 "
+                            "and ym=%s and line='material'", (WYM,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    _w2_clean()
+    mt2 = api_ok("建本月主材线目标(W2 KPI 锚)", "POST", "/api/target/plans", tok_admin,
+                 {"orgNode": 1, "yearMonth": WYM, "amount": 500000000, "line": "material"})
+    summ = api_ok("工作台汇总(节点/漏斗/KPI/拆分结构)", "GET",
+                  "/api/dashboard/material/summary?node=1", tok_admin)
+    ok = summ and isinstance(summ.get("funnel"), list) and len(summ["funnel"]) == 5 \
+        and summ.get("kpi", {}).get("hasTarget") is True \
+        and summ.get("kpi", {}).get("target") == 500000000
+    step("KPI 目标位=新建目标(漏斗五段)", ok, summ and summ.get("kpi"))
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select coalesce(sum(s.total),0) from sales_order s join organization o on o.id=s.org_id "
+                "where o.org_path like concat((select org_path from organization where id=1), '%%') "
+                "and s.status not in (2,3,4) and date_format(s.created_at, '%%Y-%%m')=%s", (WYM,))
+            w2_expect = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("KPI 实绩=DB 子树开单额汇总一致",
+         summ and summ["kpi"].get("actual") == w2_expect, (summ and summ["kpi"].get("actual"), w2_expect))
+    # 漏斗 DB 对账:判定表 SQL 复刻(终态/完结双出口/工程线/签约线/活跃报价)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select coalesce(sum(st=1),0) c1, coalesce(sum(st=2),0) c2, coalesce(sum(st=3),0) c3, "
+                "       coalesce(sum(st=4),0) c4, coalesce(sum(st=5),0) c5 from ("
+                " select d.id, case "
+                "  when exists(select 1 from sales_order s where s.org_id=d.org_id and s.order_id=d.id "
+                "              and s.status not in (2,3,4) having count(*)>0 "
+                "              and count(*)=sum(case when s.status=5 then 1 else 0 end)) then 5 "
+                "  when d.status=8 then 5 "
+                "  when d.project_status=2 then 4 "
+                "  when d.project_status=1 then 3 "
+                "  when d.status in (3,4,7,8) then 2 "
+                "  when exists(select 1 from quotation_quotation q where q.org_id=d.org_id "
+                "              and q.order_id=d.id and q.attstatus<3) then 1 "
+                "  else 0 end as st "
+                " from decoration_order d where d.org_id=1 and d.status not in (5,6)) t")
+            fc = cur.fetchone()
+    finally:
+        conn.close()
+    w2_funnel = {f["stage"]: f["count"] for f in (summ or {}).get("funnel") or []}
+    step("五阶段漏斗=DB 判定复刻逐段一致",
+         w2_funnel == {1: fc[0], 2: fc[1], 3: fc[2], 4: fc[3], 5: fc[4]}, (w2_funnel, fc))
+    step("跟单户数=漏斗合计+临近签约=阶段②",
+         summ and summ["tracked"]["total"] == sum(fc) and summ["tracked"]["nearSign"] == fc[1],
+         summ and summ["tracked"])
+    trk = api_ok("跟单明细全量", "GET", "/api/dashboard/material/tracking?node=1", tok_admin)
+    step("明细总数=漏斗合计(阶段①~⑤,废/终止退出)",
+         trk and trk.get("total") == sum(fc) and all(r["stage"] in (1, 2, 3, 4, 5) for r in trk["rows"]),
+         trk and trk.get("total"))
+    step("停留天数非负+人员投影", trk and all(r["dwellDays"] >= 0 for r in trk["rows"])
+         and ("designer" in trk["rows"][0] if trk["rows"] else True), True)
+    hot = max(range(1, 6), key=lambda s: w2_funnel.get(s, 0))
+    if w2_funnel.get(hot, 0) > 0:
+        trk2 = api_ok("按阶段筛明细(最热段)", "GET",
+                      "/api/dashboard/material/tracking?node=1&stage=%d" % hot, tok_admin)
+        step("阶段过滤全命中",
+             trk2 and trk2.get("total") == w2_funnel[hot]
+             and all(r["stage"] == hot for r in trk2["rows"]), (trk2 and trk2.get("total"), hot))
+    kw = (trk["rows"][0]["orderNo"] or "")[:6]
+    if kw:
+        trk3 = api_ok("关键词筛明细(单号前缀)", "GET",
+                      "/api/dashboard/material/tracking?node=1&keyword=" + kw, tok_admin)
+        step("关键词过滤命中且非全量",
+             trk3 and 0 < trk3.get("total") <= trk["total"]
+             and all(kw in (r["orderNo"] or "") for r in trk3["rows"]), (kw, trk3 and trk3.get("total")))
+    trk4 = api_ok("分页 size=1", "GET", "/api/dashboard/material/tracking?node=1&size=1", tok_admin)
+    step("分页生效(行数=1,总数不变)",
+         trk4 and len(trk4.get("rows") or []) == 1 and trk4.get("total") == trk.get("total"),
+         (trk4 and len(trk4.get("rows") or []), trk4 and trk4.get("total")))
+    ok = summ and any(p.get("amount") == 500000000 and p.get("nodeId") == 1
+                      for p in summ.get("plans") or [])
+    step("目标拆分视图含新目标(逐节点)", ok, summ and summ.get("plans"))
+    api_err("非法月份拒绝 390001", "GET", "/api/dashboard/material/summary?ym=2026-13",
+            tok_admin, None, 390001)
+    if tok_o:
+        st, res = call("GET", "/api/dashboard/material/summary", tok_o)
+        step("无角色访问工作台拒 122006(菜单型)", st == 200 and res.get("code") == 122006, res)
+    _w2_clean()
+    summ2 = api_ok("清理后汇总回读", "GET", "/api/dashboard/material/summary?node=1", tok_admin)
+    step("工作台目标清理零残留(hasTarget=false)",
+         summ2 and summ2.get("kpi", {}).get("hasTarget") is False, summ2 and summ2.get("kpi"))
+
     print("== 毛利管理线(addon-balance D2:两线两主体+版本化发布+乐观闸+scope 守卫) ==")
     MY = 2027   # 测试业务年(未来年,17 周期全 PENDING)
     MYP = 2025  # 过去年(NORMAL 断言)

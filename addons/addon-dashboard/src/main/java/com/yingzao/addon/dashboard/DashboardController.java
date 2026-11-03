@@ -1,5 +1,7 @@
 package com.yingzao.addon.dashboard;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yingzao.core.rbac.RoleService;
@@ -24,7 +27,8 @@ import com.yingzao.core.web.BizException;
 /**
  * 驾驶舱端点(菜单闸 /api/dashboard require:/dashboard):
  * GET home = 聚合首页(结论条+六维健康卡+双线+大区排名);
- * home-config = 按角色默认落地页最小配置(PRD 开放问题 6:V1 admin 可配,聚合首页缺省)。
+ * home-config = 按角色默认落地页最小配置(PRD 开放问题 6:V1 admin 可配,聚合首页缺省);
+ * material/summary+tracking = 主材销售工作台聚合(W2,门闸取最长 prefix 归 /dashboard/material)。
  */
 @RestController
 public class DashboardController {
@@ -32,14 +36,18 @@ public class DashboardController {
     public static final int CODE_BADREQUEST = 390001;
     public static final int CODE_FORBIDDEN = 390002;
 
+    private static final DateTimeFormatter YM_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+
     private final DashboardService service;
+    private final MaterialWorkbenchService workbench;
     private final JdbcTemplate jdbc;
     private final RoleService roles;
     private final MessageSource messages;
 
-    public DashboardController(DashboardService service, JdbcTemplate jdbc, RoleService roles,
-            MessageSource messages) {
+    public DashboardController(DashboardService service, MaterialWorkbenchService workbench,
+            JdbcTemplate jdbc, RoleService roles, MessageSource messages) {
         this.service = service;
+        this.workbench = workbench;
         this.jdbc = jdbc;
         this.roles = roles;
         this.messages = messages;
@@ -63,6 +71,41 @@ public class DashboardController {
     public ApiResponse<Map<String, Object>> home(HttpServletRequest request) {
         long orgId = (Long) request.getAttribute("yz.orgId");
         return ApiResponse.ok(service.home(orgId));
+    }
+
+    // ---- 主材销售工作台(W2,菜单闸 /dashboard/material,门闸取最长 prefix) ----
+
+    /** 月度汇总(只读聚合):KPI 达成+跟单户数+五阶段漏斗+异常预警+目标拆分视图。 */
+    @GetMapping("/api/dashboard/material/summary")
+    public ApiResponse<Map<String, Object>> materialSummary(
+            @RequestParam(required = false) String ym,
+            @RequestParam(required = false) Long node,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        String month = ym == null || ym.isBlank() ? YM_FMT.format(LocalDate.now()) : ym.trim();
+        boolean validMonth;
+        try {
+            java.time.YearMonth.parse(month, YM_FMT);
+            validMonth = true;
+        } catch (Exception e) {
+            validMonth = false;
+        }
+        require(validMonth, CODE_BADREQUEST, "dashboard.material.badMonth");
+        return ApiResponse.ok(workbench.summary(orgId, month, node == null ? orgId : node));
+    }
+
+    /** 跟单明细(只读;stage/keyword 过滤+分页;stage 升序+停留降序)。 */
+    @GetMapping("/api/dashboard/material/tracking")
+    public ApiResponse<Map<String, Object>> materialTracking(
+            @RequestParam(required = false) Long node,
+            @RequestParam(required = false) Integer stage,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            HttpServletRequest request) {
+        long orgId = (Long) request.getAttribute("yz.orgId");
+        require(page >= 1 && size >= 1 && size <= 100, CODE_BADREQUEST, "dashboard.material.badParam");
+        return ApiResponse.ok(workbench.tracking(orgId, node, stage, keyword, page, size));
     }
 
     // ---- 按角色默认落地页(V1 最小配置) ----

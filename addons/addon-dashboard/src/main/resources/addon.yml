@@ -1,13 +1,22 @@
 addon:
   id: dashboard
   name: 驾驶舱
-  version: 0.1.0
+  version: 0.2.0
   error-code-segment: 390000
   menus:
     - path: /dashboard/home
       title: 驾驶舱
       icon: odometer
+    - path: /dashboard/material
+      title: 主材工作台
+      icon: suitcase
   dicts:
+    materialStage:
+      - { key: '1', label: 报价跟进 }
+      - { key: '2', label: 签约待开工 }
+      - { key: '3', label: 硬装施工 }
+      - { key: '4', label: 安装决算 }
+      - { key: '5', label: 完结 }
     cardLevel:
       - { key: '0', label: 正常 }
       - { key: '1', label: 预警 }
@@ -57,6 +66,9 @@ addon:
       unit: ppm
       status: pending
   api:
+    # 主材工作台聚合(W2;最长 prefix 匹配,先于 /api/dashboard 命中)
+    - prefix: /api/dashboard/material
+      require: /dashboard/material
     # 驾驶舱聚合首页与默认落地页配置(菜单闸)
     - prefix: /api/dashboard
       require: /dashboard/home
