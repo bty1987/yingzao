@@ -6077,14 +6077,14 @@ def main():
         finally:
             conn.close()
         mt = api_ok("建主材线目标", "POST", "/api/target/plans", tok_admin,
-                    {"orgNode": 1, "ym": _sym, "amount": 100000000, "line": "material"})
+                    {"orgNode": 1, "yearMonth": _sym, "amount": 100000000, "line": "material"})
         ach_m = api_ok("主材线实绩(开单额契约)", "GET",
-                       "/api/target/achievement?node=1&line=material&yearMonth=" + _sym, tok_admin)
+                       "/api/target/achievement?node=1&line=material&ym=" + _sym, tok_admin)
         step("material 实绩=DB 汇总一致(剔除废退含完结)",
              ach_m and ach_m.get("actual") == _expect and _expect >= _stotal,
              (ach_m, _expect, _stotal))
         api_err("非法业绩线拒绝 370001", "POST", "/api/target/plans", tok_admin,
-                {"orgNode": 1, "ym": _sym, "amount": 100, "line": "bogus"}, 370001)
+                {"orgNode": 1, "yearMonth": _sym, "amount": 100, "line": "bogus"}, 370001)
         conn = db_conn()
         try:
             with conn.cursor() as cur:

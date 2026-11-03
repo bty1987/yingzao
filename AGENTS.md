@@ -74,9 +74,13 @@
 - 🔴 **业务方拍板**:组织=**一棵自引用树**(公司→分区→部门→子部门…),层级是深度标签不是独立实体;**不做「集团/分公司」两类公司实体**;多公司时树根即集团视角——同一模型,不同企业层级数不同。fl-yy(docs/07)的「战区/分部」= 树上分区节点标签。
 - 设计稿 **docs/08-组织树与数据范围设计.md**:V108(organization 加 parent_id/level_type/org_path 物化路径,存量 org 自动成根零迁移)+数据范围语义(L0 从「org 相等」扩为「子树包含」,fl-yy 六个 OrgScopeResolver 在此模型下退化为主路径推导一次)+三步演进路径(S1 内核树/S2 数据范围基座/S3 addon-target 经营目标插件——docs/07 §2.1 三模型落地,补「达成率分母」缺口)。
 
-## 当前进度(2026-11-03 更新,第 122 次运行:W1 主材业绩线写码兑现——工作台族数据基座,守望轮形态)
+## 当前进度(2026-11-04 更新,第 123 次运行:挂起清偿轮——dev 库恢复,W1/R21 双段补验全绿+确认中心浏览器实测闭环)
 
-- ✅ **W1 写码兑现(第 122 次,target 1.4.0,守望轮形态:dev 库 3306 仍断→H2 单测+纯函数路线,smoke/enforce/实测顺延挂起;mvn 81/81+web build 全绿)**:①**契约两方法(SalesApi)**:materialSalesTotalByMonth/Between(主材开单业绩:创建日落月/区间 sum(total) 剔除废退 2/3/4 含完结,实现 SalesApiImpl 参数化 date_add MySQL 5.6 兼容);②**TargetService 第三线**:LINE_MATERIAL 白名单+actualOf/Range 双分支(sales 注入构造扩参)+子树聚合/停用退场零改动(单测实证);字典 targetLine 增「主材开单额」+Targets.vue 下拉 material 选项;③**五阶段判定函数**(dashboard,纯函数零新表):MaterialStageDeriver.derive(StageInput)+判定表(废单/终止终态优先→完结双出口[销售全完结∨决算 8]→④工程完工→③开工→②合同线已签 3/4/7/8 重签归②→①活跃报价),输入契约拼装数据面 W2 接;④**单测 73→81**:MaterialStageDeriverTest 3(判定表全覆盖+label)+TargetMaterialLineTest 5(H2+契约 stub:material 建目标实绩=契约值/contract 不串线/非法线 370001/子树聚合 Σ=2×/阶段切片走 Between);**基建三项**:core 发 test-jar(KernelTestBase/垫片供 addon 复用,F4b 铺路)+target/dashboard pom test 依赖+测试 schema 补 target_plan/target_stage+垫片扩 `? + interval N month/day` 两形状;⑤**单测迭代自抓一处产品判定序缺陷**:废单/终止检查原在工程线之后(终止单开工中误归「硬装施工」),单测逼出修=终态检查前移;⑥验证:mvn clean package 全仓绿 81/81+web build;冒烟段已草拟(W1 段 5 步 py_compile 过,**待库恢复随全量首跑**);⑦文档回写:docs/15 E3.5 W1 划勾+AGENTS 本条(第 121 次压缩指针)+本报告;**挂起顺延清单**(前置同=dev 库恢复):smoke 全量(含 R21 段+W1 段首跑)/enforce(R21 静态已同步)/浏览器实测;**下轮=先探 3306,通则补跑半小时后进 W2(主材工作台页);仍断则 W2 守望写码**;老系统零触碰,fl-yy 只读,生产库零访问,dev 库零写入(本轮零连库);
+- ✅ **挂起清偿轮(第 123 次,冒烟 2775/2775 一次全绿+enforce 103/103 全绿+确认中心两态浏览器实测闭环;抓一处潜伏 50 轮的产品缺陷)**:①**冒烟三跑**:一跑 2770/2774(W1 段首跑自抓段脚本键名错两处:建目标 body 应 yearMonth/achievement 参数应 ym——同插件两 API 键名不一致);二跑 2773/2774(**潜伏产品真缺陷**:「非法业绩线拒绝 370001」实际 110000——`target.line` i18n 键自第 73 次 channel 线起不存在,该守卫从未被冒烟断言,W1 单测 STUB_MESSAGES 回显键躲过文案面=两层防线双漏;修=补双语键 中英同步);三跑 **2775/2775 一次全绿**(W1 段 6 步:material 建目标/实绩=DB 汇总一致 9180000 厘/非法线 370001/清理零残留);②**enforce 103/103**(121 次挂起清偿);③**浏览器实测闭环**(R21 确认中心两态):验证码登录→「候」票(单号+朱印+明细+确认按钮)→弹窗二次确认→**墨印「讫」+已确认时间**——自助确认全链浏览器实证;两屏入仓 docs/screenshots/webmp/04·05;④数据复位零残留(2101 挂接/确认位/轨迹全清);环境清场;⑤**下一轮=W2 主材工作台页**(dashboard V2 子域:material/summary+material/tracking 聚合端点+Web Material.vue[KPI 卡+漏斗条+明细表,管理页判例不走 huashu]);erp-T 换库待用户提供连接信息(env 一改零代码影响);老系统零触碰,fl-yy 只读,生产库零访问;
+
+## 第 122 次及以前(2026-11-03)
+
+- 第 122 次:W1 主材业绩线+五阶段判定写码兑现(守望轮形态:dev 库断连单测路线;target 1.4.0:SalesApi.materialSalesTotalByMonth/Between 契约+LINE_MATERIAL 白名单+actualOf 双分支+字典+Targets.vue 选项;MaterialStageDeriver 五阶段判定纯函数零新表;单测 73→81+core 发 test-jar[F4b 铺路];单测抓修判定序缺陷[废单/终止终态优先前移];mvn 81/81+web build 全绿);完整记录见 git 03025a7 与 docs/reports/2026-11-03-第122次运行总结.md;
 
 ## 第 121 次及以前(2026-11-03)
 
