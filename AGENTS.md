@@ -74,9 +74,13 @@
 - 🔴 **业务方拍板**:组织=**一棵自引用树**(公司→分区→部门→子部门…),层级是深度标签不是独立实体;**不做「集团/分公司」两类公司实体**;多公司时树根即集团视角——同一模型,不同企业层级数不同。fl-yy(docs/07)的「战区/分部」= 树上分区节点标签。
 - 设计稿 **docs/08-组织树与数据范围设计.md**:V108(organization 加 parent_id/level_type/org_path 物化路径,存量 org 自动成根零迁移)+数据范围语义(L0 从「org 相等」扩为「子树包含」,fl-yy 六个 OrgScopeResolver 在此模型下退化为主路径推导一次)+三步演进路径(S1 内核树/S2 数据范围基座/S3 addon-target 经营目标插件——docs/07 §2.1 三模型落地,补「达成率分母」缺口)。
 
-## 当前进度(2026-11-03 更新,第 120 次运行:工作台族划界 PRD——分角色驾驶舱待拍板)
+## 当前进度(2026-11-03 更新,第 121 次运行:R21 写码兑现——客户确认中心+案例带参埋点;dev 库断连 enforce/实测挂起)
 
-- ✅ **工作台族划界 PRD 产出(第 120 次,纯文档轮,零代码零库零冒烟;用户「按推荐」确认 R21 顺序+提出工作台需求附 fl-yy 主材跟单截图 13 页)**:①**可行性结论:可以且模型契合度极高**——逐页对照:主材总览=dashboard 聚合模式+MetricProvider SPI(就位)/装修单跟单=decoration 状态机+sales 完结轴(就位,缺阶段判定口径=纯状态推导零新表)/主材目标拆分=target_plan+target_stage 模型**完全同构**(line 白名单第三线+SalesApi 契约扩展)/组织范围=S2 基座(就位);唯一真缺口=获客五段漏斗(R33 前置不变,本族不碰);②**PRD docs/prd/addon-dashboard-workbench.md**:定位=工作台即分角色驾驶舱(驾驶舱答「公司怎么样」/工作台答「我这个角色今天该干什么」);行业中性(主材跟单共性迁,「作战/战报」话术·组织死名·品类节点配置·云客排班渠道=方林嫌疑不迁);五阶段判定表(报价跟进→签约待开工→硬装施工→安装决算→完结,零新表,重签归②等边界实现期校准);主材业绩线=target V1.4(line 第三线 material+SalesApi.materialSalesTotalByMonth/Between,实绩=当月开单排除废退单);框架=dashboard V2 子域(390100 段,预计零迁移);W1(业绩线+判定函数)→W2(工作台页)→W3(设计师/收款候选);6 项开放问题待拍板(可整体「按推荐」);③**docs/15 插排 E3.5 段**(W1~W3,PRD 拍板即开工;R21/F4b 既定顺序在前,工作台插队需明示);④考证:截图系统=fl-yy material-followup(localhost:2001 演示工程,不在 10-20 快照内;快照 BattleBoardMaterial 仅 2 端点=奖励群组 CRUD,坐实截图体系为演进形态)——以截图页面为需求事实源、以 D3 划界结论(战报族→D4 专题)为归属依据;老系统零触碰,fl-yy 只读,生产库零访问,dev 库零写入;
+- ✅ **R21 写码兑现(第 121 次,sales 0.5.0+portal 0.3.0,冒烟 2765/2765 一次全绿(R21 段 26 步)+mvn 73/73+web-mp 双绿;五跑迭代抓三处产品真缺陷全修;⚠️dev 库断连→enforce 补跑+浏览器实测挂起)**:①**客户确认中心(SalesApiController 新类,addon.yml prefix /api/c/sales-orders c-customer 型)**:GET /confirmations(名下销售单确认视图:listByCustomer 名下装修单逐单聚合,行=单号/总额/明细行/confirmed 位)+POST /{saleId}/confirm(**C 端实名自助确认**:验证码登录=实名锚免报码,替代发码→员工代录旧链;归属校验 sale→order_id→装修单→customer 不匹配一律 300001;条件更新幂等重复 300012;sales_track action=confirm operator_id=0=客户留痕;员工代录端点保留双轨);②**案例带参曝光埋点(portal)**:POST /api/c/cases/view(anonymous,inv=归因入参)落内核 yz_report_event **复用 card_exposure 词汇**(TYPES 白名单零内核改动,payload=caseId+inv);web-mp cases 分享链接生成(U{customerId} 复制剪贴板)+带参打开自动上报;③**web-mp 确认中心页**(pages/confirm):票据卡两态(讫墨印/候朱印+明细行+合计+确认二次弹窗)+mine/finance 双入口;④**五跑三修**:🔴归因锚混用(saleId 传给 queryOrderCustomer 语义=装修单 id→恒 300001,修=取 sale.order_id 再查)+🔴require 双层解析(require 第三参=i18n key,传 msg() 已解析文案→NoSuchMessageException→110000,修=传键)+🔴无 body 动作端点 415(@RequestBody 收空 POST→415→110000,修=零 body 依赖不声明,内核 begin/finish 同款);+脚本错(双向挂接才闭环/urllib data=None POST 变 GET);⑤验证:冒烟 2765/2765 全绿+enforce 静态样例同步 3 端点/规则 71 条(**补跑挂起**)+浏览器实测(**挂起**);⑥**⚠️dev 库 3306 断连**(第五跑完成后,第 61 次同款,5 分钟未恢复)——**下轮开工先探 192.168.5.21:3306,通则立即补 enforce+实测(W1 工作台族顺位在后)**;R21 段自清理已完成零残留;老系统零触碰,fl-yy 只读,生产库零访问;
+
+## 第 120 次及以前(2026-11-03)
+
+- 第 120 次:工作台族划界 PRD 产出(分角色驾驶舱,主材销售工作台首发;模型契合度极高=target_plan+target_stage 同构/S2 基座/decoration+sales 状态轴全就位,唯一缺口=获客漏斗 R33 前置;五阶段判定表零新表+主材业绩线 target V1.4+W1~W3 排期插 docs/15 E3.5;6 项开放问题已按推荐落锤 2026-11-03);完整记录见 git 982af9c 与 docs/reports/2026-11-03-第120次运行总结.md;
 
 ## 第 119 次及以前(2026-11-03)
 

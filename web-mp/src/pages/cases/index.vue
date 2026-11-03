@@ -29,6 +29,7 @@
           <text v-if="it.style"> · {{ it.style }}</text>
         </view>
         <view v-if="it.figureName" class="c-designer">设计 · {{ it.figureName }}</view>
+        <view class="c-share" @click.stop="shareCase(it)">分享得链接</view>
       </view>
     </view>
     <view v-if="rows.length && rows.length >= total" class="tip end">— 已全部加载 —</view>
@@ -37,8 +38,9 @@
 
 <script setup>
 import { ref } from 'vue'
-import { onShow, onReachBottom } from '@dcloudio/uni-app'
-import { listCases } from '../../api'
+import { onLoad, onShow, onReachBottom } from '@dcloudio/uni-app'
+import { listCases, reportCaseView } from '../../api'
+import { getCustomerId } from '../../api/http'
 
 const rows = ref([])
 const total = ref(0)
@@ -47,6 +49,26 @@ const cityOptions = ref([])
 const loading = ref(false)
 const page = ref(1)
 const broken = ref({})
+// R21 案例带参码:分享链带 ?inv=U{customerId};打开端记录 inv 并随曝光上报归因(匿名)
+const shareInv = ref('')
+
+onLoad((q) => {
+  if (q && q.inv) shareInv.value = String(q.inv)
+})
+
+function shareCase(it) {
+  const inv = getCustomerId() ? 'U' + getCustomerId() : ''
+  const base = location.origin + location.pathname + '#/pages/cases/index'
+  const link = base + (inv ? '?inv=' + inv : '')
+  uni.setClipboardData({
+    data: link + ' 「' + (it.title || '营造案例') + '」',
+    success: () => uni.showToast({ title: '分享链接已复制', icon: 'none' })
+  })
+}
+
+function trackView(it) {
+  reportCaseView(it.caseId, shareInv.value || null).catch(() => {})
+}
 
 async function load(reset) {
   if (loading.value) return
@@ -68,7 +90,11 @@ async function load(reset) {
 }
 
 const pick = (c) => { city.value = c; load(true) }
-onShow(() => load(true))
+onShow(() => {
+  load(true)
+  // 带参打开:首个案例曝光即上报归因(匿名;失败静默——埋点不阻塞浏览)
+  if (shareInv.value && rows.value.length) trackView(rows.value[0])
+})
 onReachBottom(() => { if (rows.value.length < total.value) load(false) })
 </script>
 
@@ -99,6 +125,14 @@ onReachBottom(() => { if (rows.value.length < total.value) load(false) })
 .c-body { padding: 20rpx 24rpx 24rpx; }
 .c-title { font-size: 32rpx; }
 .c-meta { margin-top: 8rpx; font-size: 24rpx; color: var(--yz-ink-50); }
+.c-share {
+  margin-top: 10rpx;
+  align-self: flex-start;
+  font-size: 22rpx;
+  color: var(--yz-ink-50);
+  border: 1rpx solid var(--yz-line);
+  padding: 4rpx 16rpx;
+}
 .c-designer { margin-top: 4rpx; font-size: 22rpx; color: var(--yz-ink-35); }
 .end { text-align: center; margin-top: 8rpx; }
 </style>

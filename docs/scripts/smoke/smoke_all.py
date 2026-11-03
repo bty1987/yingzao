@@ -5976,6 +5976,89 @@ def main():
         fin2 = api_ok("复位后资金流水(空户)", "GET", "/api/c/finance", c_token)
         step("挂接复位零残留", not any(s.get("orderId") == order_d for s in (fin2 or [])), fin2)
 
+    # ---- R21 客户确认中心(C 端实名自助确认)+ 案例带参曝光埋点 ----
+    print("== C端确认中心/案例带参(R21:sales 自助确认免报码+card_exposure 归因埋点)==")
+    conf0 = api_ok("C端确认列表(空户结构)", "GET", "/api/c/sales-orders/confirmations", c_token)
+    step("确认列表结构(list)", isinstance(conf0, list), conf0)
+    api_err("员工令牌调确认列表拒绝 122006", "GET", "/api/c/sales-orders/confirmations",
+            tok_admin, None, 122006)
+    st, res = call("GET", "/api/c/sales-orders/confirmations")
+    step("匿名调确认列表 401", st == 401, (st, res))
+    api_err("不存在销售单确认拒绝 300001", "POST", "/api/c/sales-orders/999999/confirm",
+            c_token, {}, 300001)
+
+    # 真数据:销售段 sale1 临时改挂 order_d(销售单与装修单客户双向挂接 c_cid)→列表→自助确认→复位
+    if sale1 and order_d and fid_diary:
+        conn = db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("select order_id, customer_confirmed from sales_order where id = %s", (sale1,))
+                sorig = cur.fetchone()
+                cur.execute("select customer_id from decoration_order where id = %s", (order_d,))
+                dorig = cur.fetchone()[0]
+                cur.execute("update sales_order set order_id = %s, customer_confirmed = 0, "
+                            "confirmed_at = null where id = %s", (order_d, sale1))
+                cur.execute("update decoration_order set customer_id = %s where id = %s", (c_cid, order_d))
+            conn.commit()
+        finally:
+            conn.close()
+        try:
+            conf = api_ok("C端确认列表(临时挂接销售段单)", "GET",
+                          "/api/c/sales-orders/confirmations", c_token)
+            hit = next((x for x in (conf or []) if x.get("id") == sale1), None)
+            step("销售单在列(单号/明细行/待确认章)", bool(hit) and hit.get("code")
+                 and isinstance(hit.get("items"), list) and hit.get("customer_confirmed") == 0,
+                 hit and (hit.get("code"), len(hit.get("items") or [])))
+            api_ok("C端自助确认(免报码实名)", "POST", "/api/c/sales-orders/%s/confirm" % sale1,
+                   c_token, {})
+            conf2 = api_ok("确认后回读", "GET", "/api/c/sales-orders/confirmations", c_token)
+            hit2 = next((x for x in (conf2 or []) if x.get("id") == sale1), None)
+            step("确认位置位+confirmed_at 落", hit2 and hit2.get("customer_confirmed") == 1
+                 and bool(hit2.get("confirmed_at")), hit2 and hit2.get("confirmed_at"))
+            api_err("重复确认拒绝 300012", "POST", "/api/c/sales-orders/%s/confirm" % sale1,
+                    c_token, {}, 300012)
+            conn = db_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("select count(*) from sales_track where sale_id = %s and action = 'confirm' "
+                                "and operator_id = 0", (sale1,))
+                    tcount = cur.fetchone()[0]
+            finally:
+                conn.close()
+            step("确认轨迹留痕(自助,operator=0 客户)", tcount >= 1, tcount)
+        finally:
+            conn = db_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("update sales_order set order_id = %s, customer_confirmed = %s, "
+                                "confirmed_at = null where id = %s",
+                                (sorig[0], sorig[1], sale1))
+                    cur.execute("update decoration_order set customer_id = %s where id = %s",
+                                (dorig, order_d))
+                    cur.execute("delete from sales_track where sale_id = %s and action = 'confirm' "
+                                "and operator_id = 0", (sale1,))
+                conn.commit()
+            finally:
+                conn.close()
+        conf3 = api_ok("复位后确认列表(空户)", "GET", "/api/c/sales-orders/confirmations", c_token)
+        step("销售单挂接待确认复位零残留", not any(x.get("id") == sale1 for x in (conf3 or [])), conf3)
+
+    # 案例带参曝光埋点(匿名;card_exposure 复用内核词汇,payload 携 inv 归因)
+    cs = api_ok("案例列表取一例", "GET", "/api/c/cases?page=1&size=1")
+    cid0 = (((cs or {}).get("data") or {}).get("rows") or [{}])[0].get("caseId")
+    st, res = call("POST", "/api/c/cases/view", None, {"caseId": cid0 or 1, "inv": "U999"})
+    step("匿名曝光埋点可报", st == 200 and (res or {}).get("code") == 0, res)
+    conn = db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select count(*) from yz_report_event where event_type = 'card_exposure' "
+                        "and user_id = 0 and payload like %s", ('%"inv":"U999"%',))
+            ev = cur.fetchone()[0]
+    finally:
+        conn.close()
+    step("曝光埋点落库(card_exposure+inv)", ev >= 1, ev)
+
+
 
     # ---- 毛利管理线(D2,addon-balance V1302;测试年 2027 全 PENDING + 2025 过去年全 NORMAL) ----
     print("== 毛利管理线(addon-balance D2:两线两主体+版本化发布+乐观闸+scope 守卫) ==")

@@ -1,7 +1,7 @@
 addon:
   id: sales
   name: 主材销售
-  version: 0.4.0
+  version: 0.5.0
   error-code-segment: 300000
   menus:
     - path: /sales/orders
@@ -89,6 +89,9 @@ addon:
       unit: cent
       status: confirmed
   api:
+    # C端确认中心(R21:验证码登录=实名锚,登录态自助确认免报码;归属校验 300001 不泄露)
+    - prefix: /api/c/sales-orders
+      require: c-customer
     # 结算驳回端点路径挂 /orders 前缀(历史路径),归销售单菜单;结算工作台角色建议连带授权销售单菜单
     - prefix: /api/sales/orders
       require: /sales/orders

@@ -1,7 +1,7 @@
 addon:
   id: portal
   name: C端门户
-  version: 0.2.0
+  version: 0.3.0
   error-code-segment: 360000
   # C 端无管理菜单(员工端 RBAC 菜单树不含);api 段走第四/五型 require
   api:
@@ -34,3 +34,7 @@ addon:
     - prefix: /api/c/files
       methods: [GET]
       require: c-customer
+    # 案例曝光埋点(R21 带参码:inv=分享链归因入参,匿名可报,落内核 yz_report_event)
+    - exact: /api/c/cases/view
+      methods: [POST]
+      require: anonymous

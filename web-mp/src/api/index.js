@@ -14,3 +14,8 @@ export const submitCardNotice = (token, data) => post('/api/c/cards/' + token + 
 // 资金流水/工地相册(R20,addon-portal):票据卡数据源+相册投影(归属校验 360004 后端收口)
 export const fetchFinance = () => get('/api/c/finance')
 export const fetchAlbum = (orderId) => get('/api/c/album', { orderId })
+
+// 客户确认中心/案例带参(R21,addon-sales/portal):实名自助确认+分享归因埋点
+export const fetchSalesConfirmations = () => get('/api/c/sales-orders/confirmations')
+export const confirmSalesOrder = (saleId) => post(`/api/c/sales-orders/${saleId}/confirm`)
+export const reportCaseView = (caseId, inv) => post('/api/c/cases/view', { caseId, inv })

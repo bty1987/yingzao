@@ -367,6 +367,51 @@ public class SalesOrderService {
                 saleId);
     }
 
+    // ---- C 端确认中心(R21:验证码登录=实名锚,登录态自助确认免报码;归属经契约,404 不泄露) ----
+
+    /** 名下全部销售单确认视图:归属=DecorationApi.listByCustomer 名下装修单逐单聚合(域内单据表直查,跨域走契约)。 */
+    public List<Map<String, Object>> listForCustomer(long orgId, long customerId) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (DecorationApi.OrderBrief o : decorations.listByCustomer(orgId, customerId)) {
+            for (Map<String, Object> sale : jdbc.queryForList("""
+                    select id, code, total, customer_confirmed, confirmed_at, finish_time, created_at
+                    from sales_order
+                    where org_id = ? and order_id = ? and status not in (2, 3, 4)
+                    order by id desc
+                    """, orgId, o.orderId())) {
+                long saleId = ((Number) sale.get("id")).longValue();
+                sale.put("orderId", o.orderId());
+                sale.put("orderNo", o.orderNo());
+                sale.put("houseLabel", o.houseLabel());
+                sale.put("items", jdbc.queryForList("""
+                        select goods_name, color_name, format_name, num, dis_price, total
+                        from sales_order_item where org_id = ? and sale_id = ?
+                        order by id
+                        """, orgId, saleId));
+                out.add(sale);
+            }
+        }
+        return out;
+    }
+
+    /** C 端自助确认:归属校验(销售单→装修单→客户不匹配一律 300001 不泄露存在性)+条件更新幂等+轨迹留痕。 */
+    @Transactional
+    public void confirmByCustomer(long orgId, long saleId, long customerId) {
+        Map<String, Object> sale = loadSale(orgId, saleId);
+        require(((Number) sale.get("customer_confirmed")).intValue() == 0, CODE_ALREADY_CONFIRMED,
+                "sales.confirm.duplicated");
+        DecorationApi.CustomerRef owner = decorations.queryOrderCustomer(orgId,
+                ((Number) sale.get("order_id")).longValue())
+                .orElseThrow(() -> new BizException(CODE_NOT_FOUND, msg("sales.notFound")));
+        require(owner.customerId() == customerId, CODE_NOT_FOUND, "sales.notFound");
+        int updated = jdbc.update("""
+                update sales_order set customer_confirmed = 1, confirmed_at = now()
+                where id = ? and customer_confirmed = 0
+                """, saleId);
+        require(updated > 0, CODE_ALREADY_CONFIRMED, "sales.confirm.duplicated");
+        track(orgId, saleId, "confirm", "C端自助确认(验证码登录实名)", 0L);
+    }
+
     // ---- 完结/废单 ----
 
     @Transactional

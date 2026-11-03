@@ -8,6 +8,10 @@
         <view v-else class="tip">登录后可查看装修进度与积分</view>
       </view>
     </view>
+    <view v-if="logged" class="card act" @click="goConfirm">
+      <view>客户确认</view>
+      <view class="arrow">→</view>
+    </view>
     <view class="card act" @click="logged ? doLogout() : goLogin()">
       <view>{{ logged ? '退出登录' : '手机验证码登录' }}</view>
       <view class="arrow">→</view>
@@ -38,6 +42,9 @@ function doLogout() {
   uni.removeStorageSync('c_mobile')
   load()
   uni.showToast({ title: '已退出', icon: 'none' })
+}
+function goConfirm() {
+  uni.navigateTo({ url: '/pages/confirm/index' })
 }
 function goLogin() {
   uni.navigateTo({ url: '/pages/login/index?redirect=/pages/mine/index' })

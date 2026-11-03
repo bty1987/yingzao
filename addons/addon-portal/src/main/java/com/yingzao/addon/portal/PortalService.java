@@ -58,6 +58,7 @@ public class PortalService {
     private final DecorationApi decorations;
     private final MemberApi members;
     private final PaymentApi payments;
+    private final com.yingzao.core.report.ReportEventService reportEvents;
     private final SalesApi salesApi;
     private final com.yingzao.core.file.FileService files;
     private final SecureRandom random = new SecureRandom();
@@ -69,7 +70,8 @@ public class PortalService {
     public PortalService(JdbcTemplate jdbc, MessageSource messages, TokenStore tokens,
             CustomerProfileApi profiles, MarketApi markets, ConstructionApi constructions,
             DecorationApi decorations, MemberApi members, PaymentApi payments, SalesApi salesApi,
-            com.yingzao.core.file.FileService files) {
+            com.yingzao.core.file.FileService files,
+            com.yingzao.core.report.ReportEventService reportEvents) {
         this.jdbc = jdbc;
         this.messages = messages;
         this.tokens = tokens;
@@ -81,6 +83,7 @@ public class PortalService {
         this.payments = payments;
         this.salesApi = salesApi;
         this.files = files;
+        this.reportEvents = reportEvents;
     }
 
     /** 发验证码(匿名):60s 限发+日限;6 位随机;5 分钟过期。 */
@@ -254,6 +257,36 @@ public class PortalService {
     /** 字节流读取代理(controller 用;FileRow 已过归属与软删校验)。 */
     public byte[] readFile(com.yingzao.core.file.FileService.FileRow row) {
         return files.read(row);
+    }
+
+    /**
+     * 案例曝光埋点(R21 带参码,匿名):inv=分享链归因入参(分享者标识),随曝光落内核
+     * yz_report_event(复用内核埋点词汇 card_exposure=案例卡曝光,TYPES 白名单零内核改动,
+     * payload=caseId+inv);归因聚合报表随 E3 报表面点亮,埋点先落库=数据不丢。
+     * V1 裸埋(量级小,防刷随 C2 渠道适配)。
+     */
+    public void recordCaseView(long orgId, long caseId, String inv) {
+        String payload = "{\"caseId\":" + caseId + ",\"inv\":" + jsonQuote(inv) + "}";
+        reportEvents.record(orgId, 0L,
+                new com.yingzao.core.report.ReportEventService.EventCmd("card_exposure", null, payload),
+                java.time.LocalDateTime.now().toString());
+    }
+
+    private String jsonQuote(String s) {
+        if (s == null || s.isBlank()) {
+            return "null";
+        }
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') {
+                sb.append('\\');
+            }
+            if (c >= 0x20) {
+                sb.append(c);
+            }
+        }
+        return sb.append('"').toString();
     }
 
     /** 匿名面组织上下文访问器(controller 用;登录后请求改走令牌内 orgId)。 */

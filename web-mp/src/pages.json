@@ -57,6 +57,13 @@
         "navigationBarTitleText": "工地相册",
         "enablePullDownRefresh": true
       }
+    },
+    {
+      "path": "pages/confirm/index",
+      "style": {
+        "navigationBarTitleText": "客户确认",
+        "enablePullDownRefresh": true
+      }
     }
   ],
   "globalStyle": {

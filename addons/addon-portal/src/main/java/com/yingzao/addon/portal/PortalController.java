@@ -107,4 +107,15 @@ public class PortalController {
         response.setContentLength(bytes.length);
         response.getOutputStream().write(bytes);
     }
+
+    /** 案例曝光埋点(R21 带参码,匿名):inv=分享链归因入参(可空),落内核 yz_report_event。 */
+    @PostMapping("/cases/view")
+    public ApiResponse<Void> trackCaseView(@RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        long orgId = portal.anonymousOrgId();
+        long caseId = body != null && body.get("caseId") instanceof Number n ? n.longValue() : 0L;
+        String inv = body != null && body.get("inv") instanceof String s ? s : null;
+        portal.recordCaseView(orgId, caseId, inv);
+        return ApiResponse.ok();
+    }
 }

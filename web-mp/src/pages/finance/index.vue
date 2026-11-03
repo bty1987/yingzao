@@ -29,7 +29,9 @@
 
         <!-- 主材款:每张销售单一组 -->
         <template v-if="s.material.length">
-          <view class="group-title yz-eyebrow">主材款</view>
+          <view class="group-title yz-eyebrow">主材款
+            <text class="go-confirm" @click="goConfirm">去核验确认 →</text>
+          </view>
           <view v-for="g in s.material" :key="g.salesOrderId" class="mat-group">
             <view class="mat-head">
               <text class="mat-no">{{ g.salesNo }}</text>
@@ -101,6 +103,9 @@ async function load() {
     loading.value = false
   }
 }
+function goConfirm() {
+  uni.navigateTo({ url: '/pages/confirm/index' })
+}
 function goLogin() {
   uni.navigateTo({ url: '/pages/login/index?redirect=/pages/finance/index' })
 }
@@ -162,6 +167,12 @@ onPullDownRefresh(async () => {
 .mat-head { padding: 8rpx 40rpx 0; }
 .mat-no { font-size: 24rpx; color: var(--yz-ink-50); }
 
+.go-confirm {
+  font-size: 22rpx;
+  color: var(--yz-ink-50);
+  font-weight: normal;
+  margin-left: 16rpx;
+}
 .foot-tip {
   text-align: center;
   margin-top: 40rpx;
